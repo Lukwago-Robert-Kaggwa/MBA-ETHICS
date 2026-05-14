@@ -60,6 +60,14 @@ flask --app run.py run
 
 Open `http://localhost:5000`.
 
+## Deployment
+
+Install dependencies from `requirements.txt`, then start the production server with:
+
+```bash
+gunicorn run:app
+```
+
 ## Environment Variables
 
 Required for production:
