@@ -75,6 +75,7 @@ Required for production:
 ```text
 SECRET_KEY=
 DATABASE_URL=
+PUBLIC_BASE_URL=
 ```
 
 Optional Microsoft login:
@@ -97,10 +98,12 @@ MAIL_TIMEOUT=20
 MAIL_USERNAME=
 MAIL_PASSWORD=
 MAIL_DEFAULT_SENDER=
+MAIL_LOGO_URL=
 ```
 
 Render Free web services cannot send outbound traffic on SMTP ports `25`, `465`, or `587`.
 For Gmail SMTP on Render, use a paid Render instance type, or switch production email to an email provider that supports an HTTPS API or a non-blocked SMTP submission port.
+Set `PUBLIC_BASE_URL` to your deployed app URL, for example `https://mba-ethics.onrender.com`, so notification emails can load the UJ logo from `/static/img/uj_logo.png`. You can override only the email logo with `MAIL_LOGO_URL`.
 
 ## Document Storage
 

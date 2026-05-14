@@ -141,9 +141,7 @@ def register():
     if current_user.is_authenticated:
         return post_login_redirect(current_user)
 
-    system = request.args.get("system", request.form.get("system", "mba")).lower()
-    if system not in {"mba", "ethics"}:
-        system = "mba"
+    system = "mba"
 
     if request.method == "POST":
         submitted_student_email = normalize_email(request.form.get("student_email") or "")

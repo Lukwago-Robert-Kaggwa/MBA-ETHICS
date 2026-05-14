@@ -66,9 +66,12 @@
   align-items: flex-start;
   box-sizing: border-box;
 }
-.login-bg {
-  background: linear-gradient(135deg, #f8fafc 0%, #f3f4f6 100%);
+.auth-panel.login-bg {
   min-height: 100vh;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.38), rgba(15, 23, 42, 0.58)),
+    url("../img/ethics_background.jpg") center/cover no-repeat;
+  padding: clamp(28px, 6vw, 72px) 18px;
 }
 
 .login-heading {

@@ -4,8 +4,9 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 from html import escape
 from pathlib import Path
+from urllib.parse import urljoin
 
-from flask import current_app
+from flask import current_app, has_request_context, url_for
 
 
 class MailDeliveryError(Exception):
@@ -115,11 +116,29 @@ def _email_logo_path():
     return None
 
 
-def _render_branded_email(subject, content_html, logo_cid=None):
+def _email_logo_url():
+    configured_url = current_app.config.get("MAIL_LOGO_URL")
+    if configured_url:
+        return configured_url
+
+    public_base_url = current_app.config.get("PUBLIC_BASE_URL")
+    if public_base_url:
+        return urljoin(f"{public_base_url.rstrip('/')}/", "static/img/uj_logo.png")
+
+    if has_request_context():
+        try:
+            return url_for("static", filename="img/uj_logo.png", _external=True)
+        except RuntimeError:
+            return None
+
+    return None
+
+
+def _render_branded_email(subject, content_html, logo_src=None):
     logo_html = ""
-    if logo_cid:
+    if logo_src:
         logo_html = (
-            f"<img src=\"cid:{logo_cid}\" alt=\"University of Johannesburg\" "
+            f"<img src=\"{escape(logo_src, quote=True)}\" alt=\"University of Johannesburg\" "
             "width=\"150\" style=\"display:block;max-width:150px;height:auto;border:0;\">"
         )
     else:
@@ -193,10 +212,12 @@ def build_email_message(recipient, subject, body):
     plain_footer = "\n\n--\nUniversity of Johannesburg MBA Capstone system"
     message.set_content((text_body or "You have a new MBA notification.") + plain_footer)
 
-    logo_path = _email_logo_path()
+    logo_url = _email_logo_url()
+    logo_path = None if logo_url else _email_logo_path()
     logo_cid = make_msgid("uj-logo")[1:-1] if logo_path else None
+    logo_src = logo_url or (f"cid:{logo_cid}" if logo_cid else None)
     content_html = html_body or _plain_text_to_html(text_body)
-    message.add_alternative(_render_branded_email(subject, content_html, logo_cid), subtype="html")
+    message.add_alternative(_render_branded_email(subject, content_html, logo_src), subtype="html")
 
     if logo_path:
         html_part = message.get_body(("html",))
