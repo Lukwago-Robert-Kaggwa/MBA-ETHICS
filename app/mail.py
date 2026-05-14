@@ -148,7 +148,7 @@ def _render_branded_email(subject, content_html, logo_cid=None):
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="vertical-align:middle;">{logo_html}</td>
-                    <td align="right" style="vertical-align:middle;color:{BRAND_ORANGE_DARK};font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;">MBA Workflow</td>
+                    <td align="right" style="vertical-align:middle;color:{BRAND_ORANGE_DARK};font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;">MBA</td>
                   </tr>
                 </table>
               </td>
@@ -205,6 +205,7 @@ def build_email_message(recipient, subject, body):
             maintype="image",
             subtype=logo_path.suffix.lstrip(".").lower() or "png",
             cid=f"<{logo_cid}>",
+            disposition="inline",
             filename=logo_path.name,
         )
 
