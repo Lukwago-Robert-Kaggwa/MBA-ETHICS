@@ -9,6 +9,13 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def _env_float(name, default):
+    try:
+        return float(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
     SQLALCHEMY_DATABASE_URI = os.getenv(
@@ -30,3 +37,4 @@ class Config:
     MAIL_USERNAME = os.getenv("MAIL_USERNAME") or os.getenv("EMAIL")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD") or os.getenv("EMAIL_CODE")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", MAIL_USERNAME)
+    MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 5)

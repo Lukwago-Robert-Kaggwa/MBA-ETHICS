@@ -93,10 +93,14 @@ MAIL_SERVER=
 MAIL_PORT=587
 MAIL_USE_TLS=true
 MAIL_USE_SSL=false
+MAIL_TIMEOUT=5
 MAIL_USERNAME=
 MAIL_PASSWORD=
 MAIL_DEFAULT_SENDER=
 ```
+
+Render Free web services cannot send outbound traffic on SMTP ports `25`, `465`, or `587`.
+For Gmail SMTP on Render, use a paid Render instance type, or switch production email to an email provider that supports an HTTPS API or a non-blocked SMTP submission port.
 
 ## Document Storage
 

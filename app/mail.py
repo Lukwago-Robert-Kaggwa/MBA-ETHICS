@@ -211,32 +211,49 @@ def build_email_message(recipient, subject, body):
     return message
 
 
-def send_email(recipient, subject, body):
-    if not mail_is_configured():
-        return False
-
-    message = build_email_message(recipient, subject, body)
-
+def _open_smtp_server():
     host = current_app.config["MAIL_SERVER"]
     port = current_app.config["MAIL_PORT"]
     username = current_app.config.get("MAIL_USERNAME")
     password = current_app.config.get("MAIL_PASSWORD")
     use_ssl = current_app.config.get("MAIL_USE_SSL")
     use_tls = current_app.config.get("MAIL_USE_TLS")
+    timeout = current_app.config.get("MAIL_TIMEOUT", 5)
 
+    server = None
     try:
         if use_ssl:
-            server = smtplib.SMTP_SSL(host, port, timeout=20)
+            server = smtplib.SMTP_SSL(host, port, timeout=timeout)
         else:
-            server = smtplib.SMTP(host, port, timeout=20)
+            server = smtplib.SMTP(host, port, timeout=timeout)
 
-        with server:
-            if use_tls and not use_ssl:
-                server.starttls()
-            if username and password:
-                server.login(username, password)
+        if use_tls and not use_ssl:
+            server.starttls()
+        if username and password:
+            server.login(username, password)
+        return server
+    except Exception as exc:
+        if server is not None:
+            try:
+                server.close()
+            except Exception:
+                pass
+        raise MailDeliveryError(str(exc)) from exc
+
+
+def send_email(recipient, subject, body):
+    if not mail_is_configured():
+        return False
+
+    message = build_email_message(recipient, subject, body)
+
+    try:
+        with _open_smtp_server() as server:
             server.send_message(message)
         return True
+    except MailDeliveryError:
+        current_app.logger.exception("Failed to send email to %s", recipient)
+        raise
     except Exception as exc:
         current_app.logger.exception("Failed to send email to %s", recipient)
         raise MailDeliveryError(str(exc)) from exc
@@ -245,15 +262,47 @@ def send_email(recipient, subject, body):
 def send_bulk_emails(messages):
     delivered = []
     failed = []
+    messages = list(messages)
+
+    if not messages:
+        return {"delivered": delivered, "failed": failed}
+
+    if not mail_is_configured():
+        return {
+            "delivered": delivered,
+            "failed": [
+                {"recipient": message["recipient"], "reason": "mail_not_configured"}
+                for message in messages
+            ],
+        }
+
+    pending = []
 
     for message in messages:
         try:
-            sent = send_email(message["recipient"], message["subject"], message["body"])
-            if sent:
-                delivered.append(message["recipient"])
-            else:
-                failed.append({"recipient": message["recipient"], "reason": "mail_not_configured"})
-        except MailDeliveryError as exc:
+            email_message = build_email_message(message["recipient"], message["subject"], message["body"])
+            pending.append((message, email_message))
+        except Exception as exc:
+            current_app.logger.exception("Failed to build email to %s", message["recipient"])
             failed.append({"recipient": message["recipient"], "reason": str(exc)})
+
+    if not pending:
+        return {"delivered": delivered, "failed": failed}
+
+    try:
+        with _open_smtp_server() as server:
+            for message, email_message in pending:
+                try:
+                    server.send_message(email_message)
+                    delivered.append(message["recipient"])
+                except Exception as exc:
+                    current_app.logger.exception("Failed to send email to %s", message["recipient"])
+                    failed.append({"recipient": message["recipient"], "reason": str(exc)})
+    except MailDeliveryError as exc:
+        current_app.logger.exception("Failed to connect to SMTP server for bulk email")
+        failed.extend(
+            {"recipient": message["recipient"], "reason": str(exc)}
+            for message, _email_message in pending
+        )
 
     return {"delivered": delivered, "failed": failed}
