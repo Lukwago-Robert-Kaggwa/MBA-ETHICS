@@ -218,7 +218,7 @@ def _open_smtp_server():
     password = current_app.config.get("MAIL_PASSWORD")
     use_ssl = current_app.config.get("MAIL_USE_SSL")
     use_tls = current_app.config.get("MAIL_USE_TLS")
-    timeout = current_app.config.get("MAIL_TIMEOUT", 5)
+    timeout = current_app.config.get("MAIL_TIMEOUT", 20)
 
     server = None
     try:
@@ -290,19 +290,47 @@ def send_bulk_emails(messages):
         return {"delivered": delivered, "failed": failed}
 
     try:
-        with _open_smtp_server() as server:
-            for message, email_message in pending:
-                try:
-                    server.send_message(email_message)
-                    delivered.append(message["recipient"])
-                except Exception as exc:
-                    current_app.logger.exception("Failed to send email to %s", message["recipient"])
-                    failed.append({"recipient": message["recipient"], "reason": str(exc)})
+        server = _open_smtp_server()
     except MailDeliveryError as exc:
         current_app.logger.exception("Failed to connect to SMTP server for bulk email")
         failed.extend(
             {"recipient": message["recipient"], "reason": str(exc)}
             for message, _email_message in pending
         )
+        return {"delivered": delivered, "failed": failed}
+
+    try:
+        for index, (message, email_message) in enumerate(pending):
+            try:
+                server.send_message(email_message)
+                delivered.append(message["recipient"])
+            except smtplib.SMTPServerDisconnected as exc:
+                current_app.logger.warning(
+                    "SMTP connection dropped while sending email to %s: %s",
+                    message["recipient"],
+                    exc,
+                )
+                failed.append({"recipient": message["recipient"], "reason": str(exc)})
+                try:
+                    server.close()
+                except Exception:
+                    pass
+                try:
+                    server = _open_smtp_server()
+                except MailDeliveryError as reconnect_exc:
+                    current_app.logger.exception("Failed to reconnect to SMTP server for bulk email")
+                    failed.extend(
+                        {"recipient": remaining["recipient"], "reason": str(reconnect_exc)}
+                        for remaining, _remaining_email in pending[index + 1 :]
+                    )
+                    break
+            except Exception as exc:
+                current_app.logger.exception("Failed to send email to %s", message["recipient"])
+                failed.append({"recipient": message["recipient"], "reason": str(exc)})
+    finally:
+        try:
+            server.close()
+        except Exception:
+            pass
 
     return {"delivered": delivered, "failed": failed}

@@ -37,4 +37,4 @@ class Config:
     MAIL_USERNAME = os.getenv("MAIL_USERNAME") or os.getenv("EMAIL")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD") or os.getenv("EMAIL_CODE")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", MAIL_USERNAME)
-    MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 5)
+    MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 20)
