@@ -45,6 +45,8 @@
           <button type="submit" class="primary-button login-btn">Sign in</button>
         </form>
 
+        <button type="button" class="forgot-password-button" id="forgot-password-open">Forgot Password?</button>
+
         {% if microsoft_login_enabled %}
           <a href="{{ url_for('auth.microsoft_login', system=system or 'mba') }}" class="secondary-button login-microsoft">Sign in with Microsoft</a>
         {% endif %}
@@ -54,5 +56,74 @@
         </div>
       </div>
     </main>
+
+    <dialog class="auth-dialog" id="forgot-password-dialog" aria-labelledby="forgot-password-title">
+      <form method="post" action="{{ url_for('auth.forgot_password') }}" class="auth-dialog__form">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="auth-dialog__header">
+          <div>
+            <h2 id="forgot-password-title">Reset Your Password</h2>
+          </div>
+          <button type="button" class="auth-dialog__close" id="forgot-password-close" aria-label="Close password reset dialog">&times;</button>
+        </div>
+        <div class="auth-dialog__body">
+          <label>
+            <span>Enter your email address</span>
+            <input type="email" name="reset_email" required autocomplete="email" placeholder="you@email.com">
+          </label>
+        </div>
+        <div class="auth-dialog__actions">
+          <button type="submit" class="primary-button">Send</button>
+          <button type="button" class="secondary-button" id="forgot-password-cancel">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script>
+      (function () {
+        const dialog = document.getElementById("forgot-password-dialog");
+        const openButton = document.getElementById("forgot-password-open");
+        const cancelButton = document.getElementById("forgot-password-cancel");
+        const closeButton = document.getElementById("forgot-password-close");
+        const emailInput = dialog ? dialog.querySelector('input[name="reset_email"]') : null;
+
+        function openDialog() {
+          if (!dialog) return;
+          if (typeof dialog.showModal === "function") {
+            dialog.showModal();
+          } else {
+            dialog.setAttribute("open", "");
+          }
+          if (emailInput) {
+            emailInput.focus();
+          }
+        }
+
+        function closeDialog() {
+          if (!dialog) return;
+          if (typeof dialog.close === "function") {
+            dialog.close();
+          } else {
+            dialog.removeAttribute("open");
+          }
+        }
+
+        openButton?.addEventListener("click", openDialog);
+        cancelButton?.addEventListener("click", closeDialog);
+        closeButton?.addEventListener("click", closeDialog);
+
+        dialog?.addEventListener("click", function (event) {
+          const bounds = dialog.getBoundingClientRect();
+          const clickedOutside =
+            event.clientX < bounds.left ||
+            event.clientX > bounds.right ||
+            event.clientY < bounds.top ||
+            event.clientY > bounds.bottom;
+          if (clickedOutside) {
+            closeDialog();
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

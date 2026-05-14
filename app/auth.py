@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime
 from urllib.parse import urlsplit
 
@@ -8,15 +9,18 @@ from sqlalchemy.exc import IntegrityError
 from .extensions import db, oauth
 from .models import (
     EthicsActivityLog,
+    EthicsRole,
     EthicsUser,
     MbaStudentProfile,
     MbaRole,
+    MbaScholarRole,
     MbaUser,
     UJ_STUDENT_EMAIL_RE,
     is_uj_student_email,
     normalize_email,
     student_email_for,
 )
+from .mail import send_email
 from .supervisor_sync import sync_ethics_supervisor_from_mba
 
 auth_bp = Blueprint("auth", __name__)
@@ -41,6 +45,61 @@ def find_mba_profile_by_student_number(student_number):
 
 def looks_like_email(email):
     return bool(email and "@" in email and "." in email.rsplit("@", 1)[-1])
+
+
+def _temporary_password():
+    return secrets.token_urlsafe(12)
+
+
+def _eligible_mba_password_reset_user(user):
+    if not user or not user.is_active:
+        return False
+    if user.role in {MbaRole.STUDENT.value, MbaRole.EXAMINER.value, MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}:
+        return True
+    return user.role == MbaRole.SCHOLAR.value and user.scholar_role in {
+        MbaScholarRole.EXAMINER.value,
+        MbaScholarRole.SUPERVISOR.value,
+        MbaScholarRole.BOTH.value,
+    }
+
+
+def _eligible_ethics_password_reset_user(user):
+    if not user or not user.is_active:
+        return False
+    return user.role in {
+        EthicsRole.STUDENT.value,
+        EthicsRole.SUPERVISOR.value,
+        EthicsRole.ADMIN.value,
+        EthicsRole.SUPER_ADMIN.value,
+    }
+
+
+def _password_reset_users(email):
+    clean_email = normalize_email(email)
+    users = []
+
+    mba_user = MbaUser.find_by_email(clean_email)
+    if _eligible_mba_password_reset_user(mba_user):
+        users.append(mba_user)
+
+    ethics_user = EthicsUser.find_by_email(clean_email)
+    if _eligible_ethics_password_reset_user(ethics_user):
+        users.append(ethics_user)
+
+    return users
+
+
+def _password_reset_email_body(email, temporary_password):
+    login_url = url_for("auth.login", _external=True)
+    return (
+        "Hello,\n\n"
+        "You requested a password reset. Here are your credentials:\n\n"
+        f"Email: {email}\n"
+        f"Temporary Password: {temporary_password}\n\n"
+        f"Login link: {login_url}\n\n"
+        "Please log in using this temporary password and change it immediately.\n"
+        "If you did not request this, please ignore this email or contact support."
+    )
 
 
 def user_has_popia_confirmation(user):
@@ -100,6 +159,35 @@ def login():
         return post_login_redirect(user)
 
     return render_template("auth/login.html")
+
+
+@auth_bp.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    if current_user.is_authenticated:
+        return post_login_redirect(current_user)
+
+    generic_message = "If an account with that email exists, you will receive a password reset email."
+    email = normalize_email(request.form.get("reset_email") or "")
+
+    if looks_like_email(email):
+        users = _password_reset_users(email)
+        if users:
+            temporary_password = _temporary_password()
+            for user in users:
+                user.set_password(temporary_password)
+                log_ethics_auth_activity(user, "password_reset", "Temporary password generated from login reset flow")
+
+            try:
+                sent = send_email(email, "Your Password Has Been Reset", _password_reset_email_body(email, temporary_password))
+                if not sent:
+                    raise RuntimeError("Mail delivery is not configured.")
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Password reset email failed for %s", email)
+
+    flash(generic_message, "info")
+    return redirect(url_for("auth.login"))
 
 
 @auth_bp.route("/popia-notice", methods=["GET", "POST"])
