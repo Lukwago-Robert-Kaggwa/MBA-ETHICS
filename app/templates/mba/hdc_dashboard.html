@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block title %}MBA HDC Dashboard{% endblock %}
+{% block app_name %}MBA App{% endblock %}
+{% block page_heading %}HDC Dashboard{% endblock %}
+{% block page_subheading %}Review Capstone Project assessor nominations, supporting documents, and final assessment results{% endblock %}
+
+{% block body %}
+{% from "mba/_project_disclosure.html" import project_disclosure %}
+{% macro person_name(user, fallback='Unassigned') -%}
+  {%- if user -%}
+    {%- set full_name = ((user.first_name or '') ~ (' ' ~ user.last_name if user.last_name else '')) | trim -%}
+    {{- full_name or user.email.split('@')[0] -}}
+  {%- else -%}
+    {{- fallback -}}
+  {%- endif -%}
+{%- endmacro %}
+<div class="mba-page-stack">
+<section class="ethics-panel" id="hdc-queue">
+  {% set current_approval_label = approval_labels.get(approval_set, 'HDC Approvals') if approval_labels is defined else 'HDC Approvals' %}
+  {% set has_hdc_filters = approval_set != 'overview' or review_status != 'pending_review' or hdc_student_number %}
+  <div class="panel-heading">
+    <h2>{{ current_approval_label }}</h2>
+    <span>{{ hdc_pagination.total }}</span>
+  </div>
+
+  <div class="detail-grid">
+    <div>
+      <dt>JBS5 Approvals</dt>
+      <dd>{{ hdc_pending_counts.jbs5 if hdc_pending_counts is defined else 0 }} pending</dd>
+      <a href="{{ url_for('mba.hdc_dashboard', approval_set='jbs5', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="text-link">Open</a>
+    </div>
+    <div>
+      <dt>JBS10 &amp; Assessor Nominations</dt>
+      <dd>{{ hdc_pending_counts.nominations if hdc_pending_counts is defined else 0 }} pending</dd>
+      <a href="{{ url_for('mba.hdc_dashboard', approval_set='nominations', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="text-link">Open</a>
+    </div>
+    <div>
+      <dt>Result Approvals</dt>
+      <dd>{{ hdc_pending_counts.results if hdc_pending_counts is defined else 0 }} pending</dd>
+      <a href="{{ url_for('mba.hdc_dashboard', approval_set='results', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="text-link">Open</a>
+    </div>
+  </div>
+
+  <div class="admin-filter-strip">
+    <a href="{{ url_for('mba.hdc_dashboard', approval_set=approval_set, review_status='all', student_number=hdc_student_number or None, hdc_per_page=hdc_pagination.per_page) }}" class="filter-pill {% if review_status == 'all' %}is-active{% endif %}">
+      All
+      <strong>{{ review_filter_counts.get('all', 0) }}</strong>
+    </a>
+    <a href="{{ url_for('mba.hdc_dashboard', approval_set=approval_set, review_status='pending_review', student_number=hdc_student_number or None, hdc_per_page=hdc_pagination.per_page) }}" class="filter-pill {% if review_status == 'pending_review' %}is-active{% endif %}">
+      Pending Review
+      <strong>{{ review_filter_counts.get('pending_review', 0) }}</strong>
+    </a>
+    <a href="{{ url_for('mba.hdc_dashboard', approval_set=approval_set, review_status='approved', student_number=hdc_student_number or None, hdc_per_page=hdc_pagination.per_page) }}" class="filter-pill {% if review_status == 'approved' %}is-active{% endif %}">
+      Approved
+      <strong>{{ review_filter_counts.get('approved', 0) }}</strong>
+    </a>
+    <a href="{{ url_for('mba.hdc_dashboard', approval_set=approval_set, review_status='rejected', student_number=hdc_student_number or None, hdc_per_page=hdc_pagination.per_page) }}" class="filter-pill {% if review_status == 'rejected' %}is-active{% endif %}">
+      Rejected
+      <strong>{{ review_filter_counts.get('rejected', 0) }}</strong>
+    </a>
+  </div>
+  <form method="get" action="{{ url_for('mba.hdc_dashboard') }}" class="admin-filter-form">
+    <input type="hidden" name="approval_set" value="{{ approval_set }}">
+    <input type="hidden" name="review_status" value="{{ review_status }}">
+    <input type="hidden" name="hdc_per_page" value="{{ hdc_pagination.per_page }}">
+    <label class="admin-filter-field">
+      <span>Student Number</span>
+      <input type="text" name="student_number" placeholder="Search by student number" value="{{ hdc_student_number }}" class="admin-filter-input">
+    </label>
+    <div class="admin-filter-actions">
+      <button type="submit" class="primary-button small-button">Apply Filters</button>
+      {% if has_hdc_filters %}
+        <a href="{{ url_for('mba.hdc_dashboard', hdc_per_page=hdc_pagination.per_page) }}" class="text-link">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+  {% set pagination = hdc_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+  <div class="record-list mba-work-project-list">
+    {% for project in projects %}
+      {% call project_disclosure(project, 'project-disclosure--hdc') %}
+      <div class="mba-work-project-stack">
+        {% set show_assessor_profile_hover = true %}
+        {% include "mba/_project_card.html" %}
+        {% include "mba/_jbs5_hdc_feedback.html" %}
+        {% if project.hdc_comments and (project.jbs5_hdc_comments|default('', true) or project.project_status not in ['jbs5_submitted_to_hdc', 'jbs5_hdc_approved', 'jbs5_hdc_declined']) %}
+          <details class="response-section">
+            <summary>HDC comments</summary>
+            {% for comment in project.hdc_comments.split('***')|reverse %}
+              <p>{{ comment }}</p>
+            {% endfor %}
+          </details>
+        {% endif %}
+        {% if project.results_hdc_comments %}
+          <details class="response-section">
+            <summary>HDC results comments</summary>
+            {% for comment in project.results_hdc_comments.split('***')|reverse %}
+              <p>{{ comment }}</p>
+            {% endfor %}
+          </details>
+        {% endif %}
+        {% set results_stage = project.project_status in ['results_submitted_to_hdc', 'results_declined', 'results_approved', 'graduated'] %}
+        {% set proj_docs = documents_by_project.get(project.id, []) %}
+        {% set missing_hdc_docs = required_hdc_results_documents_missing(project) if required_hdc_results_documents_missing is defined else [] %}
+        <details class="response-section" open>
+          <summary>Capstone Project documents ({{ proj_docs|length }})</summary>
+          <div class="table-wrap table-wrap--embedded">
+            <table class="admin-table admin-table--documents">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Date</th>
+                  {% if results_stage %}
+                    <th>Grade / 100</th>
+                    <th>Recommendation</th>
+                  {% endif %}
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for doc in proj_docs %}
+                  {% set proj_forms = forms_by_project.get(project.id, {}) %}
+                  {% set form = proj_forms.get(doc.doc_type) %}
+                  <tr>
+                    <td>
+                      <strong>{{ document_label(doc.doc_type) }}</strong>
+                      <small>{{ "Submitted external examiner nomination form" if doc.doc_type.startswith('assessor_profile_') else doc.original_name }}</small>
+                    </td>
+                    <td class="admin-table__date">{{ doc.uploaded_at.strftime('%d %b %Y') }}</td>
+                    {% if results_stage %}
+                      <td class="admin-table__metric">
+                        {% if form and form.payload and form.payload.get('grade') %}
+                          {{ form.payload.get('grade') }}/100
+                        {% else %}&mdash;{% endif %}
+                      </td>
+                      <td>
+                        {% if form and form.payload and form.payload.get('recommendation') %}
+                          {{ form.payload.get('recommendation') }}
+                        {% else %}&mdash;{% endif %}
+                      </td>
+                    {% endif %}
+                    <td class="admin-table__actions">
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}"
+                           class="primary-button small-button" target="_blank" rel="noopener">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}"
+                           class="secondary-button small-button">Download</a>
+                      </div>
+                    </td>
+                  </tr>
+                {% else %}
+                <tr><td colspan="{{ 5 if results_stage else 3 }}" class="admin-table__empty">{% if results_stage %}No assessor result documents uploaded yet.{% else %}No JBS10 or assessor forms uploaded yet.{% endif %}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if results_stage and project.corrections_requested_at %}
+            <p class="muted" style="margin-top:0.75rem;">
+              Corrections were requested for this result. Review the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report before deciding.
+            </p>
+          {% endif %}
+          {% if results_stage and missing_hdc_docs %}
+            <p class="muted" style="margin-top:0.5rem;">
+              Missing for HDC review:
+              {% for doc_key in missing_hdc_docs %}{{ document_label(doc_key) }}{% if not loop.last %}, {% endif %}{% endfor %}.
+            </p>
+          {% endif %}
+
+          {% set summary = grade_summaries.get(project.id) %}
+          {% if results_stage and summary and summary.count > 0 %}
+            <div style="margin-top:1rem;padding:0.75rem 1rem;background:var(--surface-alt,#f5f5f5);border-radius:6px;border-left:4px solid var(--primary,#1a237e);display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+              <strong>Grade Summary</strong>
+              <span>Grades received: {{ summary.count }} / 3</span>
+              {% if summary.final is not none %}
+                <span style="font-size:1rem;font-weight:700;color:var(--primary,#1a237e);">
+                  Average: {{ summary.percentage }}
+                </span>
+                <span style="padding:0.2rem 0.65rem;border-radius:4px;font-weight:600;
+                  background:{% if summary.classification == 'Distinction' %}#c8e6c9{% elif summary.classification == 'Merit' %}#fff9c4{% elif summary.classification == 'Pass' %}#e3f2fd{% else %}#ffcdd2{% endif %};">
+                  {{ summary.classification }}
+                </span>
+                <small style="color:var(--text-muted,#666);">
+                  Individual: {% for slot, g in summary.grades %}{{ slot.replace('assessor_','A') }}: {{ g }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </small>
+              {% endif %}
+            </div>
+          {% endif %}
+        </details>
+
+        {% if project.project_status in ['jbs5_submitted_to_hdc', 'jbs5_hdc_declined'] %}
+          <section class="response-section">
+            <strong>HDC JBS5 Review</strong>
+            <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              JBS5 contains a JBS HDC signature section. Open the form, review it, then sign and approve or return it with feedback.
+            </p>
+            <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs5') }}" class="primary-button small-button">Open JBS5 for HDC Review</a>
+          </section>
+        {% elif project.project_status in ['admin_approved', 'hdc_declined'] %}
+          <form action="{{ url_for('mba.hdc_project_action', project_id=project.id) }}" method="post" class="form-stack compact-form">
+            <label>HDC nomination comment <textarea name="comment" rows="2"></textarea></label>
+            <div class="invite-list">
+              {% for slot, slot_label, assessor in [('assessor_1', 'Assessor 1', project.assessor_1), ('assessor_2', 'Assessor 2', project.assessor_2)] %}
+                {% set hdc_decision = assessor_hdc_decision(project, slot) %}
+                {% set decision_badge = 'accepted' if hdc_decision == 'approved' else ('declined' if hdc_decision == 'declined' else 'pending') %}
+                <div class="invite-row">
+                  <div>
+                    <strong>{{ slot_label }}</strong>
+                    <small>
+                      {% if assessor %}
+                        <span class="name-email" tabindex="0">{{ person_name(assessor) }}<span class="hover-email">{{ assessor.email }}</span></span>
+                      {% else %}
+                        Unassigned
+                      {% endif %}
+                    </small>
+                    <div class="card-actions">
+                      <button class="primary-button small-button" name="action" value="approve_{{ slot }}_nomination" type="submit" {% if hdc_decision == 'approved' or not assessor %}disabled{% endif %}>Approve</button>
+                      <button class="secondary-button small-button" name="action" value="decline_{{ slot }}_nomination" type="submit" {% if hdc_decision == 'declined' or not assessor %}disabled{% endif %}>Decline</button>
+                    </div>
+                  </div>
+                  <span class="invite-badge invite-badge--{{ decision_badge }}">{{ assessor_hdc_decision_label(hdc_decision) }}</span>
+                </div>
+              {% endfor %}
+            </div>
+            <div class="card-actions">
+              <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs10') }}" class="primary-button small-button">Open JBS10 for HDC Signature</a>
+            </div>
+            <p class="muted" style="margin:0.5rem 0 0;">
+              Use the assessor buttons for individual nomination decisions. Final approval or return of the nomination set must be completed on the opened JBS10 form because it contains a JBS HDC signature section.
+            </p>
+          </form>
+        {% elif project.project_status == 'results_submitted_to_hdc' %}
+          <form action="{{ url_for('mba.hdc_project_action', project_id=project.id) }}" method="post" class="form-stack compact-form">
+            <label>HDC results comment <textarea name="comment" rows="2"></textarea></label>
+            <div class="card-actions">
+              <button class="primary-button small-button" name="action" value="approve_results" type="submit" {% if not all_assessment_results_received(project) or missing_hdc_docs %}disabled{% endif %}>Approve Results</button>
+              <button class="secondary-button small-button" name="action" value="decline_results" type="submit">Decline Results</button>
+            </div>
+          </form>
+        {% elif project.project_status == 'results_declined' %}
+          <p class="muted">
+            HDC returned these results. Wait for MBA Admin to update the pack and resubmit it before recording another HDC results decision.
+          </p>
+        {% elif project.project_status == 'results_approved' %}
+          <p class="muted">HDC approved the assessment results.</p>
+        {% elif project.project_status == 'jbs5_hdc_approved' %}
+          <p class="muted">HDC approved JBS5. Assessor nominations can be forwarded to HDC when the nomination pack is ready.</p>
+        {% elif approval_set == 'jbs5' and project.jbs5_hdc_approved_at %}
+          <p class="muted">JBS5 was approved by HDC on {{ project.jbs5_hdc_approved_at.strftime('%d %b %Y') }}. This project has moved to {{ project_status_label(project.project_status) if project_status_label is defined else project.project_status.replace('_', ' ').title() }}.</p>
+        {% elif project.project_status == 'graduated' %}
+          <p class="muted">This Capstone Project has completed the HDC review path and is marked as graduated.</p>
+        {% else %}
+          <p class="muted">This Capstone Project is currently in the assessor review stage.</p>
+        {% endif %}
+      </div>
+      {% endcall %}
+    {% else %}
+      <p class="muted">No {{ current_approval_label|lower }} match this queue.</p>
+    {% endfor %}
+  </div>
+  {% set pagination = hdc_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+</section>
+</div>
+{% endblock %}

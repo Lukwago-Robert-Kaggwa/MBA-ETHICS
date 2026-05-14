@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Temporary Claim Form - {{ slot_label }}{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Temporary Claim Form{% endblock %}
+{% block page_subheading %}{{ project.project_title }} &mdash; {{ slot_label }}{% endblock %}
+
+{% block body %}
+{% set yes_no_values = yes_no_options if yes_no_options is defined else ['Yes', 'No'] %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header mba-doc-header--centered">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <h2 class="mba-doc-title">Remuneration Claim: Temporary and Fixed Term Appointments</h2>
+        </div>
+      </div>
+
+      <div class="mba-doc-form">
+        <table class="mba-doc-table">
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">Personal Particulars of Employee</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Faculty / Division</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('faculty_division','') }}" readonly></td>
+            <td class="mba-doc-label">Department / Unit / Centre</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('department_unit_centre','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Employee Number</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('employee_number','') }}" readonly></td>
+            <td class="mba-doc-label">Month of Claim</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('month_of_claim','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Surname</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('assessor_surname','') }}" readonly></td>
+            <td class="mba-doc-label">Title</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('assessor_title','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">First Names</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('assessor_first_names','') }}" readonly></td>
+            <td class="mba-doc-label">Cellphone / Mobile Number</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('alternate_contact_number','') or prefill.get('assessor_contact','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Email Address</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('alternate_email_address','') or prefill.get('assessor_email','') }}" readonly></td>
+            <td class="mba-doc-label">Requestor Email</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('requestor_email','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Requestor Extension</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('requestor_extension','') }}" readonly></td>
+            <td class="mba-doc-label">Appointed Against Permanent Position</td>
+            <td>
+              <select class="mba-doc-select" disabled>
+                <option value="">Select</option>
+                {% for option in yes_no_values %}
+                  <option value="{{ option }}" {% if prefill.get('appointed_against_permanent_position') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">If yes, Position Number</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('position_number','') }}" readonly></td>
+            <td class="mba-doc-label">Unit Basis</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_unit_basis','') }}" readonly></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table">
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">Claim Details</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Contract EIT Number</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('contract_eit_number','') }}" readonly></td>
+            <td class="mba-doc-label">Total Units</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_total_units','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Rate</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_rate','') }}" readonly></td>
+            <td class="mba-doc-label">Currency</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_currency','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Amount Claimed</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('amount_claimed','') }}" readonly></td>
+            <td class="mba-doc-label">Claim Cost Centre Number</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_cost_centre_number','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Total Claimed</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('total_claimed','') }}" readonly></td>
+            <td class="mba-doc-label">Claim Rate Reference</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_rate','') }}" readonly></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight">
+          <tr>
+            <th colspan="3">EMPLOYEE</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Full name and Surname [Please print]</td>
+            <td class="mba-doc-label">Signature</td>
+            <td class="mba-doc-label">Date</td>
+          </tr>
+          <tr>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_signature_name','') }}" readonly></td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_signature_name','') }}" readonly></td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('claim_signature_date','') }}" readonly></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-muted-box">
+          <p class="mba-doc-note" style="font-weight:700;color:#111827;margin-bottom:6px;">Claim Approvals</p>
+          <p class="mba-doc-note">Primary line manager and secondary line manager sections are completed outside this assessor submission step.</p>
+        </div>
+
+        <label class="mba-doc-checkline">
+          <span>I confirm the claim information above is complete and accurate.</span>
+          <input class="mba-doc-checkbox" type="checkbox" disabled {% if prefill.get('claim_declaration') %}checked{% endif %}>
+        </label>
+      </div>
+    </div>
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% endblock %}

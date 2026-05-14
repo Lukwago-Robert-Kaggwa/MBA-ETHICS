@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Ethics Analytics{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Analytics{% endblock %}
+{% block page_subheading %}Super Admin reporting across submissions, status, risk, and reviewer workload{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="analytics-grid">
+  <article class="ethics-panel analytics-card">
+    <h2>{{ totals.submissions }}</h2>
+    <p>Total submissions</p>
+  </article>
+  <article class="ethics-panel analytics-card">
+    <h2>{{ totals.students }}</h2>
+    <p>Students</p>
+  </article>
+  <article class="ethics-panel analytics-card">
+    <h2>{{ totals.supervisors }}</h2>
+    <p>Supervisors</p>
+  </article>
+  <article class="ethics-panel analytics-card">
+    <h2>{{ totals.reviewers }}</h2>
+    <p>Reviewers</p>
+  </article>
+</section>
+
+<div class="grid-two">
+  <section class="ethics-panel">
+    <div class="panel-heading">
+      <h2>Forms By Type</h2>
+      <span>A, B, C</span>
+    </div>
+    <div class="analytics-list">
+      {% for form_type, count in form_counts.items() %}
+        <div><strong>Form {{ form_type }}</strong><span>{{ count }}</span></div>
+      {% else %}
+        <p class="muted">No form data yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="ethics-panel">
+    <div class="panel-heading">
+      <h2>Forms By Risk</h2>
+      <span>Low to high</span>
+    </div>
+    <div class="analytics-list">
+      {% for risk, count in risk_counts.items() %}
+        <div><strong>{{ risk.title() }}</strong><span>{{ count }}</span></div>
+      {% else %}
+        <p class="muted">No risk data yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Status Breakdown</h2>
+    <span>{{ status_counts|length }} statuses</span>
+  </div>
+  <div class="analytics-list analytics-list--wide">
+    {% for status, count in status_counts.items() %}
+      <div><strong>{{ status.replace('_', ' ').title() }}</strong><span>{{ count }}</span></div>
+    {% else %}
+      <p class="muted">No status data yet.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Reviewer Workload</h2>
+    <span>{{ reviewer_stats|length }} reviewers</span>
+  </div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Reviewer</th>
+          <th>Assigned</th>
+          <th>Completed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for email, assigned, completed in reviewer_stats %}
+          <tr>
+            <td>{{ email }}</td>
+            <td>{{ assigned }}</td>
+            <td>{{ completed }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="3" class="muted">No reviewer data yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}MBA Examiner Dashboard{% endblock %}
+{% block app_name %}MBA App{% endblock %}
+{% block page_heading %}Examiner Dashboard{% endblock %}
+{% block page_subheading %}Assigned assessor Capstone Projects{% endblock %}
+
+{% block body %}
+{% from "mba/_project_disclosure.html" import project_disclosure %}
+<div class="mba-page-stack">
+<section class="ethics-panel" id="assigned-projects">
+  <div class="panel-heading">
+    <h2>Assigned Capstone Projects</h2>
+    <span>{{ examiner_pagination.total }}</span>
+  </div>
+  {% set pagination = examiner_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+  <div class="record-list mba-work-project-list">
+    {% for project in projects %}
+      {% call project_disclosure(project, 'project-disclosure--assessor') %}
+      <div class="mba-work-project-stack">
+        {% set hide_assessor_lineup = true %}
+        {% include "mba/_project_card.html" %}
+        {% set invitation_slots = invitation_status_for_user(project, current_user.id) %}
+        {% for slot in invitation_slots %}
+          {% if slot.slot in ['assessor_1', 'assessor_2', 'assessor_3'] %}
+            <div class="response-section">
+              <p><strong>{{ slot.label }} invitation:</strong> {{ slot.status.replace('_', ' ').title() }}</p>
+              {% set appointment_docs = project.documents | selectattr('doc_type', 'equalto', assessor_temp_appointment_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set claim_docs = project.documents | selectattr('doc_type', 'equalto', assessor_temp_claim_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set profile_docs = project.documents | selectattr('doc_type', 'equalto', assessor_profile_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set cv_docs = project.documents | selectattr('doc_type', 'equalto', assessor_cv_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set highest_qualification_docs = project.documents | selectattr('doc_type', 'equalto', assessor_highest_qualification_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set appointment_doc = appointment_docs[0] if appointment_docs else None %}
+              {% set claim_doc = claim_docs[0] if claim_docs else None %}
+              {% set profile_doc = profile_docs[0] if profile_docs else None %}
+              {% set cv_doc = cv_docs[0] if cv_docs else None %}
+              {% set highest_qualification_doc = highest_qualification_docs[0] if highest_qualification_docs else None %}
+              {% if slot.status == 'expired' %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  This assessor invitation has expired.
+                </p>
+              {% elif slot.status == 'declined' %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  You declined this assessor invitation. No further action is available.
+                </p>
+              {% elif slot.status != 'accepted' %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  Complete the temporary appointment, claim, and external examiner nomination form, and upload your CV and Highest Qualification document to accept this assessor invitation.
+                </p>
+                <div class="invitation-action-row">
+                  <a href="{{ url_for('mba.assessor_acceptance_form', project_id=project.id, slot=slot.slot) }}" class="primary-button small-button">Complete Forms and Accept</a>
+                  <form action="{{ url_for('mba.invitation_response', project_id=project.id) }}" method="post" class="invitation-action-form">
+                    <input type="hidden" name="slot" value="{{ slot.slot }}">
+                    <button class="secondary-button small-button" name="decision" value="declined" type="submit">Decline invitation</button>
+                  </form>
+                </div>
+              {% endif %}
+              {% if slot.status == 'accepted' %}
+                <div class="invite-list invite-list--documents" style="margin-top:0.75rem;">
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Temporary Appointment Form</strong>
+                      <small>{% if appointment_doc %}Submitted{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if appointment_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=appointment_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=appointment_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Temporary Claim Form</strong>
+                      <small>{% if claim_doc %}Submitted{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if claim_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=claim_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=claim_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>External Examiner Nomination Form</strong>
+                      <small>{% if profile_doc %}Submitted{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if profile_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=profile_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=profile_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Curriculum Vitae</strong>
+                      <small>{% if cv_doc %}Uploaded{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if cv_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=cv_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=cv_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Highest Qualification Document</strong>
+                      <small>{% if highest_qualification_doc %}Uploaded{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if highest_qualification_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=highest_qualification_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=highest_qualification_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <a href="{{ url_for('mba.assessor_acceptance_form', project_id=project.id, slot=slot.slot) }}"
+                   class="secondary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                  Edit Acceptance Forms
+                </a>
+                {% set result_doc = uploaded_doc_for(project, assessment_doc_type(slot.slot)) %}
+                {% set result_pack_complete = assessment_result_pack_complete(project, slot.slot) if assessment_result_pack_complete is defined else result_doc %}
+                {% if assessor_can_view_project_documents(project) %}
+                  {% set student_dissertation_docs = project.documents | selectattr('doc_type', 'equalto', 'dissertation') | list %}
+                  <div class="invite-list invite-list--documents" style="margin-top:0.75rem;">
+                    {% if assessor_can_view_student_dissertation(project) %}
+                      {% for doc in student_dissertation_docs %}
+                        <div class="invite-row invite-row--document">
+                          <div>
+                            <strong>{{ document_label(doc.doc_type) }}</strong>
+                            <small>{{ doc.original_name }}</small>
+                          </div>
+                          <div class="document-action-row">
+                            <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">View</a>
+                            <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">Download</a>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    {% elif student_dissertation_docs %}
+                      <p class="muted">The Capstone Manuscript is uploaded and waiting for MBA Admin to release it to assessors.</p>
+                    {% endif %}
+                    {% if not student_dissertation_docs %}
+                      <p class="muted">MBA Admin has not uploaded the Capstone Manuscript from Moodle yet.</p>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <p class="muted" style="margin-top:0.5rem;">Capstone Manuscript access opens after MBA Admin releases it to assessors.</p>
+                {% endif %}
+                {% if not assessor_can_view_student_dissertation(project) %}
+                  <p class="muted" style="margin-top:0.5rem;">Assessor pack submission opens after MBA Admin releases the Capstone Manuscript to assessors.</p>
+                {% elif result_pack_complete %}
+                  <p class="muted" style="margin-top:0.5rem;">Assessment results already submitted.</p>
+                {% elif project.project_status in ['hdc_verified', 'results_submitted_to_hdc', 'results_declined'] %}
+                  <a href="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot.slot) }}"
+                     class="primary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                    Submit Results
+                  </a>
+                {% else %}
+                  <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after HDC verifies the assessor nominations.</p>
+                {% endif %}
+              {% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% if additional_assessment_required is defined and additional_assessment_required(project) %}
+          <section class="response-section">
+            <strong>Additional Assessment</strong>
+            <p class="muted" style="margin:0.5rem 0 0;">
+              This Capstone Project is under the additional assessment workflow. Current status: {{ additional_assessment_status_label(additional_assessment_stage(project)) }}.
+            </p>
+          </section>
+        {% endif %}
+      </div>
+      {% endcall %}
+    {% else %}
+      <p class="muted">No examiner Capstone Projects assigned yet.</p>
+    {% endfor %}
+  </div>
+  {% set pagination = examiner_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+</section>
+</div>
+{% endblock %}

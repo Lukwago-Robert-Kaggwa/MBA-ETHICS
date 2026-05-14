@@ -1,0 +1,19 @@
+<article class="record-card">
+  <div class="record-card__top">
+    <h3>Form {{ submission.form_type }}: {{ submission.title }}</h3>
+    <span class="status-pill status-pill--{{ submission.status }}">{{ submission.status.replace('_', ' ').title() }}</span>
+  </div>
+  <p>{{ submission.student.email }}{% if submission.supervisor %} &middot; Supervisor: {{ submission.supervisor.email }}{% endif %}</p>
+  <span>{{ submission.risk_level.title() }} risk{% if submission.submitted_at %} &middot; Submitted {{ submission.submitted_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}</span>
+  <div class="feedback-summary">
+    <span>Supervisor: {{ submission.supervisor_decision.replace('_', ' ').title() if submission.supervisor_decision else 'Awaiting review' }}</span>
+    <span>Reviewers: {{ submission.reviewer_assignments|selectattr('completed_at')|list|length }}/{{ submission.reviewer_assignments|length }} reviewed</span>
+    <span>REC: {{ submission.rec_status.replace('_', ' ').title() if submission.rec_status else 'No decision yet' }}</span>
+  </div>
+  <div class="card-actions">
+    <a class="text-link" href="{{ url_for('ethics.submission_detail', submission_id=submission.id) }}">Open form</a>
+    {% if show_previous_link|default(false) and current_user.role == 'supervisor' %}
+      <a class="text-link" href="{{ url_for('ethics.supervisor_previous_forms', student_id=submission.student_id) }}">Previous forms</a>
+    {% endif %}
+  </div>
+</article>

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Student Ethics Dashboard{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Student Dashboard{% endblock %}
+{% block page_subheading %}Choose a supervisor, submit Forms A/B/C, and track previous submissions{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<div class="grid-two">
+  <section class="ethics-panel" id="ethics-pack">
+    <div class="panel-heading">
+      <h2>Ethics Pack</h2>
+      <span>Form A/B/C</span>
+    </div>
+
+    {% if not current_user.supervisor_id %}
+      <form action="{{ url_for('ethics.choose_supervisor') }}" method="post" class="form-stack compact-form">
+        <label>
+          Supervisor
+          <select name="supervisor_id" required>
+            <option value="">Choose supervisor</option>
+            {% for supervisor in supervisors %}
+              <option value="{{ supervisor.id }}">{{ supervisor.first_name or supervisor.email }} {{ supervisor.last_name or '' }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="primary-button" type="submit">Save supervisor</button>
+      </form>
+    {% else %}
+      <div class="form-section">
+        <p class="muted">
+          Supervisor:
+          <strong>{{ current_user.supervisor.first_name or current_user.supervisor.email }} {{ current_user.supervisor.last_name or '' }}</strong>
+        </p>
+        <details>
+          <summary class="text-link">Replace supervisor</summary>
+          <form action="{{ url_for('ethics.choose_supervisor') }}" method="post" class="form-stack compact-form">
+            <input type="hidden" name="replace_supervisor" value="1">
+            <label>
+              New supervisor
+              <select name="supervisor_id" required>
+                <option value="">Choose supervisor</option>
+                {% for supervisor in supervisors %}
+                  <option value="{{ supervisor.id }}" {% if supervisor.id == current_user.supervisor_id %}selected{% endif %}>
+                    {{ supervisor.first_name or supervisor.email }} {{ supervisor.last_name or '' }}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+            <button class="secondary-button" type="submit">Replace supervisor</button>
+          </form>
+        </details>
+      </div>
+      <div class="form-section">
+        <h3>Start Ethics Pack</h3>
+        <p class="muted">Open the production-style ethics pack and complete Form A, Form B, or Form C in its own format.</p>
+        <a class="primary-button" href="{{ url_for('ethics.ethics_pack') }}">Open Ethics Pack</a>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="ethics-panel" id="my-submissions">
+    <div class="panel-heading">
+      <h2>Active Submissions</h2>
+      <span>{{ active_submissions|length }}</span>
+    </div>
+    <div class="record-list">
+      {% for submission in active_submissions %}
+        {% include "ethics/_submission_card.html" %}
+      {% else %}
+        <p class="muted">No active ethics submissions.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="ethics-panel" id="old-forms">
+  <div class="panel-heading">
+    <h2>Old Forms</h2>
+    <span>{{ old_submissions|length }}</span>
+  </div>
+  <div class="record-list">
+    {% for submission in old_submissions %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No old forms yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

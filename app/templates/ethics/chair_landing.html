@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Ethics Admin Dashboard{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Ethics Admin Dashboard{% endblock %}
+{% block page_subheading %}Assign reviewers, monitor forms, and issue certificates{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="ethics-panel" id="admin-queue">
+  <div class="panel-heading">
+    <h2>Admin Queue</h2>
+    <span>{{ active_submissions|length }} active</span>
+  </div>
+  <div class="record-list">
+    {% for submission in active_submissions %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No active admin submissions.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="ethics-panel" id="old-forms">
+  <div class="panel-heading">
+    <h2>Old Forms And Certificates</h2>
+    <span>{{ old_submissions|length }}</span>
+  </div>
+  <div class="record-list">
+    {% for submission in old_submissions %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No archived forms yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

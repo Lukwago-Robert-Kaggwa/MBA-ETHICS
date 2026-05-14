@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}TII AI Declaration (JBS){% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}TII AI Declaration (JBS){% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header mba-doc-header--centered">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <h2 class="mba-doc-title">Assignment/Assessment AI Declaration</h2>
+          <div class="mba-doc-subtitle">Artificial Intelligence (AI) declaration</div>
+          <div class="mba-doc-kicker" style="margin-top:8px;">University of Johannesburg</div>
+          <div class="mba-doc-kicker">Johannesburg Business School</div>
+        </div>
+      </div>
+
+      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='ai_declaration_form') }}" method="post" class="mba-doc-form">
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:28%;">
+            <col style="width:72%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Course</td>
+            <td><input class="mba-doc-input" name="course_name" value="{{ prefill.get('course_name','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Module</td>
+            <td><input class="mba-doc-input" name="module_title" value="{{ prefill.get('module_title','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Assessment</td>
+            <td><textarea class="mba-doc-textarea mba-doc-textarea--line" name="assessment_title" rows="2" readonly required>{{ prefill.get('assessment_title','') }}</textarea></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Lecturer</td>
+            <td><input class="mba-doc-input" name="lecturer_name" value="{{ prefill.get('lecturer_name','') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Due Date</td>
+            <td><input class="mba-doc-input" type="date" name="due_date" value="{{ prefill.get('due_date','') }}" required></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-center" style="font-weight:700;">DETAILS OF INDIVIDUAL</div>
+
+        <table class="mba-doc-table mba-doc-table--center">
+          <colgroup>
+            <col style="width:40%;">
+            <col style="width:25%;">
+            <col style="width:35%;">
+          </colgroup>
+          <tr>
+            <th>INITIALS AND SURNAME</th>
+            <th>STUDENT NUMBER</th>
+            <th>SIGNATURE</th>
+          </tr>
+          <tr>
+            <td><input class="mba-doc-input" name="full_name" value="{{ prefill.get('full_name','') }}" required></td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" required></td>
+            <td><input class="mba-doc-input" name="signature_name" value="{{ prefill.get('signature_name','') }}" required></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-form" style="gap:10px;">
+          <p class="mba-doc-paragraph">By completing this form, I hereby confirm that:</p>
+          <p class="mba-doc-paragraph">The document I have submitted or contributed to was written by me.</p>
+          <p class="mba-doc-paragraph">I have acknowledged the use of any generative AI tools as and where relevant.</p>
+          <p class="mba-doc-paragraph">I understand that the misuse of AI tools without approval or proper motivation for the use of the tools is academic misconduct.</p>
+          <p class="mba-doc-paragraph">I understand that I will be held accountable and liable for any academic misconduct that arises in breach of any relevant University policy.</p>
+        </div>
+
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:32%;">
+            <col style="width:28%;">
+            <col style="width:40%;">
+          </colgroup>
+          <tr>
+            <th>Generative AI tool used (list each separately)</th>
+            <th>Purpose</th>
+            <th>Motivation for the use of the generative AI tool</th>
+          </tr>
+          <tr>
+            <td><textarea class="mba-doc-textarea" name="ai_tools_used" rows="6" required>{{ prefill.get('ai_tools_used','') }}</textarea></td>
+            <td><textarea class="mba-doc-textarea" name="ai_use_purpose" rows="6">{{ prefill.get('ai_use_purpose','') }}</textarea></td>
+            <td><textarea class="mba-doc-textarea" name="ai_use_motivation" rows="6">{{ prefill.get('ai_use_motivation','') }}</textarea></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-static-row"></td>
+            <td class="mba-doc-static-row"></td>
+            <td class="mba-doc-static-row"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-static-row"></td>
+            <td class="mba-doc-static-row"></td>
+            <td class="mba-doc-static-row"></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight">
+          <tr>
+            <td class="mba-doc-label" style="width:24%;">Declaration Date</td>
+            <td><input class="mba-doc-input" type="date" name="signature_date" value="{{ prefill.get('signature_date','') }}" required></td>
+            <td class="mba-doc-label" style="width:24%;">UJ Email</td>
+            <td><input class="mba-doc-input" type="email" name="email" value="{{ prefill.get('email','') }}"></td>
+          </tr>
+        </table>
+
+        <label class="mba-doc-checkline">
+          <span>I confirm the AI declaration above. <span style="color:red;">*</span></span>
+          <input class="mba-doc-checkbox" type="checkbox" name="ai_consent" value="1" required {% if prefill.get('ai_consent') %}checked{% endif %}>
+        </label>
+
+        <div class="mba-doc-actions">
+          <button class="primary-button" type="submit">Submit AI Declaration</button>
+          <a href="{{ url_for('mba.student_dashboard') }}" class="secondary-button">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

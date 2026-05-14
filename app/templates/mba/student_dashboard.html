@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% block title %}MBA Student Dashboard{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Student Dashboard{% endblock %}
+{% block page_subheading %}Create Capstone Projects, submit JBS 5, and follow MBA workflow progress{% endblock %}
+
+{% block body %}
+{% from "mba/_project_disclosure.html" import project_disclosure %}
+<div class="mba-page-stack mba-student-dashboard">
+<section class="ethics-welcome-banner app-banner">
+  <div>
+    <p class="eyebrow">MBA Student</p>
+    <h1>Welcome, {{ current_user.first_name }}</h1>
+    <p>Your Capstone Projects move from JBS 5 submission to admin, HDC, assessors, and Ethics.</p>
+  </div>
+  <div class="banner-actions">
+    <a href="{{ url_for('mba.download_manuscript_template') }}" class="banner-button">Capstone Manuscript Template</a>
+  </div>
+</section>
+
+{% set correction_alert_count = pending_correction_projects|length if pending_correction_projects is defined else 0 %}
+{% if correction_alert_count %}
+{% set returned_correction_count = pending_correction_projects|selectattr('corrections_supervisor_rejected_at')|list|length %}
+<section class="student-correction-alert" role="status" aria-live="polite">
+  <div class="student-correction-alert__content">
+    <span class="student-correction-alert__count">{{ correction_alert_count }}</span>
+    <div>
+      <p class="student-correction-alert__eyebrow">{% if returned_correction_count %}Corrections Returned{% else %}Corrections Released{% endif %}</p>
+      <h2>{% if returned_correction_count %}Revised correction pack required{% else %}Response to Assessors' Comments required{% endif %}</h2>
+      <p>
+        {% if returned_correction_count %}
+          Your supervisor returned corrections{% if correction_alert_count == 1 %} for {{ pending_correction_projects[0].project_title }}{% else %} for {{ returned_correction_count }} Capstone Projects{% endif %}.
+        {% else %}
+          Your supervisor has released assessor comments{% if correction_alert_count == 1 %} for {{ pending_correction_projects[0].project_title }}{% else %} for {{ correction_alert_count }} Capstone Projects{% endif %}.
+        {% endif %}
+        Upload the corrected Capstone Manuscript, complete the response form, and upload the resubmitted Turnitin report in the MBA system.
+      </p>
+    </div>
+  </div>
+  <a href="{{ url_for('mba.student_corrections') }}" class="primary-button">Open Corrections</a>
+</section>
+{% endif %}
+
+<section class="workflow-strip">
+  <div class="workflow-step is-current"><span>1</span><strong>JBS 5</strong></div>
+  <div class="workflow-step"><span>2</span><strong>Supervisor</strong></div>
+  <div class="workflow-step"><span>3</span><strong>Assessors</strong></div>
+  <div class="workflow-step"><span>4</span><strong>HDC</strong></div>
+  <div class="workflow-step"><span>5</span><strong>Ethics</strong></div>
+</section>
+
+<div class="mba-student-layout">
+  <section class="ethics-panel mba-student-create-panel">
+    <div class="panel-heading">
+      <h2>Create Capstone Project</h2>
+      <span>Student Action</span>
+    </div>
+    <form action="{{ url_for('mba.create_project') }}" method="post" enctype="multipart/form-data" class="form-stack compact-form">
+      <label>Title
+        <input name="project_title" required data-project-title-input>
+        <small style="color:var(--text-muted,#666);font-weight:500;">
+          Use full words only. Acronyms, abbreviations, and special characters are not allowed. Keep the title to 12 words where possible; maximum 15 words.
+        </small>
+      </label>
+      <label>Discipline
+        <select name="discipline_id" required>
+          <option value="">Select discipline</option>
+          {% for discipline in disciplines %}
+            <option value="{{ discipline.id }}">{{ discipline.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Description <textarea name="project_description" rows="4" required></textarea></label>
+      <button class="primary-button" type="submit">Create Capstone Project</button>
+    </form>
+  </section>
+
+  <section class="ethics-panel mba-student-projects-panel">
+    <div class="panel-heading">
+      <h2>My Capstone Projects</h2>
+      <span>{{ projects|length }}</span>
+    </div>
+    <div class="record-list mba-student-project-list">
+      {% for project in projects %}
+        {% call project_disclosure(project, 'project-disclosure--student') %}
+        <div class="mba-student-project-stack" style="margin-bottom:2.5rem;">
+          <div class="project-section-header" style="font-size:1.15rem;font-weight:600;margin-bottom:0.5rem;color:var(--primary,#1a237e);border-left:4px solid var(--primary,#1a237e);padding-left:0.75rem;">
+            {{ project.project_title }}
+          </div>
+          {% include "mba/_student_project_card.html" %}
+          {% include "mba/_jbs5_hdc_feedback.html" %}
+          {% if project.supervisor_title_change_requested_at and not project.supervisor_title_change_resolved_at %}
+            <section class="response-section">
+              <strong>Supervisor requested title changes</strong>
+              <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                {{ project.supervisor_title_change_request }}
+              </p>
+            </section>
+          {% endif %}
+          {% set project_comment_heading = 'Capstone Project Comments' %}
+          {% set show_project_comment_form = false %}
+          {% set hide_other_assessor_comments = false %}
+          {% set empty_project_comments_message = 'No Capstone Project comments yet.' %}
+          {% include "mba/_project_comments.html" %}
+          {% set jbs5_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs5') | list %}
+          {% set jbs5_form = project.forms | selectattr('form_type', 'equalto', 'jbs5') | list | first %}
+          {% set jbs5_supervisor_signed = jbs5_form and jbs5_form.supervisor_signed %}
+
+          <div class="mini-record">
+            <strong>JBS 5</strong>
+            {% if jbs5_docs %}
+              {% set latest_jbs5 = jbs5_docs|last %}
+              <span>Uploaded and visible to MBA Admin</span>
+              <small>
+                <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=latest_jbs5.id) }}" class="text-link">{{ latest_jbs5.original_name }}</a>
+                &mdash; {{ latest_jbs5.uploaded_at.strftime('%d %b %Y') }}
+              </small>
+            {% else %}
+              <span>Missing</span>
+              <small>Submitting JBS 5 sends the Capstone Project to MBA Admin automatically.</small>
+              {% if project.project_status in ['created', 'admin_declined', 'jbs5_hdc_declined'] %}
+                <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button" style="margin-top:0.5rem;display:inline-block;">Fill JBS 5 Form</a>
+              {% endif %}
+            {% endif %}
+          </div>
+
+          {% if jbs5_supervisor_signed %}
+            <span class="muted" style="display:block;margin-bottom:0.75rem;">JBS5 has been signed by the supervisor and is locked for editing.</span>
+          {% elif project.supervisor_title_change_requested_at and not project.supervisor_title_change_resolved_at %}
+            <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button" style="margin-bottom:0.75rem;display:inline-block;">Edit JBS 5 Form for Requested Title Changes</a>
+          {% elif project.project_status in ['created', 'admin_declined', 'jbs5_hdc_declined'] %}
+            <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button" style="margin-bottom:0.75rem;display:inline-block;">Complete JBS 5 and Submit to Admin</a>
+          {% endif %}
+
+          {% if project.supervisor_accepted_at %}
+            <details class="response-section" open>
+              <summary>Required Forms</summary>
+              <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                Your supervisor has accepted. Submit the supervisor-signed Supervisor Agreement first. Ethics Certificate or Ethics Exemption Form upload appears after the supervisor signs JBS5.
+              </p>
+              {% set supervisor_docs = project.documents | selectattr('doc_type', 'equalto', 'supervisor_agreement') | list %}
+              {% set student_supervisor_docs = supervisor_docs | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set student_supervisor_submitted = student_supervisor_docs|length > 0 %}
+              {% set jbs10_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs10') | list %}
+              {% set intent_docs = project.documents | selectattr('doc_type', 'equalto', 'intent_to_submit') | list %}
+              {% set jbs1_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
+              {% set plagiarism_docs = project.documents | selectattr('doc_type', 'equalto', 'plagiarism_declaration') | list %}
+              {% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit') | list %}
+              {% set dissertation_docs = project.documents | selectattr('doc_type', 'equalto', 'dissertation') | list %}
+              {% set global_document_docs = project.documents | selectattr('doc_type', 'equalto', 'global_document') | list %}
+              {% set combined_turnitin_ai_report_docs = project.documents | selectattr('doc_type', 'equalto', 'combined_turnitin_ai_report') | list %}
+              {% set ethics_certificate_docs = project.documents | selectattr('doc_type', 'equalto', 'ethics_certificate') | list %}
+              {% set ethics_exemption_docs = project.documents | selectattr('doc_type', 'equalto', 'ethics_exemption_form') | list %}
+              {% set has_ethics_support_docs = ethics_certificate_docs or ethics_exemption_docs %}
+              {% set jbs5_hdc_approved = project.jbs5_hdc_approved_at %}
+              {% set support_upload_count = (1 if global_document_docs else 0) + (1 if combined_turnitin_ai_report_docs else 0) %}
+              {% set support_forms_ready = jbs1_docs and plagiarism_docs and affidavit_docs %}
+              <div class="form-download-row">
+                <div class="form-download-info">
+                  <strong>Supervisor Agreement Form</strong>
+                </div>
+                {% if supervisor_docs %}
+                  <div class="uploaded-files">
+                    <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                    {% for uploaded in supervisor_docs %}
+                      <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
+                        &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
+                      </span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if not student_supervisor_submitted %}
+                  <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='supervisor_agreement') }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">Fill Supervisor Agreement</a>
+                {% endif %}
+              </div>
+
+              {% if student_supervisor_submitted and not jbs5_supervisor_signed %}
+                <hr style="margin:1.5rem 0;">
+                <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                  Wait for your supervisor to complete title review and sign JBS5. Ethics Certificate or Ethics Exemption Form upload will appear after JBS5 is signed.
+                </p>
+              {% endif %}
+
+              {% if student_supervisor_submitted and jbs5_supervisor_signed %}
+                <hr style="margin:1.5rem 0;">
+                <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                  JBS5 is signed by your supervisor. Upload one ethics proof document here. JBS10 and Intent to Submit unlock only after HDC approves JBS5 and the Ethics Certificate or Ethics Exemption Form is on file.
+                </p>
+                {% for doc_key, doc_info in [('ethics_certificate', 'Ethics Certificate'), ('ethics_exemption_form', 'Ethics Exemption Form')] %}
+                  <div class="form-download-row">
+                    <div class="form-download-info">
+                      <strong>{{ doc_info }}</strong>
+                    </div>
+                    {% set matching_docs = project.documents | selectattr('doc_type', 'equalto', doc_key) | list %}
+                    {% if matching_docs %}
+                      <div class="uploaded-files">
+                        <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                        {% for uploaded in matching_docs %}
+                          <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                            <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
+                            &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
+                          </span>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                    <form action="{{ url_for('mba.upload_project_form', project_id=project.id) }}" method="post" enctype="multipart/form-data" class="upload-form" style="margin-top:0.5rem;">
+                      <input type="hidden" name="doc_type" value="{{ doc_key }}">
+                      <label class="upload-label">
+                        {{ 'Update PDF' if matching_docs else 'Upload PDF' }}
+                        <input type="file" name="form_file" accept=".pdf" required>
+                      </label>
+                      <button type="submit" class="primary-button small-button">{{ 'Update' if matching_docs else 'Upload' }}</button>
+                    </form>
+                  </div>
+                {% endfor %}
+
+                {% if has_ethics_support_docs and not jbs5_hdc_approved %}
+                  <hr style="margin:1.5rem 0;">
+                  <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                    Ethics proof is on file. JBS10 and Intent to Submit will be released after HDC approves JBS5.
+                  </p>
+                {% endif %}
+
+                {% if has_ethics_support_docs and jbs5_hdc_approved %}
+                  <hr style="margin:1.5rem 0;">
+                  <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                    Ethics proof is on file. Submit JBS10 and Intent to Submit here. MBA Admin will use them to nominate two assessors.
+                  </p>
+                  {% for doc_key, doc_info in [('jbs10', 'JBS10 Project Submission Form'), ('intent_to_submit', 'Intent to Submit')] %}
+                    <div class="form-download-row">
+                      <div class="form-download-info">
+                        <strong>{{ doc_info }}</strong>
+                      </div>
+                      {% set matching_docs = project.documents | selectattr('doc_type', 'equalto', doc_key) | list %}
+                      {% if matching_docs %}
+                        <div class="uploaded-files">
+                          <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                          {% for uploaded in matching_docs %}
+                            <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                              <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
+                              &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
+                            </span>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                      <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
+                    </div>
+                  {% endfor %}
+                {% endif %}
+
+                {% if jbs5_hdc_approved and jbs10_docs and intent_docs %}
+                  <hr style="margin:1.5rem 0;">
+                  <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                    JBS10 and Intent to Submit are in. Submit the Capstone Manuscript through Moodle. On this system, upload only supporting documents, including the Global Document and combined Turnitin-AI report. MBA Admin will upload the Capstone Manuscript here after downloading it from Moodle.
+                  </p>
+                  {% if project.dissertation_moodle_request_sent_at and not dissertation_docs %}
+                    <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                      MBA Admin requested your Capstone Manuscript submission on Moodle on {{ project.dissertation_moodle_request_sent_at.strftime('%d %b %Y %H:%M') }}.
+                    </p>
+                  {% endif %}
+                  {% for doc_key, doc_info in [('jbs1_declaration', 'JBS 1 Declaration'), ('plagiarism_declaration', 'Combined Plagiarism, Turnitin and AI Declaration'), ('affidavit', 'JBS 2 Affidavit')] %}
+                    <div class="form-download-row">
+                      <div class="form-download-info">
+                        <strong>{{ doc_info }}</strong>
+                      </div>
+                      {% set matching_docs = project.documents | selectattr('doc_type', 'equalto', doc_key) | list %}
+                      {% if matching_docs %}
+                        <div class="uploaded-files">
+                          <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                          {% for uploaded in matching_docs %}
+                            <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                              <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
+                              &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
+                            </span>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                      <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
+                    </div>
+                  {% endfor %}
+
+                  <hr style="margin:1.5rem 0;">
+                  <section class="dissertation-pack-panel">
+                    <div class="dissertation-pack-panel__header">
+                      <div>
+                        <p class="dissertation-pack-panel__eyebrow">Supporting Documents</p>
+                        <h3 class="dissertation-pack-panel__title">Student Supporting Pack</h3>
+                        <p class="dissertation-pack-panel__intro">
+                          Upload supporting documents here only. The Capstone Manuscript must be submitted through Moodle and will be uploaded by MBA Admin.
+                        </p>
+                      </div>
+                      <div class="dissertation-pack-panel__summary">{{ support_upload_count }}/2 uploads ready</div>
+                    </div>
+
+                    <div class="dissertation-pack-status-grid">
+                      <div class="pack-status-item {% if dissertation_docs %}is-ready{% else %}is-missing{% endif %}" data-pack-item="dissertation">
+                        <small>Admin Capstone Manuscript</small>
+                        <strong data-pack-status="dissertation">{{ 'Ready' if dissertation_docs else 'Missing' }}</strong>
+                      </div>
+                      <div class="pack-status-item {% if global_document_docs %}is-ready{% else %}is-missing{% endif %}" data-pack-item="global-document">
+                        <small>Global Document</small>
+                        <strong>{{ 'Ready' if global_document_docs else 'Missing' }}</strong>
+                      </div>
+                      <div class="pack-status-item {% if combined_turnitin_ai_report_docs %}is-ready{% else %}is-missing{% endif %}" data-pack-item="combined-turnitin-ai">
+                        <small>Combined Turnitin-AI Report</small>
+                        <strong>{{ 'Ready' if combined_turnitin_ai_report_docs else 'Missing' }}</strong>
+                      </div>
+                    </div>
+
+                    {% if dissertation_docs or global_document_docs or combined_turnitin_ai_report_docs %}
+                      <div class="dissertation-pack-files">
+                        {% for uploaded in dissertation_docs + global_document_docs + combined_turnitin_ai_report_docs %}
+                          <span class="dissertation-pack-files__item">
+                            <strong>{{ document_label(uploaded.doc_type) }}:</strong>
+                            <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
+                            &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
+                          </span>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+
+                    {% if support_forms_ready %}
+                      {% for doc_key, doc_info in [('global_document', 'Global Document'), ('combined_turnitin_ai_report', 'Combined Turnitin-AI Report')] %}
+                        {% set matching_docs = project.documents | selectattr('doc_type', 'equalto', doc_key) | list %}
+                        <form action="{{ url_for('mba.upload_project_form', project_id=project.id) }}" method="post" enctype="multipart/form-data" class="upload-form" style="margin-top:0.75rem;">
+                          <input type="hidden" name="doc_type" value="{{ doc_key }}">
+                          <label class="upload-label">
+                            {{ 'Update ' ~ doc_info if matching_docs else 'Upload ' ~ doc_info }}
+                            <input type="file" name="form_file" accept=".pdf" required>
+                          </label>
+                          <button type="submit" class="primary-button small-button">{{ 'Update' if matching_docs else 'Upload' }}</button>
+                        </form>
+                      {% endfor %}
+                    {% else %}
+                      <p class="muted dissertation-pack-note">
+                        Complete JBS 1 Declaration, the combined plagiarism declaration, and JBS 2 Affidavit to unlock supporting document uploads.
+                      </p>
+                    {% endif %}
+                  </section>
+                {% endif %}
+              {% endif %}
+            </details>
+          {% endif %}
+        </div>
+        {% endcall %}
+      {% else %}
+        <p class="muted">No MBA Capstone Projects yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+<script src="{{ url_for('static', filename='js/project_title_format.js') }}"></script>
+</div>
+{% endblock %}

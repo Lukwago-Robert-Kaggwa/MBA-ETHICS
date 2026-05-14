@@ -1,0 +1,130 @@
+{% set jbs5_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs5') | list %}
+{% set jbs5_form = project.forms | selectattr('form_type', 'equalto', 'jbs5') | list | first %}
+{% set jbs5_supervisor_signed = jbs5_form and jbs5_form.supervisor_signed %}
+{% set supervisor_docs = project.documents | selectattr('doc_type', 'equalto', 'supervisor_agreement') | list %}
+{% set student_supervisor_docs = supervisor_docs | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+{% set jbs10_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs10') | list %}
+{% set intent_docs = project.documents | selectattr('doc_type', 'equalto', 'intent_to_submit') | list %}
+{% set jbs1_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
+{% set plagiarism_docs = project.documents | selectattr('doc_type', 'equalto', 'plagiarism_declaration') | list %}
+{% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit') | list %}
+{% set dissertation_docs = project.documents | selectattr('doc_type', 'equalto', 'dissertation') | list %}
+{% set global_document_docs = project.documents | selectattr('doc_type', 'equalto', 'global_document') | list %}
+{% set combined_turnitin_ai_report_docs = project.documents | selectattr('doc_type', 'equalto', 'combined_turnitin_ai_report') | list %}
+{% set ethics_certificate_docs = project.documents | selectattr('doc_type', 'equalto', 'ethics_certificate') | list %}
+{% set ethics_exemption_docs = project.documents | selectattr('doc_type', 'equalto', 'ethics_exemption_form') | list %}
+{% set jbs5_hdc_approved = project.jbs5_hdc_approved_at %}
+{% set support_forms_complete = jbs1_docs and plagiarism_docs and affidavit_docs %}
+{% set student_support_docs_complete = global_document_docs and combined_turnitin_ai_report_docs %}
+{% set admin_capstone_upload_complete = dissertation_docs %}
+{% set assigned_assessor_count = (1 if project.assessor_1_id else 0) + (1 if project.assessor_2_id else 0) %}
+{% set corrections_active = project_has_active_corrections(project) if project_has_active_corrections is defined else false %}
+{% set corrections_released = corrections_released_to_student(project) if corrections_released_to_student is defined else false %}
+{% set corrections_state = project_corrections_status(project) if project_corrections_status is defined else 'none' %}
+
+<article class="record-card mba-student-summary-card">
+  <div class="mba-student-summary-card__top">
+    <div>
+      <p class="mba-student-summary-card__eyebrow">{{ project.discipline_name }}</p>
+      <h3>{{ project.project_title }}</h3>
+    </div>
+    {% set status_badge_class = project_status_badge_class(project.project_status) if project_status_badge_class is defined else project.project_status %}
+    <span class="status-pill status-pill--{{ status_badge_class }}">{{ project_status_label(project.project_status) if project_status_label is defined else project.project_status.replace('_', ' ').title() }}</span>
+  </div>
+
+  <p class="mba-student-summary-card__description">{{ project.project_description }}</p>
+
+  <div class="mba-student-summary-card__grid">
+    <div>
+      <small>JBS 5</small>
+      <strong>{{ 'Uploaded' if jbs5_docs else 'Missing' }}</strong>
+    </div>
+    <div>
+      <small>Supervisor</small>
+      {% if project.primary_supervisor %}
+        <strong class="supervisor-hover-email" title="{{ project.primary_supervisor.email }}">
+          {{ project.primary_supervisor.first_name }}
+        </strong>
+      {% else %}
+        <strong>Pending</strong>
+      {% endif %}
+    </div>
+    <div>
+      <small>Assessors</small>
+      <strong>{{ assigned_assessor_count }}/2 assigned</strong>
+    </div>
+    <div>
+      <small>Supervisor Form</small>
+      <strong>{{ 'Uploaded' if student_supervisor_docs else 'Pending' }}</strong>
+    </div>
+  </div>
+
+  <div class="mba-student-summary-card__footer">
+    <span class="mba-student-summary-card__next-label">Next step</span>
+    <strong>
+      {% if project.project_status == 'jbs5_hdc_declined' %}
+        Review the HDC JBS5 feedback below, update the JBS5 form, and resubmit it to MBA Admin.
+      {% elif project.project_status in ['created', 'admin_declined'] %}
+        Complete and submit JBS 5 to send the Capstone Project to MBA Admin.
+      {% elif not project.assignment_confirmed %}
+        Wait for MBA Admin to invite supervisors and assessors.
+      {% elif not project.supervisor_accepted_at %}
+        Wait for a supervisor to accept the invitation.
+      {% elif not student_supervisor_docs %}
+        Upload the signed supervisor agreement form.
+      {% elif not jbs5_supervisor_signed %}
+        Wait for your supervisor to complete title review and sign JBS5.
+      {% elif not (ethics_certificate_docs or ethics_exemption_docs) %}
+        Upload the Ethics Certificate or the Ethics Exemption Form.
+      {% elif not jbs5_hdc_approved %}
+        Wait for HDC to approve JBS5 before JBS10 and Intent to Submit are released.
+      {% elif not jbs10_docs %}
+        Upload the completed JBS10 form.
+      {% elif not intent_docs %}
+        Upload the Intent to Submit form.
+      {% elif not support_forms_complete %}
+        {% if not jbs1_docs %}
+          Complete the JBS 1 Declaration.
+        {% elif not plagiarism_docs %}
+          Complete the Combined Plagiarism, Turnitin and AI Declaration.
+        {% elif not affidavit_docs %}
+          Complete the JBS 2 Affidavit.
+        {% endif %}
+      {% elif not student_support_docs_complete %}
+        Upload the Global Document and combined Turnitin-AI report here. Submit the Capstone Manuscript through Moodle.
+      {% elif not admin_capstone_upload_complete %}
+        Wait for MBA Admin to upload the Capstone Manuscript from Moodle.
+      {% elif not project.dissertation_released_to_assessors %}
+        Wait for MBA Admin to release the Capstone Manuscript to assessors.
+      {% elif project.project_status == 'admin_approved' %}
+        Wait for HDC to approve the assessor nominations.
+      {% elif project.project_status == 'hdc_declined' %}
+        MBA Admin is updating the assessor nominations.
+      {% elif project.project_status == 'hdc_verified' %}
+        {% if corrections_active and corrections_released %}
+          {% if corrections_state == 'awaiting_student' %}
+            Open the Response to Assessors' Comments area, upload your corrected Capstone Manuscript, fill the response form, and upload the resubmitted Turnitin report here.
+          {% elif corrections_state == 'rejected_by_supervisor' %}
+            Your supervisor returned the corrections. Open the Response to Assessors' Comments area to revise and resubmit the corrected pack.
+          {% elif corrections_state == 'awaiting_supervisor' %}
+            Wait for your supervisor to approve the response pack.
+          {% else %}
+            The response pack is complete. MBA Admin can now send results to HDC.
+          {% endif %}
+        {% elif corrections_active %}
+          Your supervisor is reviewing assessor feedback before releasing any required response.
+        {% else %}
+          Your assessors are reviewing the Capstone Project.
+        {% endif %}
+      {% elif project.project_status == 'results_submitted_to_hdc' %}
+        HDC is reviewing the assessment results.
+      {% elif project.project_status == 'results_declined' %}
+        HDC rejected the assessment results. Wait for MBA follow-up.
+      {% elif project.project_status == 'results_approved' %}
+        Final assessment outcome is being processed by MBA Admin.
+      {% else %}
+        Track admin, HDC, and ethics progress.
+      {% endif %}
+    </strong>
+  </div>
+</article>

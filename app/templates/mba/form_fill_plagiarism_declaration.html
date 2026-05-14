@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Combined Plagiarism, Turnitin and AI Declaration{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Combined Plagiarism, Turnitin and AI Declaration{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header mba-doc-header--centered">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <h2 class="mba-doc-title">Combined Plagiarism, Turnitin and AI Declaration</h2>
+          <div class="mba-doc-subtitle">Capstone Project integrity declaration and report confirmation</div>
+          <div class="mba-doc-kicker" style="margin-top:8px;">University of Johannesburg</div>
+          <div class="mba-doc-kicker">Johannesburg Business School (JBS)</div>
+        </div>
+      </div>
+
+      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='plagiarism_declaration') }}" method="post" class="mba-doc-form">
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:28%;">
+            <col style="width:72%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">MODULE</td>
+            <td><input class="mba-doc-input" name="programme" value="{{ prefill.get('programme','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">ASSESSMENT</td>
+            <td><textarea class="mba-doc-textarea mba-doc-textarea--line" name="assessment_title" rows="2" readonly required>{{ prefill.get('assessment_title','') }}</textarea></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">LECTURER</td>
+            <td><input class="mba-doc-input" name="module_lead" value="{{ prefill.get('module_lead','') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">DUE DATE</td>
+            <td><input class="mba-doc-input" type="date" name="submission_date" value="{{ prefill.get('submission_date','') }}" required></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-center" style="font-weight:700;">DETAILS OF INDIVIDUAL / GROUP MEMBERS</div>
+
+        <table class="mba-doc-table mba-doc-table--center">
+          <colgroup>
+            <col style="width:40%;">
+            <col style="width:25%;">
+            <col style="width:35%;">
+          </colgroup>
+          <tr>
+            <th>INITIALS AND SURNAME</th>
+            <th>STUDENT NUMBER</th>
+            <th>SIGNATURE</th>
+          </tr>
+          <tr>
+            <td><input class="mba-doc-input" name="full_name" value="{{ prefill.get('full_name','') }}" required></td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" required></td>
+            <td><input class="mba-doc-input" name="signature_name" value="{{ prefill.get('signature_name','') }}" required></td>
+          </tr>
+          {% for _ in range(5) %}
+          <tr>
+            <td class="mba-doc-static-row"></td>
+            <td class="mba-doc-static-row"></td>
+            <td class="mba-doc-static-row"></td>
+          </tr>
+          {% endfor %}
+        </table>
+
+        <div class="mba-doc-form" style="gap:10px;">
+          <p class="mba-doc-paragraph">I understand that plagiarism is to present someone else’s ideas as my own.</p>
+          <p class="mba-doc-paragraph">Where material written by other people has been used, either from a printed source or from the Internet, this has been carefully acknowledged and referenced. I have used the required citation and referencing style.</p>
+          <p class="mba-doc-paragraph">I know that plagiarism is wrong.</p>
+          <p class="mba-doc-paragraph">I understand what plagiarism is and am aware of the Faculty’s and University’s policy in this regard and I have fully familiarized myself with the contents of these policies.</p>
+          <p class="mba-doc-paragraph">I know that I will be guilty of plagiarism if I do not properly credit my sources, or if I copy any data, results, graphs, phrases, sentences or paragraphs from a book, article, presentation or Internet source without proper acknowledgement.</p>
+          <p class="mba-doc-paragraph">I declare that I have written my submission in my own words, sentences, and paragraphs throughout and have properly credited all ideas, words, thoughts, graphical and pictorial presentations from other people’s work.</p>
+          <p class="mba-doc-paragraph">I declare that this submission is my own original work.</p>
+          <p class="mba-doc-paragraph">I have not allowed, and will not allow, anyone to copy my work with the intention of passing it off as his or her own work.</p>
+          <p class="mba-doc-paragraph">I understand that if someone else submits work that is copied from my own, I may be held equally liable.</p>
+          <p class="mba-doc-paragraph">I confirm that the combined Turnitin-AI report submitted with this Capstone Project is the report for this submission.</p>
+          <p class="mba-doc-paragraph">I have acknowledged the use of any generative AI tools as and where relevant, and I understand that misuse of AI tools without approval or proper motivation is academic misconduct.</p>
+        </div>
+
+        <table class="mba-doc-table mba-doc-table--tight">
+          <tr>
+            <td class="mba-doc-label" style="width:24%;">Declaration Date</td>
+            <td><input class="mba-doc-input" type="date" name="signature_date" value="{{ prefill.get('signature_date','') }}" required></td>
+            <td class="mba-doc-label" style="width:24%;">UJ Email</td>
+            <td><input class="mba-doc-input" type="email" name="email" value="{{ prefill.get('email','') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Supervisor Signature</td>
+            <td><input class="mba-doc-input" name="supervisor_signature_name" value="{{ prefill.get('supervisor_signature_name','') }}" required></td>
+            <td class="mba-doc-label">Supervisor Date</td>
+            <td><input class="mba-doc-input" type="date" name="supervisor_signature_date" value="{{ prefill.get('supervisor_signature_date','') }}" required></td>
+          </tr>
+        </table>
+
+        <label class="mba-doc-checkline">
+          <span>I confirm the combined plagiarism, Turnitin and AI declaration above. <span style="color:red;">*</span></span>
+          <input class="mba-doc-checkbox" type="checkbox" name="plagiarism_consent" value="1" required {% if prefill.get('plagiarism_consent') %}checked{% endif %}>
+        </label>
+
+        <div class="mba-doc-actions">
+          <button class="primary-button" type="submit">Submit Combined Declaration</button>
+          <a href="{{ url_for('mba.student_dashboard') }}" class="secondary-button">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% set correction_requests = project_correction_requests(project, forms_by_project=forms_by_project) %}
+{% set anonymize_assessors = anonymize_assessors|default(false) %}
+{% if correction_requests %}
+  <div class="invite-list">
+    {% for item in correction_requests %}
+      <div class="invite-row" style="align-items:flex-start;">
+        <div style="width:100%;">
+          <strong>{% if anonymize_assessors %}Assessor Comment {{ loop.index }}{% else %}{{ item.slot_label }}{% endif %}</strong>
+          <small>
+            {{ item.recommendation }}
+            {% if item.submitted_at %}&mdash; {{ item.submitted_at.strftime('%d %b %Y %H:%M') }}{% endif %}
+          </small>
+          <p style="margin:0.5rem 0 0;white-space:pre-wrap;">{{ item.written_assessment or 'No detailed correction notes were entered.' }}</p>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="muted">No active assessor comments are currently recorded for this Capstone Project.</p>
+{% endif %}

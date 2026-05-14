@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}{% if hdc_signature_mode|default(false) %}HDC Review JBS10{% else %}JBS 10 - Title / Supervisor Registration{% endif %}{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}{% if hdc_signature_mode|default(false) %}HDC Review JBS10{% else %}JBS 10 - Title / Supervisor Registration{% endif %}{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+{% set hdc_signature_mode = hdc_signature_mode|default(false) %}
+{% set current_study_type = prefill.get('study_type', 'Capstone Project') %}
+{% set current_4ir = prefill.get('is_4ir_research', 'No') %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header mba-doc-header--centered">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <div class="mba-doc-kicker">Form JBS10 Feb 2022</div>
+          <h2 class="mba-doc-title">Johannesburg Business School<br>Registration and/or Amendment of Title / Supervisor(s) / Assessor(s)</h2>
+        </div>
+      </div>
+
+      <form action="{% if hdc_signature_mode %}{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs10') }}{% else %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs10') }}{% endif %}" method="post" class="mba-doc-form">
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:18%;">
+            <col style="width:22%;">
+            <col style="width:18%;">
+            <col style="width:22%;">
+            <col style="width:20%;">
+          </colgroup>
+          <tr>
+            <th class="mba-doc-section-title" colspan="5">Section A: Student information</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Surname:</td>
+            <td><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname', '') }}"></td>
+            <td class="mba-doc-label">Title:</td>
+            <td><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title', '') }}"></td>
+            <td rowspan="2">
+              <div class="mba-doc-label" style="margin-bottom:8px;">Is this student a UJ staff member?</div>
+              <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                {% for option in ['Yes', 'No'] %}
+                  <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="radio" name="student_is_staff_member" value="{{ option }}" style="width:auto;margin:0;" {% if prefill.get('student_is_staff_member', 'No') == option %}checked{% endif %}>
+                    <span>{{ option }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Initials(s):</td>
+            <td><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials', '') }}"></td>
+            <td class="mba-doc-label">Student number:</td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number', '') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Qualification (e.g. MBA):</td>
+            <td colspan="2"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification', '') }}"></td>
+            <td class="mba-doc-label">Ethical clearance number:</td>
+            <td><input class="mba-doc-input" name="ethical_clearance_number" value="{{ prefill.get('ethical_clearance_number', '') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Study type</td>
+            <td colspan="4">
+              <div style="display:flex;flex-wrap:wrap;gap:14px;">
+                {% for option in ['Capstone Project', 'Thesis - Monograph', 'Thesis - By Article'] %}
+                  <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="radio" name="study_type" value="{{ option }}" style="width:auto;margin:0;" {% if current_study_type == option %}checked{% endif %}>
+                    <span>{{ option }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table">
+          <tr>
+            <th class="mba-doc-section-title" colspan="3">Section B: Registration / Amendment of title</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label" style="width:28%;">B1: Proposed title / Approved title</td>
+            <td><textarea class="mba-doc-textarea" name="research_title" rows="4" required>{{ prefill.get('research_title', '') }}</textarea></td>
+            <td style="width:20%;">
+              <div class="mba-doc-label" style="margin-bottom:8px;">Is this a 4IR research?</div>
+              {% for option in ['Yes', 'No'] %}
+                <label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                  <input type="radio" name="is_4ir_research" value="{{ option }}" style="width:auto;margin:0;" {% if current_4ir == option %}checked{% endif %}>
+                  <span>{{ option }}</span>
+                </label>
+              {% endfor %}
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">B2: Previously approved title</td>
+            <td colspan="2"><textarea class="mba-doc-textarea" name="previous_title" rows="3">{{ prefill.get('previous_title', '') }}</textarea></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Proposed amendment to title</td>
+            <td colspan="2"><textarea class="mba-doc-textarea" name="amended_title" rows="3">{{ prefill.get('amended_title', '') }}</textarea></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table">
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">Section C: Registration / Amendment of supervisor(s)</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label" style="width:26%;">Supervisor: Title, initials, surname, affiliation</td>
+            <td><input class="mba-doc-input" name="supervisor_name" value="{{ prefill.get('supervisor_name', '') }}"></td>
+            <td class="mba-doc-label" style="width:16%;">Staff number:</td>
+            <td><input class="mba-doc-input" name="supervisor_staff_number" value="{{ prefill.get('supervisor_staff_number', '') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Co-supervisor I: Title, initials, surname, affiliation</td>
+            <td><input class="mba-doc-input" name="co_supervisor_1" value="{{ prefill.get('co_supervisor_1', '') }}"></td>
+            <td class="mba-doc-label">Staff number:</td>
+            <td><input class="mba-doc-input" name="co_supervisor_1_staff_number" value="{{ prefill.get('co_supervisor_1_staff_number', '') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Co-supervisor II: Title, initials, surname, affiliation</td>
+            <td><input class="mba-doc-input" name="co_supervisor_2" value="{{ prefill.get('co_supervisor_2', '') }}"></td>
+            <td class="mba-doc-label">Staff number:</td>
+            <td><input class="mba-doc-input" name="co_supervisor_2_staff_number" value="{{ prefill.get('co_supervisor_2_staff_number', '') }}"></td>
+          </tr>
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">C2: Amendment of supervisor(s)</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Previously approved supervisor(s)</td>
+            <td colspan="3"><input class="mba-doc-input" name="previous_supervisor_lineup" value="{{ prefill.get('previous_supervisor_lineup', '') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Amended supervisor(s)</td>
+            <td colspan="3"><input class="mba-doc-input" name="amended_supervisor_lineup" value="{{ prefill.get('amended_supervisor_lineup', '') }}"></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table">
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">Section D: Nomination / Amendment of assessors</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label" style="width:26%;">Assessor 1: Title, initials, surname, affiliation</td>
+            <td><input class="mba-doc-input" name="assessor_1_name" value="{{ prefill.get('assessor_1_name', '') }}" readonly></td>
+            <td class="mba-doc-label" style="width:16%;">Highest academic qualification</td>
+            <td><input class="mba-doc-input" name="assessor_1_qualification" value="{{ prefill.get('assessor_1_qualification', '') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">E-mail address:</td>
+            <td colspan="3"><input class="mba-doc-input" name="assessor_1_email" value="{{ prefill.get('assessor_1_email', '') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Assessor 2: Title, initials, surname, affiliation</td>
+            <td><input class="mba-doc-input" name="assessor_2_name" value="{{ prefill.get('assessor_2_name', '') }}" readonly></td>
+            <td class="mba-doc-label">Highest academic qualification</td>
+            <td><input class="mba-doc-input" name="assessor_2_qualification" value="{{ prefill.get('assessor_2_qualification', '') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">E-mail address:</td>
+            <td colspan="3"><input class="mba-doc-input" name="assessor_2_email" value="{{ prefill.get('assessor_2_email', '') }}" readonly></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight">
+          <colgroup>
+            <col style="width:28%;">
+            <col style="width:22%;">
+            <col style="width:12%;">
+            <col style="width:38%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label" style="width:28%;">Signature: Supervisor</td>
+            <td><input class="mba-doc-input" name="supervisor_signature" value="{{ prefill.get('supervisor_signature', '') }}"></td>
+            <td class="mba-doc-label" style="width:12%;">Date</td>
+            <td><input class="mba-doc-input" type="date" name="supervisor_signature_date" value="{{ prefill.get('supervisor_signature_date', '') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Signature: Co-Supervisor</td>
+            <td><input class="mba-doc-input" name="co_supervisor_signature" value="{{ prefill.get('co_supervisor_signature', '') }}"></td>
+            <td class="mba-doc-label">Date</td>
+            <td><input class="mba-doc-input" type="date" name="co_supervisor_signature_date" value="{{ prefill.get('co_supervisor_signature_date', '') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Signature: Head of Department</td>
+            <td><input class="mba-doc-input" name="head_of_department_signature" value="{{ prefill.get('head_of_department_signature', '') }}"></td>
+            <td class="mba-doc-label">Date</td>
+            <td><input class="mba-doc-input" type="date" name="head_of_department_signature_date" value="{{ prefill.get('head_of_department_signature_date', '') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Signature: JBS HDC</td>
+            <td><input class="mba-doc-input" name="jbs_hdc_signature" value="{{ prefill.get('jbs_hdc_signature', '') }}" {% if not hdc_signature_mode %}readonly{% endif %}></td>
+            <td class="mba-doc-label">Date</td>
+            <td><input class="mba-doc-input" type="date" name="jbs_hdc_signature_date" value="{{ prefill.get('jbs_hdc_signature_date', '') }}" {% if not hdc_signature_mode %}readonly{% endif %}></td>
+          </tr>
+        </table>
+
+        <label class="mba-doc-checkline">
+          <span>I confirm the above declaration and agree to the terms of submission. <span style="color:red;">*</span></span>
+          <input class="mba-doc-checkbox" type="checkbox" name="declaration" value="1" required {% if prefill.get('declaration') %}checked{% endif %}>
+        </label>
+
+        {% if hdc_signature_mode %}
+          <div class="mba-doc-muted-box" style="border:1.5px solid #92400e;background:#fffbeb;margin-top:1rem;">
+            <p class="mba-doc-note" style="font-weight:700;color:#78350f;margin-bottom:8px;">HDC review</p>
+            <p class="mba-doc-note" style="color:#78350f;">
+              Review the opened JBS10 form and the assessor nomination pack. If approved, complete the JBS HDC signature and date in the signature section before submitting the approval.
+            </p>
+          </div>
+          <label>HDC feedback
+            <textarea class="mba-doc-textarea" name="comment" rows="3" placeholder="Required when returning nominations; optional when approving"></textarea>
+          </label>
+        {% endif %}
+
+        <div class="mba-doc-actions">
+          {% if hdc_signature_mode %}
+            <button class="primary-button" type="submit" name="decision" value="approve">Sign and Approve Nominations</button>
+            <button class="secondary-button" type="submit" name="decision" value="decline" formnovalidate>Return Nominations</button>
+          {% else %}
+            <button class="primary-button" type="submit">Submit JBS 10</button>
+          {% endif %}
+          <a href="{% if hdc_signature_mode %}{{ url_for('mba.hdc_dashboard') }}{% else %}{{ url_for('mba.student_dashboard') }}{% endif %}" class="secondary-button">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% if hdc_signature_mode %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const editable = new Set(['jbs_hdc_signature', 'jbs_hdc_signature_date', 'comment', 'decision']);
+      document.querySelectorAll('.mba-doc-form input, .mba-doc-form textarea, .mba-doc-form select').forEach(function (field) {
+        if (editable.has(field.name) || field.type === 'hidden' || field.type === 'submit') {
+          return;
+        }
+        if (field.type === 'checkbox' || field.type === 'radio' || field.tagName === 'SELECT') {
+          field.disabled = true;
+        } else {
+          field.readOnly = true;
+        }
+      });
+    });
+  </script>
+{% endif %}
+{% endblock %}

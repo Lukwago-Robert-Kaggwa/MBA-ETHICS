@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Sign In{% endblock %}
+{% block app_name %}MBA Ethics{% endblock %}
+{% block page_heading %}Sign In{% endblock %}
+{% block page_subheading %}{% if microsoft_login_enabled %}Use Microsoft for UJ accounts, or email/password for registered users{% else %}Use your registered email and password{% endif %}{% endblock %}
+
+{% block body %}
+<section class="auth-panel login-bg">
+  <div class="auth-card">
+    <img src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="UJ" class="auth-logo">
+    <h2 class="login-heading">Welcome to MBA & Ethics Portal</h2>
+    <p class="login-subheading">Sign in to access your dashboard</p>
+    <form method="post" class="form-stack" autocomplete="on">
+      <label>
+        <span>System</span>
+        <select name="system">
+          <option value="mba" {% if system != 'ethics' %}selected{% endif %}>MBA App</option>
+          <option value="ethics" {% if system == 'ethics' %}selected{% endif %}>Ethics</option>
+        </select>
+      </label>
+      <label>
+        <span>Email</span>
+        <input type="email" name="email" value="{{ email or '' }}" required autocomplete="email" placeholder="you@email.com">
+      </label>
+      <label>
+        <span>Password</span>
+        <input type="password" name="password" required autocomplete="current-password" placeholder="Password">
+      </label>
+      <button type="submit" class="primary-button login-btn">Sign in</button>
+    </form>
+
+    {% if microsoft_login_enabled %}
+      <a href="{{ url_for('auth.microsoft_login', system=system or 'mba') }}" class="secondary-button login-microsoft">Sign in with Microsoft</a>
+    {% endif %}
+
+    <div class="auth-links">
+      <a href="{{ url_for('auth.register', system='mba') }}">Register MBA student</a>
+      <a href="{{ url_for('auth.register', system='ethics') }}">Register Ethics student</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

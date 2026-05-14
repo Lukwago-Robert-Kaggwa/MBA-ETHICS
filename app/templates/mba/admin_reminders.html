@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}MBA Reminders{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Reminders{% endblock %}
+{% block page_subheading %}Manually manage pending MBA notifications that still need a response{% endblock %}
+
+{% block body %}
+<div class="mba-page-stack">
+  {% include "mba/_kpis.html" %}
+  <section class="ethics-panel" id="admin-reminders">
+    <div class="panel-heading">
+      <h2>Pending Notifications</h2>
+      <span>{{ reminder_pagination.total }}</span>
+    </div>
+
+    <div class="admin-project-toolbar">
+      <div class="admin-project-toolbar__views" role="tablist" aria-label="Reminder filters">
+        <a href="{{ url_for('mba.admin_reminders', type='all', reminder_per_page=reminder_pagination.per_page) }}" class="filter-pill {% if reminder_type == 'all' %}is-active{% endif %}">
+          All <strong>{{ reminder_counts.all }}</strong>
+        </a>
+        {% for type_label in reminder_types %}
+          <a href="{{ url_for('mba.admin_reminders', type=type_label, reminder_per_page=reminder_pagination.per_page) }}" class="filter-pill {% if reminder_type == type_label %}is-active{% endif %}">
+            {{ type_label }} <strong>{{ reminder_counts.get(type_label, 0) }}</strong>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% set item_label = 'pending reminders' %}
+    {% set pagination = reminder_pagination %}
+    {% include "mba/_project_pagination.html" %}
+
+    <div class="reminder-list">
+      {% for reminder in reminders %}
+        <article class="record-card reminder-card">
+          <div class="record-card__top reminder-card__top">
+            <div>
+              <h3>{{ reminder.type_label }}</h3>
+              <p>{{ reminder.project_title }}</p>
+            </div>
+            <span class="invite-badge invite-badge--pending">{{ reminder.status }}</span>
+          </div>
+
+          <div class="admin-project-meta reminder-meta-grid">
+            <div class="admin-project-meta-item">
+              <strong>Recipient</strong>
+              <span>{{ reminder.recipient_name }}</span>
+              <small>{{ reminder.recipient_email }}</small>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Initial Notification Sent</strong>
+              <span>{{ reminder.sent_at_label }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Waiting</strong>
+              <span>{{ reminder.elapsed_label }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Student Number</strong>
+              <span>{{ reminder.student_number }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Student Email</strong>
+              <span>{{ reminder.student_email }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Last Manual Reminder</strong>
+              <span>{{ reminder.last_sent_label }}</span>
+            </div>
+          </div>
+
+          <div class="reminder-card__footer">
+            {% if reminder.project_id %}
+              <a href="{{ url_for('mba.admin_dashboard', panel='projects', student_number=reminder.student_number if reminder.student_number != 'Not captured' else None) }}" class="secondary-button small-button">Open Project</a>
+            {% endif %}
+            <form action="{{ url_for('mba.admin_reminder_action') }}" method="post" class="inline-action reminder-actions">
+              <input type="hidden" name="reminder_key" value="{{ reminder.key }}">
+              <button class="primary-button small-button" name="action" value="send" type="submit">Send Reminder</button>
+              <button class="secondary-button small-button" name="action" value="dismiss" type="submit">Dismiss</button>
+            </form>
+          </div>
+        </article>
+      {% else %}
+        <div class="empty-state reminder-empty-state">
+          <h3>No Pending Reminders</h3>
+          <p class="muted">
+            {% if reminder_type != 'all' %}
+              No pending notifications match this reminder type.
+            {% else %}
+              Every tracked notification has either received a response or has been dismissed by Admin.
+            {% endif %}
+          </p>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% set item_label = 'pending reminders' %}
+    {% set pagination = reminder_pagination %}
+    {% include "mba/_project_pagination.html" %}
+  </section>
+</div>
+{% endblock %}

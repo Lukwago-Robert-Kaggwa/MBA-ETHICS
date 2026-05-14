@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}Ethics Form {{ submission.form_type }}{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Form {{ submission.form_type }} Review{% endblock %}
+{% block page_subheading %}{{ submission.title }}{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+
+<div class="grid-two">
+  <section class="ethics-panel">
+    <div class="panel-heading">
+      <h2>Submission</h2>
+      <span class="status-pill status-pill--{{ submission.status }}">{{ submission.status.replace('_', ' ').title() }}</span>
+    </div>
+
+    <dl class="detail-grid">
+      <div><dt>Student</dt><dd>{{ submission.student.email }}</dd></div>
+      <div><dt>Supervisor</dt><dd>{{ submission.supervisor.email if submission.supervisor else 'Not assigned' }}</dd></div>
+      <div><dt>Form</dt><dd>Form {{ submission.form_type }}</dd></div>
+      <div><dt>Risk</dt><dd>{{ submission.risk_level.title() }}</dd></div>
+      <div><dt>Department</dt><dd>{{ submission.department or 'Not captured' }}</dd></div>
+      <div><dt>Degree</dt><dd>{{ submission.degree or 'Not captured' }}</dd></div>
+      <div><dt>Submitted</dt><dd>{% if submission.submitted_at %}{{ submission.submitted_at.strftime('%d/%m/%Y %H:%M') }}{% else %}Draft{% endif %}</dd></div>
+      <div><dt>Updated</dt><dd>{{ submission.updated_at.strftime('%d/%m/%Y %H:%M') }}</dd></div>
+    </dl>
+
+    <div class="detail-section">
+      <h3>Study Summary</h3>
+      <p>{{ submission.summary or 'No summary captured.' }}</p>
+    </div>
+
+    {% if submission.payload and submission.payload.sections %}
+      <div class="detail-section">
+        <h3>Form {{ submission.form_type }} Responses</h3>
+        <div class="response-section-list">
+          {% for section in submission.payload.sections %}
+            <details class="response-section" {% if loop.first %}open{% endif %}>
+              <summary>{{ section.title }}</summary>
+              <dl class="response-grid">
+                {% for answer in section.answers %}
+                  <div>
+                    <dt>{{ answer.label }}</dt>
+                    <dd>
+                      {% if answer.value is sequence and answer.value is not string %}
+                        {% if answer.value and answer.value[0] is mapping %}
+                          {% if answer.value[0].filename is defined and (answer.value[0].stored_name is defined or answer.value[0].url is defined) %}
+                            {% for file in answer.value %}
+                              {% if file.stored_name is defined %}
+                                <a class="text-link" href="{{ url_for('ethics.download_submission_file', submission_id=submission.id, stored_name=file.stored_name) }}">{{ file.filename }}</a>{% if not loop.last %}, {% endif %}
+                              {% else %}
+                                {{ file.filename }}{% if not loop.last %}, {% endif %}
+                              {% endif %}
+                            {% endfor %}
+                          {% else %}
+                            <div class="table-wrap">
+                              <table class="admin-table form-table">
+                                <tbody>
+                                  {% for row in answer.value %}
+                                    <tr>
+                                      {% for key, cell in row.items() %}
+                                        <td><strong>{{ key.replace('_', ' ').title() }}:</strong> {{ cell or 'Not captured' }}</td>
+                                      {% endfor %}
+                                    </tr>
+                                  {% endfor %}
+                                </tbody>
+                              </table>
+                            </div>
+                          {% endif %}
+                        {% else %}
+                          {{ answer.value|join(', ') if answer.value else 'Not captured' }}
+                        {% endif %}
+                      {% else %}
+                        {{ answer.value or 'Not captured' }}
+                      {% endif %}
+                    </dd>
+                  </div>
+                {% endfor %}
+              </dl>
+            </details>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if submission.requirement %}
+      <div class="detail-section">
+        <h3>Requirements And Documents</h3>
+        <div class="document-grid">
+          <span>Permission letter: {{ 'Yes' if submission.requirement.needs_permission else 'No' }}</span>
+          <span>Prior clearance: {{ 'Yes' if submission.requirement.has_clearance else 'No' }}</span>
+          <span>Ethics evidence: {{ 'Yes' if submission.requirement.has_ethics_evidence else 'No' }}</span>
+          <span>Proposal: {{ submission.requirement.proposal_filename or 'Not uploaded' }}</span>
+          <span>Permission letter file: {{ submission.requirement.permission_letter_filename or 'Not uploaded' }}</span>
+          <span>Research tools: {{ submission.requirement.research_tools_filename or 'Not uploaded' }}</span>
+          <span>Impact assessment: {{ submission.requirement.impact_assessment_filename or 'Not uploaded' }}</span>
+          <span>Participation info: {{ submission.requirement.participation_info_filename or 'Not uploaded' }}</span>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="detail-section">
+      <h3>Feedback And Decisions</h3>
+      {% if submission.supervisor_comments %}
+        <article class="mini-record">
+          <strong>Supervisor: {{ submission.supervisor.email if submission.supervisor else 'Not assigned' }}</strong>
+          <span>{{ submission.supervisor_decision.replace('_', ' ').title() if submission.supervisor_decision else 'Reviewed' }}</span>
+        <p>{{ submission.supervisor_comments }}</p>
+        {% if submission.supervisor_reviewed_at %}
+            <small>{{ submission.supervisor_reviewed_at.strftime('%d/%m/%Y %H:%M') }}</small>
+        {% endif %}
+        </article>
+      {% else %}
+        <article class="mini-record">
+          <strong>Supervisor: {{ submission.supervisor.email if submission.supervisor else 'Not assigned' }}</strong>
+          <span>Awaiting supervisor review</span>
+        </article>
+      {% endif %}
+
+      <div class="record-list feedback-list">
+        {% for assignment in submission.reviewer_assignments %}
+          <article class="mini-record">
+            <strong>Reviewer: {{ assignment.reviewer.email }}</strong>
+            <span>{{ assignment.recommendation.replace('_', ' ').title() if assignment.recommendation else 'Awaiting review' }}</span>
+            {% if assignment.comments %}<p>{{ assignment.comments }}</p>{% endif %}
+            {% if assignment.completed_at %}<small>{{ assignment.completed_at.strftime('%d/%m/%Y %H:%M') }}</small>{% endif %}
+          </article>
+        {% else %}
+          <article class="mini-record">
+            <strong>Reviewers</strong>
+            <span>No reviewer feedback yet</span>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if submission.rec_status %}
+        <article class="mini-record">
+          <strong>REC Decision</strong>
+          <span>{{ submission.rec_status.replace('_', ' ').title() }}</span>
+        <p>{{ submission.rec_status.replace('_', ' ').title() }}</p>
+        {% if submission.rec_comments %}<p>{{ submission.rec_comments }}</p>{% endif %}
+        </article>
+      {% else %}
+        <article class="mini-record">
+          <strong>REC Decision</strong>
+          <span>No REC decision yet</span>
+        </article>
+      {% endif %}
+    </div>
+
+    {% if submission.certificate_code %}
+      <div class="detail-section certificate-box">
+        <h3>{{ submission.certificate_heading or 'Ethical Clearance Certificate' }}</h3>
+        <p><strong>{{ submission.certificate_code }}</strong></p>
+        <p>Issued by {{ submission.certificate_issuer }} on {{ submission.certificate_issued_at.strftime('%d/%m/%Y') }}</p>
+        {% if submission.certificate_end_date %}<p>Valid until {{ submission.certificate_end_date.strftime('%d/%m/%Y') }}</p>{% endif %}
+      </div>
+    {% endif %}
+  </section>
+
+  <aside class="side-stack">
+    <section class="ethics-panel">
+      <div class="panel-heading">
+        <h2>Actions</h2>
+        <span>{{ current_user.role.replace('_', ' ').title() }}</span>
+      </div>
+
+      {% if current_user.role == 'supervisor' and submission.supervisor_id == current_user.id and submission.status == 'awaiting_supervisor' %}
+        <form action="{{ url_for('ethics.supervisor_action', submission_id=submission.id) }}" method="post" class="form-stack">
+          <label>Comments <textarea name="comments" rows="4"></textarea></label>
+          <button class="secondary-button" name="decision" value="send_back">Send back to student</button>
+          <button class="primary-button" name="decision" value="approve">Submit to Ethics Admin</button>
+        </form>
+      {% elif current_user.role in ['admin', 'super_admin', 'dean'] and submission.status in ['awaiting_admin', 'review_in_progress'] %}
+        <form action="{{ url_for('ethics.assign_reviewers', submission_id=submission.id) }}" method="post" class="form-stack">
+          <label>
+            Reviewers
+            <select name="reviewer_ids" multiple size="5">
+              {% for reviewer in reviewers %}
+                <option value="{{ reviewer.id }}">{{ reviewer.email }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button class="primary-button" type="submit">Assign reviewers</button>
+        </form>
+      {% elif current_user.role == 'reviewer' and current_assignment and not current_assignment.completed_at %}
+        <form action="{{ url_for('ethics.reviewer_action', assignment_id=current_assignment.id) }}" method="post" class="form-stack">
+          <label>
+            Recommendation
+            <select name="recommendation">
+              <option value="approved">Approved</option>
+              <option value="approved_with_minor_changes">Approved with minor changes</option>
+              <option value="resubmission_required">Resubmission required</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <label>Reviewer comments <textarea name="comments" rows="4"></textarea></label>
+          <button class="primary-button" type="submit">Submit review</button>
+        </form>
+      {% elif current_user.role == 'rec' and submission.status == 'awaiting_rec' %}
+        <form action="{{ url_for('ethics.rec_action', submission_id=submission.id) }}" method="post" class="form-stack">
+          <label>
+            REC decision
+            <select name="decision">
+              <option value="approved">Approved</option>
+              <option value="resubmission_required">Resubmission required</option>
+            </select>
+          </label>
+          <label>REC comments <textarea name="comments" rows="4"></textarea></label>
+          <button class="primary-button" type="submit">Save REC decision</button>
+        </form>
+      {% elif current_user.role in ['admin', 'super_admin', 'dean'] and submission.status in ['approved', 'approved_with_minor_changes'] %}
+        <form action="{{ url_for('ethics.issue_certificate', submission_id=submission.id) }}" method="post" class="form-stack">
+          <label>Certificate heading <input name="heading" value="Ethical Clearance Certificate"></label>
+          <label>Valid years <input name="valid_years" type="number" min="1" max="5" value="1"></label>
+          <button class="primary-button" type="submit">Issue certificate</button>
+        </form>
+      {% else %}
+        <p class="muted">No action is currently required from you.</p>
+      {% endif %}
+    </section>
+
+    {% if current_user.role in ['admin', 'super_admin'] %}
+      <section class="ethics-panel">
+        <div class="panel-heading">
+          <h2>Timestamp Trail</h2>
+          <span>{{ timeline|length }}</span>
+        </div>
+        <ol class="timeline-list">
+          {% for log in timeline %}
+            <li>
+              <strong>{{ log.action.replace('_', ' ').title() }}</strong>
+              <span>{{ log.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+              {% if log.details %}<p>{{ log.details }}</p>{% endif %}
+            </li>
+          {% else %}
+            <li><span>No timestamp records yet.</span></li>
+          {% endfor %}
+        </ol>
+      </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

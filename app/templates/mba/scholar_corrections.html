@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}MBA Response Review{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Response to Assessors' Comments Review{% endblock %}
+{% block page_subheading %}Release anonymous assessor comments, review student responses, and approve before results go to HDC{% endblock %}
+
+{% block body %}
+{% from "mba/_project_disclosure.html" import project_disclosure %}
+<div class="mba-page-stack">
+  <section class="ethics-panel">
+    <div class="panel-heading">
+      <h2>Supervisor Response Queue</h2>
+      <span>{{ projects|length }}</span>
+    </div>
+    {% set has_filters = corrections_status != 'all' or student_number %}
+    <div class="admin-project-toolbar scholar-project-toolbar">
+      <div class="admin-project-toolbar__views" role="tablist" aria-label="Assessors' comments filters">
+        <a href="{{ url_for('mba.scholar_corrections', corrections_status='all', student_number=student_number) }}" class="filter-pill {% if corrections_status == 'all' %}is-active{% endif %}">
+          All <strong>{{ correction_counts.all }}</strong>
+        </a>
+        <a href="{{ url_for('mba.scholar_corrections', corrections_status='awaiting_student', student_number=student_number) }}" class="filter-pill {% if corrections_status == 'awaiting_student' %}is-active{% endif %}">
+          Awaiting Student <strong>{{ correction_counts.awaiting_student }}</strong>
+        </a>
+        <a href="{{ url_for('mba.scholar_corrections', corrections_status='rejected_by_supervisor', student_number=student_number) }}" class="filter-pill {% if corrections_status == 'rejected_by_supervisor' %}is-active{% endif %}">
+          Returned to Student <strong>{{ correction_counts.rejected_by_supervisor }}</strong>
+        </a>
+        <a href="{{ url_for('mba.scholar_corrections', corrections_status='awaiting_supervisor', student_number=student_number) }}" class="filter-pill {% if corrections_status == 'awaiting_supervisor' %}is-active{% endif %}">
+          Awaiting Supervisor <strong>{{ correction_counts.awaiting_supervisor }}</strong>
+        </a>
+        <a href="{{ url_for('mba.scholar_corrections', corrections_status='ready_for_admin', student_number=student_number) }}" class="filter-pill {% if corrections_status == 'ready_for_admin' %}is-active{% endif %}">
+          Ready for Admin <strong>{{ correction_counts.ready_for_admin }}</strong>
+        </a>
+      </div>
+      <form method="get" action="{{ url_for('mba.scholar_corrections') }}" class="admin-filter-form">
+        <input type="hidden" name="corrections_status" value="{{ corrections_status }}">
+        <label class="admin-filter-field">
+          <span>Student Number</span>
+          <input type="text" name="student_number" value="{{ student_number }}" placeholder="Search corrections queue" class="admin-filter-input">
+        </label>
+        <div class="admin-filter-actions">
+          <button type="submit" class="secondary-button small-button">Apply Filter</button>
+          {% if has_filters %}
+            <a href="{{ url_for('mba.scholar_corrections') }}" class="text-link">Clear</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    <div class="record-list">
+      {% for project in projects %}
+        {% set correction_status_value = project_corrections_status(project, forms_by_project=forms_by_project) %}
+        {% set corrected_doc = uploaded_doc_for(project, 'corrected_dissertation') %}
+        {% set response_doc = uploaded_doc_for(project, 'corrections_response') %}
+        {% set turnitin_doc = uploaded_doc_for(project, 'corrections_turnitin_report') %}
+        {% set student_number_value = project.student.student_profile.student_number if project.student and project.student.student_profile and project.student.student_profile.student_number else 'Not captured' %}
+        {% call project_disclosure(project, 'project-disclosure--supervisor') %}
+        <article class="record-card">
+          <div class="record-card__top">
+            <div>
+              <h3>{{ project.project_title }}</h3>
+              <p>{{ project.discipline_name }}</p>
+            </div>
+            <span class="status-pill status-pill--{{ correction_status_value }}">{{ corrections_status_label(correction_status_value) }}</span>
+          </div>
+          <div class="admin-project-meta" style="margin-top:0;">
+            <div class="admin-project-meta-item">
+              <strong>Student</strong>
+              <span>{{ project.student.email if project.student else 'Unknown' }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Student Number</strong>
+              <span>{{ student_number_value }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Capstone Project Status</strong>
+              <span>{{ project_status_label(project.project_status) }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Corrections Opened</strong>
+              <span>{% if correction_request_reference_time(project, forms_by_project=forms_by_project) %}{{ correction_request_reference_time(project, forms_by_project=forms_by_project).strftime('%d %b %Y %H:%M') }}{% else %}Pending{% endif %}</span>
+            </div>
+          </div>
+
+          <details class="response-section" open>
+            <summary>Assessors' Comments</summary>
+            {% set anonymize_assessors = true %}
+            {% include "mba/_corrections_request_list.html" %}
+          </details>
+          {% if not corrections_released_to_student(project) %}
+            <section class="response-section">
+              <strong>Release Comments to Student</strong>
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                Release the anonymous assessment summary and assessor comments to the student so they can complete the Response to Assessors' Comments form.
+              </p>
+              <form action="{{ url_for('mba.supervisor_release_corrections', project_id=project.id) }}" method="post" class="inline-action">
+                <button class="primary-button small-button" type="submit">Release Comments</button>
+              </form>
+            </section>
+          {% endif %}
+
+          <details class="response-section" open>
+            <summary>Student Resubmission</summary>
+            {% if corrected_doc or response_doc or turnitin_doc %}
+              <div class="invite-list" style="margin-top:0.5rem;">
+                {% if corrected_doc %}
+                  <div class="invite-row">
+                    <div>
+                      <strong>{{ document_label('corrected_dissertation') }}</strong>
+                      <small>{{ corrected_doc.original_name }}</small>
+                    </div>
+                    <div class="inline-action" style="gap:0.5rem;">
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=corrected_doc.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=corrected_doc.id) }}" class="secondary-button small-button">Download</a>
+                    </div>
+                  </div>
+                {% endif %}
+                {% if response_doc %}
+                  <div class="invite-row">
+                    <div>
+                      <strong>{{ document_label('corrections_response') }}</strong>
+                      <small>{{ response_doc.original_name }}</small>
+                    </div>
+                    <div class="inline-action" style="gap:0.5rem;">
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=response_doc.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=response_doc.id) }}" class="secondary-button small-button">Download</a>
+                    </div>
+                  </div>
+                {% endif %}
+                {% if turnitin_doc %}
+                  <div class="invite-row">
+                    <div>
+                      <strong>{{ document_label('corrections_turnitin_report') }}</strong>
+                      <small>{{ turnitin_doc.original_name }}</small>
+                    </div>
+                    <div class="inline-action" style="gap:0.5rem;">
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=turnitin_doc.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=turnitin_doc.id) }}" class="secondary-button small-button">Download</a>
+                    </div>
+                  </div>
+                {% endif %}
+              </div>
+            {% else %}
+              <p class="muted" style="margin-top:0.5rem;">The student has not submitted the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report yet.</p>
+            {% endif %}
+          </details>
+
+          {% if correction_status_value == 'awaiting_supervisor' %}
+            <section class="response-section">
+              <strong>Approve Response Pack</strong>
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                Review the student's corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report before approving.
+              </p>
+              <form action="{{ url_for('mba.supervisor_approve_corrections', project_id=project.id) }}" method="post" class="form-stack compact-form">
+                <label>Supervisor comments
+                  <textarea name="comment" rows="3" placeholder="Optional approval note for admin and student"></textarea>
+                </label>
+                <button class="primary-button small-button" type="submit">Approve Response Pack</button>
+              </form>
+              <form action="{{ url_for('mba.supervisor_reject_corrections', project_id=project.id) }}" method="post" class="form-stack compact-form" style="margin-top:1rem;">
+                <label>Return comments for student
+                  <textarea name="rejection_comment" rows="3" placeholder="Explain what the student must correct before resubmitting" required></textarea>
+                </label>
+                <button class="secondary-button small-button" type="submit">Return Corrections to Student</button>
+              </form>
+            </section>
+          {% elif correction_status_value == 'ready_for_admin' %}
+            <p style="margin-top:0.75rem;color:var(--success,#2d7a3a);font-weight:600;">
+              Response pack approved{% if project.corrections_supervisor_approved_at %} on {{ project.corrections_supervisor_approved_at.strftime('%d %b %Y %H:%M') }}{% endif %}. MBA Admin can now review the Capstone Manuscript for HDC submission.
+            </p>
+            {% if project.corrections_supervisor_comments %}
+              <p class="muted" style="margin-top:0.35rem;white-space:pre-wrap;">{{ project.corrections_supervisor_comments }}</p>
+            {% endif %}
+          {% elif correction_status_value == 'rejected_by_supervisor' %}
+            <p style="margin-top:0.75rem;color:var(--danger,#b91c1c);font-weight:700;">
+              Corrections returned to the student{% if project.corrections_supervisor_rejected_at %} on {{ project.corrections_supervisor_rejected_at.strftime('%d %b %Y %H:%M') }}{% endif %}. Waiting for resubmission.
+            </p>
+            {% if project.corrections_supervisor_rejection_comments %}
+              <p class="muted" style="margin-top:0.35rem;white-space:pre-wrap;">{{ project.corrections_supervisor_rejection_comments }}</p>
+            {% endif %}
+          {% else %}
+            <p class="muted" style="margin-top:0.75rem;">
+              {% if correction_status_value == 'awaiting_student' %}
+                Waiting for the student to submit the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report.
+              {% else %}
+                This corrections round is not yet ready for supervisor approval.
+              {% endif %}
+            </p>
+          {% endif %}
+        </article>
+        {% endcall %}
+      {% else %}
+        <p class="muted">{% if has_filters %}No response Capstone Projects match these filters.{% else %}No Capstone Projects are currently under response review.{% endif %}</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

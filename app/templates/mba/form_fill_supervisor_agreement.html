@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Supervisor Agreement Form{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Supervisor Agreement Form{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+{% set student_acceptance = student_acceptance|default(false) %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <div class="mba-doc-kicker">Johannesburg Business School</div>
+          <h2 class="mba-doc-title">Sept 2022<br>Student / Supervisor Agreement</h2>
+        </div>
+      </div>
+
+      <form action="{% if student_acceptance %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='supervisor_agreement') }}{% else %}{{ url_for('mba.supervisor_fill_form', project_id=project.id) }}{% endif %}" method="post" class="mba-doc-form">
+        <input type="hidden" name="capacity_statement" value="{{ prefill.get('capacity_statement', '') }}">
+
+        <div class="mba-doc-form" style="gap:10px;">
+          <p class="mba-doc-paragraph" style="font-weight:800;">PLEASE NOTE:</p>
+          <p class="mba-doc-paragraph">This document lists the rights and obligations of all master’s and doctoral postgraduate students enrolled at the University of Johannesburg (UJ), as well as those of their supervisors and co-supervisors.</p>
+          <p class="mba-doc-paragraph">For the purpose of this document, co-supervisors will also be referred to as supervisors, since their essential responsibilities are the same in respect of their interaction with the student. Where minor differences may exist, the supervisor and co-supervisor will clarify these between themselves, and communicate them to the student.</p>
+          <p class="mba-doc-paragraph">The purpose of this document is to provide a clear and concise outline of what each party to the student-supervisor relationship may expect from the other, thereby promoting the development and maintenance of a sound and productive relationship between the two parties.</p>
+          <p class="mba-doc-paragraph">This agreement records the expectations that the parties may reasonably have from each other in respect of postgraduate supervision and does not by itself create contractual obligations or duties for the parties from the breach of which contractual remedies can be enforced against each other.</p>
+          <p class="mba-doc-paragraph">The resolution of any disputes that might arise between postgraduate students and their supervisors will be strongly informed by the content of this document.</p>
+          <p class="mba-doc-paragraph">The main focus of this agreement is the student-supervisor relationship, not the general relationship between the University and the student or supervisor.</p>
+        </div>
+
+        <div class="mba-doc-center" style="font-weight:800;">AGREEMENT</div>
+
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:24%;">
+            <col style="width:46%;">
+            <col style="width:10%;">
+            <col style="width:20%;">
+          </colgroup>
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">BETWEEN A MASTER’S / DOCTORAL STUDENT</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Full name(s) and surname of student</td>
+            <td colspan="3"><input class="mba-doc-input" name="student_name" value="{{ prefill.get('student_name', '') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Student number</td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number', '') }}" readonly></td>
+            <td class="mba-doc-label">Degree</td>
+            <td><input class="mba-doc-input" name="degree" value="{{ prefill.get('degree', '') }}" readonly></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-center" style="font-weight:800;">AND</div>
+
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:24%;">
+            <col style="width:76%;">
+          </colgroup>
+          <tr>
+            <th class="mba-doc-section-title" colspan="2">THE SUPERVISOR</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Full name(s) and surname of supervisor</td>
+            <td><input class="mba-doc-input" name="supervisor_full_name" value="{{ prefill.get('supervisor_full_name', '') }}" required {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">School / Department</td>
+            <td><input class="mba-doc-input" name="department" value="{{ prefill.get('department', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-center" style="font-weight:800;">AND (If applicable)</div>
+
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:24%;">
+            <col style="width:76%;">
+          </colgroup>
+          <tr>
+            <th class="mba-doc-section-title" colspan="2">THE CO-SUPERVISOR</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Full name(s) and surname of co-supervisor</td>
+            <td><input class="mba-doc-input" name="co_supervisor_full_name" value="{{ prefill.get('co_supervisor_full_name', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">School / Department</td>
+            <td><input class="mba-doc-input" name="co_supervisor_department" value="{{ prefill.get('co_supervisor_department', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-form" style="gap:12px;">
+          <p class="mba-doc-paragraph" style="font-weight:800;">1. PARTIES</p>
+          <p class="mba-doc-paragraph">The parties to this agreement are the student, the supervisor, and where applicable, the co-supervisor.</p>
+        </div>
+
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:18%;">
+            <col style="width:32%;">
+            <col style="width:18%;">
+            <col style="width:32%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Student surname</td>
+            <td><input class="mba-doc-input" name="student_surname" value="{{ prefill.get('student_surname', '') }}" readonly></td>
+            <td class="mba-doc-label">Initials</td>
+            <td><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials', '') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Address</td>
+            <td colspan="3"><input class="mba-doc-input" name="student_address" value="{{ prefill.get('student_address', '') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Postal code</td>
+            <td><input class="mba-doc-input" name="student_postal_code" value="{{ prefill.get('student_postal_code', '') }}" readonly></td>
+            <td class="mba-doc-label">Research title</td>
+            <td><input class="mba-doc-input" name="research_title" value="{{ prefill.get('research_title', '') }}" required readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Supervisor surname</td>
+            <td><input class="mba-doc-input" name="supervisor_surname" value="{{ prefill.get('supervisor_surname', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+            <td class="mba-doc-label">Initials</td>
+            <td><input class="mba-doc-input" name="supervisor_initials" value="{{ prefill.get('supervisor_initials', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Affiliation</td>
+            <td colspan="3"><input class="mba-doc-input" name="affiliation" value="{{ prefill.get('affiliation', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Position</td>
+            <td colspan="3"><input class="mba-doc-input" name="position" value="{{ prefill.get('position', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Co-supervisor surname</td>
+            <td><input class="mba-doc-input" name="co_supervisor_surname" value="{{ prefill.get('co_supervisor_surname', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+            <td class="mba-doc-label">Initials</td>
+            <td><input class="mba-doc-input" name="co_supervisor_initials" value="{{ prefill.get('co_supervisor_initials', '') }}" {% if student_acceptance %}readonly{% endif %}></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-form" style="gap:12px;">
+          <p class="mba-doc-paragraph" style="font-weight:800;">2. BACKGROUND</p>
+          <p class="mba-doc-paragraph">The basis of this agreement is to build a student-supervisor relationship for the duration of the research and study period based on mutual trust.</p>
+          <p class="mba-doc-paragraph" style="font-weight:800;">3. PURPOSE OF UNDERSTANDING</p>
+          <p class="mba-doc-paragraph">The main focus of this agreement is the student-supervisor relationship and not the general relationship between the University of Johannesburg and the student or supervisor.</p>
+          <p class="mba-doc-paragraph" style="font-weight:800;">4. BASIS OF UNDERSTANDING</p>
+          <p class="mba-doc-paragraph">4.1 This agreement does not replace any agreements between the University of Johannesburg and the student or employee / supervisor and should be read in conjunction with the general rules governing the enrolment of a student, academic regulations, and conditions of employment for employees.</p>
+          <p class="mba-doc-paragraph">4.2 The under-mentioned responsibilities and legitimate expectations of the student and the supervisor / co-supervisor are applicable generically across all faculties.</p>
+          <p class="mba-doc-paragraph" style="font-weight:800;">5. DEFINITIONS PERTAINING TO THE AGREEMENT</p>
+          <p class="mba-doc-paragraph"><strong>Supervisor</strong> means the person appointed by the University to give professional and academic guidance to a student registered for a postgraduate research project.</p>
+          <p class="mba-doc-paragraph"><strong>Co-Supervisor</strong> means a person who, in consultation with the supervisor, is appointed to give assistance and guidance to a student in areas where the supervisor is not sufficiently familiar with the full scope of the field to be covered.</p>
+        </div>
+
+        <div class="mba-doc-form" style="gap:14px;">
+          <div>
+            <p class="mba-doc-paragraph" style="font-weight:800;">6.1 Responsibilities of the student and legitimate expectations by supervisor of the student</p>
+            <ul class="mba-doc-bullets">
+              <li>Plan and implement the agreed research programme or project.</li>
+              <li>Successfully complete all the academic outputs of the study programme.</li>
+              <li>Find appropriate literature and obtain information from literature.</li>
+              <li>Write the research proposal within the time stipulated.</li>
+              <li>Prepare all documents required for obtaining ethics clearance, if applicable.</li>
+              <li>Plan work schedules and engage in required fieldwork, data gathering, and analysis.</li>
+              <li>Write and proofread the Capstone Project, including obtaining professional editing assistance where needed.</li>
+              <li>Attend to any amendments or revisions required by supervisors or assessors.</li>
+              <li>Make regular appointments with the supervisor or co-supervisor and report administrative or academic difficulties in time.</li>
+              <li>Adhere at all times to academic integrity, plagiarism rules, and ethics requirements relating to the research work.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="mba-doc-paragraph" style="font-weight:800;">6.2 Responsibilities of the supervisor / co-supervisor and legitimate expectations by the student</p>
+            <ul class="mba-doc-bullets">
+              <li>Clarify the respective roles of the supervisor and co-supervisor and communicate these clearly to the student.</li>
+              <li>Administer and manage matters associated with the student’s studies according to University regulations.</li>
+              <li>Cooperate with each other and with the Head of Department or Dean to ensure that the student is provided with basic infrastructure and necessary resources.</li>
+              <li>Provide academic guidance to the student to ensure the development of research skills and mastery of the research discipline.</li>
+              <li>Facilitate the student’s access to necessary research resources without diminishing the student’s own responsibility.</li>
+              <li>Introduce the student to the School and involve the student in suitable academic activities where possible.</li>
+              <li>Meet with the student regularly to provide guidance, monitor progress, and recommend corrective measures where necessary.</li>
+              <li>Keep a written record of progress and provide timeous feedback.</li>
+              <li>Provide progress reports required by the University and its research or postgraduate study structures.</li>
+              <li>Adhere at all times to academic integrity, plagiarism rules, and ethics requirements relating to the research work.</li>
+            </ul>
+          </div>
+        </div>
+
+        <label class="mba-doc-checkline">
+          <span>Student: I have reviewed and accept the supervisor agreement. {% if student_acceptance %}<span style="color:red;">*</span>{% endif %}</span>
+          <input class="mba-doc-checkbox" type="checkbox" name="student_agreement_declaration" value="1" {% if student_acceptance %}required{% else %}disabled{% endif %} {% if prefill.get('student_agreement_declaration') or prefill.get('agreement_declaration') %}checked{% endif %}>
+          {% if not student_acceptance and (prefill.get('student_agreement_declaration') or prefill.get('agreement_declaration')) %}
+            <input type="hidden" name="student_agreement_declaration" value="1">
+          {% endif %}
+        </label>
+
+        <label class="mba-doc-checkline">
+          <span>Supervisor: I confirm the above and formally accept the supervisor agreement. {% if not student_acceptance %}<span style="color:red;">*</span>{% endif %}</span>
+          <input class="mba-doc-checkbox" type="checkbox" name="supervisor_agreement_declaration" value="1" {% if not student_acceptance %}required{% else %}disabled{% endif %} {% if prefill.get('supervisor_agreement_declaration') %}checked{% endif %}>
+          {% if student_acceptance and prefill.get('supervisor_agreement_declaration') %}
+            <input type="hidden" name="supervisor_agreement_declaration" value="1">
+          {% endif %}
+        </label>
+
+        <div class="mba-doc-actions">
+          <button class="primary-button" type="submit">{% if student_acceptance %}Submit Supervisor Agreement{% else %}Submit Form & Accept Invitation{% endif %}</button>
+          <a href="{% if student_acceptance %}{{ url_for('mba.student_dashboard') }}{% else %}{{ url_for('mba.scholar_dashboard') }}{% endif %}" class="secondary-button">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% endblock %}

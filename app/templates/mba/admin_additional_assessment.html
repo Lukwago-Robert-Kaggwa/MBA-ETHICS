@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}MBA Additional Assessment{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Additional Assessment{% endblock %}
+{% block page_subheading %}Resolve conflicting assessor outcomes before results can go to HDC{% endblock %}
+
+{% block body %}
+{% from "mba/_project_disclosure.html" import project_disclosure %}
+<div class="mba-page-stack">
+  {% include "mba/_kpis.html" %}
+  <section class="ethics-panel">
+    <div class="panel-heading">
+      <h2>Additional Assessment Queue</h2>
+      <span>{{ projects|length }}</span>
+    </div>
+    {% set has_filters = assessment_status != 'all' or student_number %}
+    <div class="admin-project-toolbar">
+      <div class="admin-project-toolbar__views" role="tablist" aria-label="Additional assessment filters">
+        <a href="{{ url_for('mba.admin_additional_assessment', assessment_status='all', student_number=student_number) }}" class="filter-pill {% if assessment_status == 'all' %}is-active{% endif %}">
+          All <strong>{{ assessment_counts.all }}</strong>
+        </a>
+        <a href="{{ url_for('mba.admin_additional_assessment', assessment_status='needs_assignment', student_number=student_number) }}" class="filter-pill {% if assessment_status == 'needs_assignment' %}is-active{% endif %}">
+          Needs Assignment <strong>{{ assessment_counts.needs_assignment }}</strong>
+        </a>
+        <a href="{{ url_for('mba.admin_additional_assessment', assessment_status='awaiting_acceptance', student_number=student_number) }}" class="filter-pill {% if assessment_status == 'awaiting_acceptance' %}is-active{% endif %}">
+          Awaiting Acceptance <strong>{{ assessment_counts.awaiting_acceptance }}</strong>
+        </a>
+        <a href="{{ url_for('mba.admin_additional_assessment', assessment_status='awaiting_result', student_number=student_number) }}" class="filter-pill {% if assessment_status == 'awaiting_result' %}is-active{% endif %}">
+          Awaiting Result <strong>{{ assessment_counts.awaiting_result }}</strong>
+        </a>
+      </div>
+      <form method="get" action="{{ url_for('mba.admin_additional_assessment') }}" class="admin-filter-form">
+        <input type="hidden" name="assessment_status" value="{{ assessment_status }}">
+        <label class="admin-filter-field">
+          <span>Student Number</span>
+          <input type="text" name="student_number" value="{{ student_number }}" placeholder="Search additional assessment queue" class="admin-filter-input">
+        </label>
+        <div class="admin-filter-actions">
+          <button type="submit" class="secondary-button small-button">Apply Filter</button>
+          {% if has_filters %}
+            <a href="{{ url_for('mba.admin_additional_assessment') }}" class="text-link">Clear</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    <div class="record-list">
+      {% for project in projects %}
+        {% set stage = additional_assessment_stage(project, forms_by_project=forms_by_project) %}
+        {% set suggestion = additional_assessor_suggestions.get(project.id) %}
+        {% set student_number_value = project.student.student_profile.student_number if project.student and project.student.student_profile and project.student.student_profile.student_number else 'Not captured' %}
+        {% set assessor_1_grade = assessor_grade_for_slot(project, 'assessor_1', forms_by_project=forms_by_project) %}
+        {% set assessor_2_grade = assessor_grade_for_slot(project, 'assessor_2', forms_by_project=forms_by_project) %}
+        {% set assessor_3_result = uploaded_doc_for(project, assessment_doc_type('assessor_3')) %}
+        {% set assessor_3_report = uploaded_doc_for(project, assessor_report_doc_type('assessor_3')) %}
+        {% set assessor_3_narrative = uploaded_doc_for(project, assessor_narrative_doc_type('assessor_3')) %}
+        {% call project_disclosure(project, 'project-disclosure--admin') %}
+        <article class="record-card admin-project-card">
+          <div class="record-card__top">
+            <div>
+              <h3>{{ project.project_title }}</h3>
+              <p>{{ project.discipline_name }}</p>
+            </div>
+            <span class="status-pill status-pill--{{ stage }}">{{ additional_assessment_status_label(stage) }}</span>
+          </div>
+
+          <div class="admin-project-meta">
+            <div class="admin-project-meta-item">
+              <strong>Student</strong>
+              <span>{{ project.student.email if project.student else 'Unknown' }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Student Number</strong>
+              <span>{{ student_number_value }}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Supervisor</strong>
+              <span>{% if project.primary_supervisor %}{{ project.primary_supervisor.first_name }} {{ project.primary_supervisor.last_name }}{% else %}Pending{% endif %}</span>
+            </div>
+            <div class="admin-project-meta-item">
+              <strong>Capstone Project Status</strong>
+              <span>{{ project_status_label(project.project_status) }}</span>
+            </div>
+          </div>
+
+          <section class="response-section">
+            <strong>Conflicting Assessor Outcomes</strong>
+            <div class="invite-list" style="margin-top:0.75rem;">
+              <div class="invite-row">
+                <div>
+                  <strong>Assessor 1</strong>
+                  <small>{% if project.assessor_1 %}{{ project.assessor_1.first_name }} {{ project.assessor_1.last_name }}{% else %}Unassigned{% endif %}</small>
+                </div>
+                <span class="invite-badge invite-badge--accepted">{{ assessor_1_grade if assessor_1_grade is not none else 'Pending' }}</span>
+              </div>
+              <div class="invite-row">
+                <div>
+                  <strong>Assessor 2</strong>
+                  <small>{% if project.assessor_2 %}{{ project.assessor_2.first_name }} {{ project.assessor_2.last_name }}{% else %}Unassigned{% endif %}</small>
+                </div>
+                <span class="invite-badge invite-badge--accepted">{{ assessor_2_grade if assessor_2_grade is not none else 'Pending' }}</span>
+              </div>
+            </div>
+            <p class="muted" style="margin-top:0.75rem;">
+              One outcome is below 50 and the other is 50 or above, so this Capstone Project needs a third assessor before results can go to HDC.
+            </p>
+          </section>
+
+          <section class="response-section">
+            <strong>Third Assessor Assignment</strong>
+            {% if project.assessor_3 %}
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                Current third assessor: {{ project.assessor_3.first_name }} {{ project.assessor_3.last_name }} ({{ project.assessor_3.email }}) &middot; {{ (project.assessor_3_invitation_status or 'not sent').replace('_', ' ').title() }}
+              </p>
+            {% endif %}
+            <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="form-stack compact-form">
+              <label>Suggested third assessor
+                <select name="additional_assessor_id" required>
+                  <option value="">Select assessor</option>
+                  {% for examiner in examiners %}
+                    {% set is_primary_assessor = examiner.id in [project.assessor_1_id, project.assessor_2_id, project.primary_supervisor_id] %}
+                    <option value="{{ examiner.id }}"
+                            {% if (project.assessor_3_id and project.assessor_3_id == examiner.id) or (not project.assessor_3_id and suggestion and suggestion.id == examiner.id) %}selected{% endif %}
+                            {% if is_primary_assessor %}disabled{% endif %}>
+                      {{ examiner.first_name }} {{ examiner.last_name }} ({{ examiner.email }}){% if suggestion and suggestion.id == examiner.id %} - Suggested{% endif %}{% if is_primary_assessor %} - Already on Capstone Project{% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+              </label>
+              <button class="primary-button small-button" name="action" value="assign_additional_assessor" type="submit">
+                {% if project.assessor_3_id %}Update Third Assessor{% else %}Assign Third Assessor{% endif %}
+              </button>
+            </form>
+          </section>
+
+          {% if project.assessor_3 %}
+            <section class="response-section">
+              <strong>Third Assessor Progress</strong>
+              <div class="invite-list" style="margin-top:0.75rem;">
+                <div class="invite-row">
+                  <div>
+                    <strong>Invitation</strong>
+                    <small>{{ (project.assessor_3_invitation_status or 'not sent').replace('_', ' ').title() }}</small>
+                  </div>
+                </div>
+                <div class="invite-row">
+                  <div>
+                    <strong>Assessment Result Summary</strong>
+                    <small>{% if assessor_3_result %}Submitted{% else %}Pending{% endif %}</small>
+                  </div>
+                  {% if assessor_3_result %}
+                    <div class="inline-action" style="gap:0.5rem;">
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_result.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_result.id) }}" class="secondary-button small-button">Download</a>
+                    </div>
+                  {% endif %}
+                </div>
+                <div class="invite-row">
+                  <div>
+                    <strong>Assessor Report Form 1</strong>
+                    <small>{% if assessor_3_report %}Submitted{% else %}Pending{% endif %}</small>
+                  </div>
+                  {% if assessor_3_report %}
+                    <div class="inline-action" style="gap:0.5rem;">
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_report.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_report.id) }}" class="secondary-button small-button">Download</a>
+                    </div>
+                  {% endif %}
+                </div>
+                <div class="invite-row">
+                  <div>
+                    <strong>Assessor Report Form 2</strong>
+                    <small>{% if assessor_3_narrative %}Submitted{% else %}Pending{% endif %}</small>
+                  </div>
+                  {% if assessor_3_narrative %}
+                    <div class="inline-action" style="gap:0.5rem;">
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_narrative.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_narrative.id) }}" class="secondary-button small-button">Download</a>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </section>
+          {% endif %}
+
+          <section class="response-section">
+            <strong>HDC Gate</strong>
+            <p class="muted" style="margin:0.5rem 0 0;">
+              {% if additional_assessment_blocks_hdc_submission(project, forms_by_project=forms_by_project) %}
+                Results are blocked from HDC until the third assessor completes the full assessment workflow.
+              {% else %}
+                Additional assessment is complete and this Capstone Project can proceed once the rest of the result workflow is ready.
+              {% endif %}
+            </p>
+          </section>
+        </article>
+        {% endcall %}
+      {% else %}
+        <p class="muted">{% if has_filters %}No additional-assessment Capstone Projects match these filters.{% else %}No Capstone Projects currently need an additional assessment.{% endif %}</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Ethics Monitoring Forms{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Monitoring Forms{% endblock %}
+{% block page_subheading %}Track form status, reviewers, supervisor feedback, REC feedback, and certificates{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>All Ethics Forms</h2>
+    <span>{{ submissions|length }} total</span>
+  </div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Form</th>
+          <th>Student</th>
+          <th>Supervisor</th>
+          <th>Status</th>
+          <th>Risk</th>
+          <th>Reviewers</th>
+          <th>Feedback</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for submission in submissions %}
+          <tr>
+            <td>
+              <a href="{{ url_for('ethics.submission_detail', submission_id=submission.id) }}" class="text-link">
+                Form {{ submission.form_type }} #{{ submission.id }}
+              </a>
+              <small>{{ submission.title }}</small>
+            </td>
+            <td>{{ submission.student.email if submission.student else '-' }}</td>
+            <td>{{ submission.supervisor.email if submission.supervisor else 'Unassigned' }}</td>
+            <td><span class="status-pill status-pill--{{ submission.status }}">{{ submission.status.replace('_', ' ').title() }}</span></td>
+            <td><span class="status-pill status-pill--{{ submission.risk_level }}">{{ submission.risk_level.title() }}</span></td>
+            <td>
+              {% for assignment in submission.reviewer_assignments %}
+                <span class="line-item">
+                  {{ assignment.reviewer.email }}
+                  {% if assignment.completed_at %}(done){% else %}(pending){% endif %}
+                </span>
+              {% else %}
+                <span class="muted">No reviewers</span>
+              {% endfor %}
+            </td>
+            <td>
+              {% if submission.supervisor_comments %}
+                <span class="line-item"><strong>Supervisor:</strong> {{ submission.supervisor_comments }}</span>
+              {% endif %}
+              {% for assignment in submission.reviewer_assignments if assignment.comments %}
+                <span class="line-item"><strong>{{ assignment.reviewer.email }}:</strong> {{ assignment.comments }}</span>
+              {% endfor %}
+              {% if submission.rec_comments %}
+                <span class="line-item"><strong>REC:</strong> {{ submission.rec_comments }}</span>
+              {% endif %}
+              {% if not submission.supervisor_comments and not submission.rec_comments and submission.reviewer_assignments|selectattr('comments')|list|length == 0 %}
+                <span class="muted">No feedback yet</span>
+              {% endif %}
+            </td>
+            <td>{{ submission.updated_at.strftime('%Y-%m-%d') }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="8" class="muted">No ethics forms have been submitted yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

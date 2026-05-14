@@ -1,0 +1,11 @@
+Alembic migration directory.
+
+Use Flask-Migrate commands from the project root:
+
+```powershell
+flask --app run.py db upgrade
+flask --app run.py db migrate -m "describe change"
+flask --app run.py db revision -m "describe manual change"
+```
+
+Do not store credentials, local connection strings, exported data, or generated uploads in this directory.

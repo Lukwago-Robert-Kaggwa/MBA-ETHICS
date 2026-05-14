@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+{% block page_heading %}Student Registration{% endblock %}
+{% block page_subheading %}Use your student email address{% endblock %}
+
+{% block body %}
+<section class="auth-panel">
+  <div class="auth-card">
+    <form method="post" class="form-stack">
+      <label>
+        System
+        <select name="system">
+          <option value="mba" {% if system == 'mba' %}selected{% endif %}>MBA App</option>
+          <option value="ethics" {% if system == 'ethics' %}selected{% endif %}>Ethics</option>
+        </select>
+      </label>
+      <label>
+        Student Email Address
+        <input type="email" name="student_email" value="{{ student_email or '' }}" placeholder="student@example.com" required>
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" required autocomplete="new-password">
+      </label>
+      <label>
+        Confirm Password
+        <input type="password" name="confirm_password" required autocomplete="new-password">
+      </label>
+      <button type="submit" class="primary-button">Create student account</button>
+    </form>
+    <div class="auth-links">
+      <a href="{{ url_for('auth.login') }}">Back to sign in</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

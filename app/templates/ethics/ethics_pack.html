@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Ethics Pack{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Ethics Pack{% endblock %}
+{% block page_subheading %}Select the nature of your research and open the matching production-style form{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Select the Nature of Your Research</h2>
+    <span>Form A/B/C</span>
+  </div>
+  <p class="muted">To determine the required ethical templates, please choose the nature of your research:</p>
+
+  <div class="ethics-pack-grid">
+    {% for form_type, definition in form_definitions.items() %}
+      <article class="record-card ethics-pack-card">
+        <div class="record-card__top">
+          <h3>Form {{ form_type }}</h3>
+          <span>{{ definition.sections|length }} sections</span>
+        </div>
+        <p>{{ definition.title }}</p>
+        {% if definition.templates %}
+          <div class="template-chip-list">
+            {% for title, file_path in definition.templates %}
+              <a href="{{ url_for('static', filename=file_path) }}" class="text-link">{{ title }}</a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="muted">Form C has no additional templates.</p>
+        {% endif %}
+        <a class="primary-button" href="{{ url_for('ethics.new_ethics_form', form_type=form_type) }}">Open Form {{ form_type }}</a>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

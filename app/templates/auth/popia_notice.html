@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}POPIA Notice{% endblock %}
+{% block app_name %}MBA Ethics{% endblock %}
+{% block page_heading %}POPIA Notice{% endblock %}
+{% block page_subheading %}Protection of Personal Information Act confirmation{% endblock %}
+
+{% block body %}
+<section class="auth-panel">
+  <div class="auth-card popia-card">
+    <img src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="UJ" class="auth-logo">
+    <p class="popia-eyebrow">Required before system access</p>
+    <h2>Personal Information Processing Notice</h2>
+    <p>
+      The University of Johannesburg, Johannesburg Business School, and authorised system users process personal
+      information in this platform to administer MBA Capstone Project, assessment, supervision, HDC, Ethics, and
+      related academic workflows.
+    </p>
+    <div class="popia-notice-box">
+      <h3>By continuing, you acknowledge that:</h3>
+      <ul>
+        <li>Your personal information may be used for identity verification, communication, academic administration, supervision, assessment, review, record keeping, reporting, and audit purposes.</li>
+        <li>Your information may be visible to authorised users only where their role in the workflow requires it, including students, supervisors, assessors, MBA Admin, HDC members, Ethics reviewers, committee members, and authorised institutional staff.</li>
+        <li>You must use information accessed in this system only for authorised University purposes and keep it confidential.</li>
+        <li>Your confirmation of this notice will be recorded in the database with the date and notice version.</li>
+      </ul>
+    </div>
+    <form method="post" class="form-stack popia-confirm-form">
+      {% if next_url %}
+        <input type="hidden" name="next" value="{{ next_url }}">
+      {% endif %}
+      <label class="popia-checkbox">
+        <input type="checkbox" name="popia_confirmed" value="yes" required>
+        <span>I have read and understood this POPIA notice and agree to use this system responsibly.</span>
+      </label>
+      <button type="submit" class="primary-button login-btn">Confirm and Continue</button>
+    </form>
+    <p class="popia-version">Notice version: {{ notice_version }}</p>
+  </div>
+</section>
+{% endblock %}

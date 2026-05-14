@@ -1,0 +1,491 @@
+{% extends "base.html" %}
+{% block title %}MBA Scholar Dashboard{% endblock %}
+{% block app_name %}MBA App{% endblock %}
+{% block page_heading %}Scholar Dashboard{% endblock %}
+{% block page_subheading %}Supervisor and assessor workspace{% endblock %}
+
+{% block body %}
+{% from "mba/_project_disclosure.html" import project_disclosure %}
+<div class="mba-page-stack">
+
+{% if current_user.is_supervisor_role() %}
+<section class="ethics-panel" id="available-supervisor-projects">
+  <div class="panel-heading">
+    <h2>Available Project Titles</h2>
+    <span>{{ available_pagination.total }}</span>
+  </div>
+  <p class="muted" style="margin:0 0 1rem;">
+    MBA Admin has released these JBS5 project titles for supervisor selection. Choose a project to reserve it, then complete the Supervisor Agreement to confirm supervision.
+  </p>
+  {% set pagination = available_pagination %}
+  {% set item_label = 'available project titles' %}
+  {% include "mba/_project_pagination.html" %}
+  <div class="record-list mba-work-project-list">
+    {% for project in available_supervisor_projects %}
+      <article class="record-card supervisor-pool-card">
+        <div class="record-card__top">
+          <div>
+            <h3>{{ project.project_title }}</h3>
+            <p>{{ project.discipline_name }}</p>
+          </div>
+          <span class="status-pill status-pill--awaiting_student">Available</span>
+        </div>
+        <p>{{ project.project_description }}</p>
+        <div class="feedback-summary">
+          <span>Released: {{ project.supervisor_pool_released_at.strftime('%d %b %Y') if project.supervisor_pool_released_at else 'Recently' }}</span>
+          <span>Supervisor: Open for selection</span>
+        </div>
+        {% set jbs5_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs5') | list %}
+        {% set latest_jbs5 = jbs5_docs|last if jbs5_docs else None %}
+        <div class="invitation-action-row" style="margin-top:0.75rem;">
+          {% if latest_jbs5 %}
+            <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=latest_jbs5.id) }}" class="secondary-button small-button">View JBS5</a>
+          {% endif %}
+          <form action="{{ url_for('mba.select_supervisor_project', project_id=project.id) }}" method="post" class="invitation-action-form">
+            <button class="primary-button small-button" type="submit">Choose Project and Complete Agreement</button>
+          </form>
+        </div>
+      </article>
+    {% else %}
+      <p class="muted">No released project titles are available for supervisor selection right now.</p>
+    {% endfor %}
+  </div>
+  {% set pagination = available_pagination %}
+  {% set item_label = 'available project titles' %}
+  {% include "mba/_project_pagination.html" %}
+</section>
+{% endif %}
+
+<section class="ethics-panel" id="supervisor-projects">
+  <div class="panel-heading">
+    <h2>Supervisor Capstone Projects</h2>
+    <span>{{ supervisor_pagination.total }}</span>
+  </div>
+  {% set has_supervisor_filters = supervisor_status != 'all' or supervisor_student_number %}
+  <div class="admin-project-toolbar scholar-project-toolbar">
+    <div class="admin-project-toolbar__views" role="tablist" aria-label="Supervisor Capstone Project filters">
+      <a href="{{ url_for('mba.scholar_dashboard', supervisor_status='all', supervisor_student_number=supervisor_student_number or None, supervisor_per_page=supervisor_pagination.per_page, assessor_status=assessor_status, assessor_student_number=assessor_student_number or None, assessor_page=assessor_pagination.page, assessor_per_page=assessor_pagination.per_page) }}" class="filter-pill {% if supervisor_status == 'all' %}is-active{% endif %}">
+        All <strong>{{ supervisor_filter_counts.all }}</strong>
+      </a>
+      <a href="{{ url_for('mba.scholar_dashboard', supervisor_status='accepted', supervisor_student_number=supervisor_student_number or None, supervisor_per_page=supervisor_pagination.per_page, assessor_status=assessor_status, assessor_student_number=assessor_student_number or None, assessor_page=assessor_pagination.page, assessor_per_page=assessor_pagination.per_page) }}" class="filter-pill {% if supervisor_status == 'accepted' %}is-active{% endif %}">
+        Accepted <strong>{{ supervisor_filter_counts.accepted }}</strong>
+      </a>
+      <a href="{{ url_for('mba.scholar_dashboard', supervisor_status='expired', supervisor_student_number=supervisor_student_number or None, supervisor_per_page=supervisor_pagination.per_page, assessor_status=assessor_status, assessor_student_number=assessor_student_number or None, assessor_page=assessor_pagination.page, assessor_per_page=assessor_pagination.per_page) }}" class="filter-pill {% if supervisor_status == 'expired' %}is-active{% endif %}">
+        Expired <strong>{{ supervisor_filter_counts.expired }}</strong>
+      </a>
+    </div>
+    <form method="get" action="{{ url_for('mba.scholar_dashboard') }}" class="admin-filter-form">
+      <input type="hidden" name="supervisor_status" value="{{ supervisor_status }}">
+      <input type="hidden" name="supervisor_per_page" value="{{ supervisor_pagination.per_page }}">
+      <input type="hidden" name="assessor_status" value="{{ assessor_status }}">
+      <input type="hidden" name="assessor_student_number" value="{{ assessor_student_number }}">
+      <input type="hidden" name="assessor_page" value="{{ assessor_pagination.page }}">
+      <input type="hidden" name="assessor_per_page" value="{{ assessor_pagination.per_page }}">
+      <label class="admin-filter-field">
+        <span>Student Number</span>
+        <input type="text" name="supervisor_student_number" placeholder="Search supervisor Capstone Projects" value="{{ supervisor_student_number }}" class="admin-filter-input">
+      </label>
+      <div class="admin-filter-actions">
+        <button type="submit" class="secondary-button small-button">Apply Filter</button>
+        {% if has_supervisor_filters %}
+          <a href="{{ url_for('mba.scholar_dashboard', supervisor_status='all', supervisor_per_page=supervisor_pagination.per_page, assessor_status=assessor_status, assessor_student_number=assessor_student_number or None, assessor_page=assessor_pagination.page, assessor_per_page=assessor_pagination.per_page) }}" class="text-link">Clear</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {% set pagination = supervisor_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+  <div class="record-list mba-work-project-list">
+    {% for project in supervised_projects %}
+      {% call project_disclosure(project, 'project-disclosure--supervisor') %}
+      <div class="mba-work-project-stack">
+        {% set supervisor_can_view_assessor_lineup = false %}
+        {% set hide_assessor_lineup = not supervisor_can_view_assessor_lineup %}
+        {% include "mba/_project_card.html" %}
+        {% set supervisor_state = supervisor_project_states.get(project.id, 'all') %}
+        {% set supervisor_invitation = project.supervisor_invitations | selectattr('supervisor_id', 'equalto', current_user.id) | list | first %}
+        {% set supervisor_invitation_expired = supervisor_state == 'expired' %}
+        {% if supervisor_invitation %}
+          <div class="response-section">
+            <p><strong>Supervisor invitation:</strong> {{ supervisor_invitation.status.replace('_', ' ').title() }}</p>
+            {% if supervisor_invitation.status == 'pending' %}
+              {% set jbs5_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs5') | list %}
+              {% set latest_jbs5 = jbs5_docs|last if jbs5_docs else None %}
+              <p class="muted" style="margin:0.5rem 0 0;">
+                Accept the invitation first. After acceptance, review JBS5 and either request title changes or sign it.
+              </p>
+              <div class="invitation-action-row">
+                {% if latest_jbs5 %}
+                  <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=latest_jbs5.id) }}" class="secondary-button small-button">View JBS5</a>
+                {% endif %}
+                <a href="{{ url_for('mba.supervisor_fill_form', project_id=project.id) }}" class="primary-button small-button">Fill Supervisor Agreement and Accept</a>
+              </div>
+              <form action="{{ url_for('mba.invitation_response', project_id=project.id) }}" method="post" class="inline-action" style="margin-top:0.5rem;">
+                <input type="hidden" name="supervisor_invitation_id" value="{{ supervisor_invitation.id }}">
+                <button class="secondary-button small-button" name="decision" value="declined" type="submit">Decline invitation</button>
+              </form>
+            {% elif supervisor_invitation_expired %}
+              <p class="muted" style="margin:0.5rem 0 0;">
+                This invitation has expired because another supervisor accepted the Capstone Project.
+              </p>
+            {% endif %}
+          </div>
+        {% endif %}
+        {% if supervisor_state == 'accepted' %}
+          <details class="response-section">
+            <summary>Capstone Project documents</summary>
+            <div class="invite-list invite-list--documents" style="margin-top:0.5rem;">
+              {% for doc in project.documents if not (doc.doc_type.startswith('assessor_banking_') or doc.doc_type.startswith('assessor_temp_appointment_') or doc.doc_type.startswith('assessor_temp_claim_') or doc.doc_type.startswith('assessor_profile_') or doc.doc_type.startswith('assessor_cv_') or doc.doc_type.startswith('assessor_highest_qualification_') or doc.doc_type.startswith('assessment_result_') or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_narrative_')) %}
+                <div class="invite-row invite-row--document">
+                  <div>
+                    <strong>{{ document_label(doc.doc_type) }}</strong>
+                    <small>{{ doc.original_name }}</small>
+                  </div>
+                  <div class="document-action-row">
+                    <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">View</a>
+                    <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">Download</a>
+                  </div>
+                </div>
+              {% else %}
+                <p class="muted">No documents uploaded yet.</p>
+              {% endfor %}
+            </div>
+          </details>
+          <details class="response-section" open>
+            <summary>JBS5 Review</summary>
+            {% set accepted_jbs5_form = project.forms | selectattr('form_type', 'equalto', 'jbs5') | list | first %}
+            {% set accepted_jbs5_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs5') | list %}
+            {% set accepted_latest_jbs5 = accepted_jbs5_docs|last if accepted_jbs5_docs else None %}
+            {% set accepted_supervisor_agreement_form = project.forms | selectattr('form_type', 'equalto', 'supervisor_agreement') | list | first %}
+            {% set accepted_student_supervisor_agreement_docs = project.documents | selectattr('doc_type', 'equalto', 'supervisor_agreement') | selectattr('uploaded_by_id', 'equalto', project.student_id) | list %}
+            {% set accepted_student_supervisor_agreement_signed = accepted_supervisor_agreement_form and accepted_supervisor_agreement_form.supervisor_signed and (accepted_supervisor_agreement_form.student_signed or accepted_student_supervisor_agreement_docs) %}
+            {% set accepted_title_change_pending = project.supervisor_title_change_requested_at and not project.supervisor_title_change_resolved_at %}
+            <div class="invitation-action-row">
+              {% if accepted_latest_jbs5 %}
+                <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=accepted_latest_jbs5.id) }}" class="secondary-button small-button">View JBS5</a>
+              {% endif %}
+              {% if accepted_jbs5_form and accepted_jbs5_form.supervisor_signed %}
+                <span class="status-pill status-pill--accepted">JBS5 Signed</span>
+              {% elif not accepted_jbs5_form %}
+                <span class="muted" style="display:inline-flex;align-items:center;">JBS5 is not available yet.</span>
+              {% elif accepted_title_change_pending %}
+                <span class="muted" style="display:inline-flex;align-items:center;">Title change request sent. Wait for the student to update JBS5 before signing.</span>
+              {% elif not accepted_student_supervisor_agreement_signed %}
+                <span class="muted" style="display:inline-flex;align-items:center;">Waiting for the student to submit the supervisor-signed Supervisor Agreement.</span>
+              {% else %}
+                <a href="{{ url_for('mba.supervisor_sign_jbs5', project_id=project.id) }}" class="primary-button small-button">Sign JBS5</a>
+              {% endif %}
+            </div>
+            {% include "mba/_jbs5_hdc_feedback.html" %}
+            {% if accepted_jbs5_form and accepted_jbs5_form.supervisor_signed %}
+              <p class="muted" style="margin:0.5rem 0 0;">
+                JBS5 has been signed by the supervisor and title changes are now locked.
+              </p>
+            {% elif accepted_title_change_pending %}
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                A title change request is waiting for the student.
+              </p>
+            {% elif not accepted_jbs5_form %}
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                The student-submitted JBS5 form is not available yet.
+              </p>
+            {% elif project.supervisor_title_change_resolved_at %}
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                The student has submitted an updated JBS 5 form for the latest title change request.
+              </p>
+            {% endif %}
+            {% if accepted_jbs5_form and not accepted_jbs5_form.supervisor_signed and not accepted_student_supervisor_agreement_signed %}
+              <p class="muted" style="margin:0.5rem 0 0;">
+                The student must sign and submit the supervisor-signed Supervisor Agreement before title changes can be requested or JBS5 can be signed.
+              </p>
+            {% elif accepted_jbs5_form and not accepted_jbs5_form.supervisor_signed %}
+              <form action="{{ url_for('mba.supervisor_title_change_request', project_id=project.id) }}" method="post" class="form-stack compact-form" style="margin-top:0.75rem;">
+                <label>Requested title changes
+                  <textarea name="title_change_comment" rows="3" required placeholder="Describe the title changes the student should make">{{ project.supervisor_title_change_request if accepted_title_change_pending else '' }}</textarea>
+                </label>
+                <button class="secondary-button small-button" type="submit">
+                  {% if accepted_title_change_pending %}Update Title Change Request{% else %}Request Title Changes{% endif %}
+                </button>
+              </form>
+            {% endif %}
+          </details>
+          {% if project_has_active_corrections is defined and project_has_active_corrections(project) and assessment_results_forwarded_to_supervisor(project) %}
+            {% set corrections_state = project_corrections_status(project) %}
+            <section class="response-section">
+              <strong>Response Workflow</strong>
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                This Capstone Project is under response review. Please review and release comments to student.
+              </p>
+              <a href="{{ url_for('mba.scholar_corrections') }}" class="secondary-button small-button">Open Response Review</a>
+            </section>
+          {% endif %}
+          {% if project.project_status == 'results_approved' %}
+            <section class="response-section">
+              <strong>HDC-Approved Results</strong>
+              {% if results_released_to_supervisor is defined and results_released_to_supervisor(project) %}
+                <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                  MBA Admin released the HDC-approved assessment results to you{% if project.results_released_to_supervisor_at %} on {{ project.results_released_to_supervisor_at.strftime('%d %b %Y %H:%M') }}{% endif %}.
+                </p>
+                {% if project.results_hdc_comments %}
+                  <details class="response-section" style="margin-top:0.75rem;">
+                    <summary>HDC Results Comments</summary>
+                    {% for comment in project.results_hdc_comments.split('***')|reverse %}
+                      <p>{{ comment }}</p>
+                    {% endfor %}
+                  </details>
+                {% endif %}
+                <div class="invite-list invite-list--documents" style="margin-top:0.75rem;">
+                  {% for doc in project.documents if doc.doc_type.startswith('assessment_result_') or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_narrative_') %}
+                    <div class="invite-row invite-row--document">
+                      <div>
+                        <strong>{{ document_label(doc.doc_type) }}</strong>
+                        <small>{{ doc.original_name }}</small>
+                      </div>
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    </div>
+                  {% else %}
+                    <p class="muted">No assessor result documents are available for this project.</p>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  HDC approved the assessment results. MBA Admin has not released them to the supervisor yet.
+                </p>
+              {% endif %}
+            </section>
+          {% endif %}
+        {% endif %}
+        {% if not supervisor_invitation_expired %}
+          {% set project_comment_heading = 'Capstone Project Comments' %}
+          {% set project_comment_label = 'Supervisor comment' %}
+          {% set show_project_comment_form = true %}
+          {% include "mba/_project_comments.html" %}
+        {% endif %}
+      </div>
+      {% endcall %}
+    {% else %}
+      <p class="muted">{% if has_supervisor_filters %}No supervised Capstone Projects match these filters.{% else %}No supervised Capstone Projects assigned yet.{% endif %}</p>
+    {% endfor %}
+  </div>
+  {% set pagination = supervisor_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+</section>
+
+<section class="ethics-panel" id="assessor-projects">
+  <div class="panel-heading">
+    <h2>Assessor Capstone Projects</h2>
+    <span>{{ assessor_pagination.total }}</span>
+  </div>
+  {% set has_assessor_filters = assessor_status != 'all' or assessor_student_number %}
+  <div class="admin-project-toolbar scholar-project-toolbar">
+    <div class="admin-project-toolbar__views" role="tablist" aria-label="Assessor Capstone Project filters">
+      <a href="{{ url_for('mba.scholar_dashboard', supervisor_status=supervisor_status, supervisor_student_number=supervisor_student_number or None, supervisor_page=supervisor_pagination.page, supervisor_per_page=supervisor_pagination.per_page, assessor_status='all', assessor_student_number=assessor_student_number or None, assessor_per_page=assessor_pagination.per_page) }}" class="filter-pill {% if assessor_status == 'all' %}is-active{% endif %}">
+        All <strong>{{ assessor_filter_counts.all }}</strong>
+      </a>
+      <a href="{{ url_for('mba.scholar_dashboard', supervisor_status=supervisor_status, supervisor_student_number=supervisor_student_number or None, supervisor_page=supervisor_pagination.page, supervisor_per_page=supervisor_pagination.per_page, assessor_status='accepted', assessor_student_number=assessor_student_number or None, assessor_per_page=assessor_pagination.per_page) }}" class="filter-pill {% if assessor_status == 'accepted' %}is-active{% endif %}">
+        Accepted <strong>{{ assessor_filter_counts.accepted }}</strong>
+      </a>
+      <a href="{{ url_for('mba.scholar_dashboard', supervisor_status=supervisor_status, supervisor_student_number=supervisor_student_number or None, supervisor_page=supervisor_pagination.page, supervisor_per_page=supervisor_pagination.per_page, assessor_status='expired', assessor_student_number=assessor_student_number or None, assessor_per_page=assessor_pagination.per_page) }}" class="filter-pill {% if assessor_status == 'expired' %}is-active{% endif %}">
+        Expired <strong>{{ assessor_filter_counts.expired }}</strong>
+      </a>
+    </div>
+    <form method="get" action="{{ url_for('mba.scholar_dashboard') }}" class="admin-filter-form">
+      <input type="hidden" name="supervisor_status" value="{{ supervisor_status }}">
+      <input type="hidden" name="supervisor_student_number" value="{{ supervisor_student_number }}">
+      <input type="hidden" name="supervisor_page" value="{{ supervisor_pagination.page }}">
+      <input type="hidden" name="supervisor_per_page" value="{{ supervisor_pagination.per_page }}">
+      <input type="hidden" name="assessor_status" value="{{ assessor_status }}">
+      <input type="hidden" name="assessor_per_page" value="{{ assessor_pagination.per_page }}">
+      <label class="admin-filter-field">
+        <span>Student Number</span>
+        <input type="text" name="assessor_student_number" placeholder="Search assessor Capstone Projects" value="{{ assessor_student_number }}" class="admin-filter-input">
+      </label>
+      <div class="admin-filter-actions">
+        <button type="submit" class="secondary-button small-button">Apply Filter</button>
+        {% if has_assessor_filters %}
+          <a href="{{ url_for('mba.scholar_dashboard', supervisor_status=supervisor_status, supervisor_student_number=supervisor_student_number or None, supervisor_page=supervisor_pagination.page, supervisor_per_page=supervisor_pagination.per_page, assessor_status='all', assessor_per_page=assessor_pagination.per_page) }}" class="text-link">Clear</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {% set pagination = assessor_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+  <div class="record-list mba-work-project-list">
+    {% for project in examiner_projects %}
+      {% call project_disclosure(project, 'project-disclosure--assessor') %}
+      <div class="mba-work-project-stack">
+        {% set hide_assessor_lineup = true %}
+        {% include "mba/_project_card.html" %}
+        {% set invitation_slots = invitation_status_for_user(project, current_user.id) %}
+        {% set assessor_invitation_expired = invitation_slots | selectattr('status', 'equalto', 'expired') | list | length > 0 %}
+        {% for slot in invitation_slots %}
+          {% if slot.slot in ['assessor_1', 'assessor_2', 'assessor_3'] %}
+            <div class="response-section">
+              <p><strong>{{ slot.label }} invitation:</strong> {{ slot.status.replace('_', ' ').title() }}</p>
+              {% set appointment_docs = project.documents | selectattr('doc_type', 'equalto', assessor_temp_appointment_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set claim_docs = project.documents | selectattr('doc_type', 'equalto', assessor_temp_claim_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set profile_docs = project.documents | selectattr('doc_type', 'equalto', assessor_profile_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set cv_docs = project.documents | selectattr('doc_type', 'equalto', assessor_cv_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set highest_qualification_docs = project.documents | selectattr('doc_type', 'equalto', assessor_highest_qualification_doc_type(slot.slot)) | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+              {% set appointment_doc = appointment_docs[0] if appointment_docs else None %}
+              {% set claim_doc = claim_docs[0] if claim_docs else None %}
+              {% set profile_doc = profile_docs[0] if profile_docs else None %}
+              {% set cv_doc = cv_docs[0] if cv_docs else None %}
+              {% set highest_qualification_doc = highest_qualification_docs[0] if highest_qualification_docs else None %}
+              {% if slot.status == 'expired' %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  This assessor invitation has expired.
+                </p>
+              {% elif slot.status == 'declined' %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  You declined this assessor invitation. No further action is available.
+                </p>
+              {% elif slot.status != 'accepted' %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  Complete the temporary appointment, claim, and external examiner nomination form, and upload your CV and Highest Qualification document to accept this assessor invitation.
+                </p>
+                <div class="invitation-action-row">
+                  <a href="{{ url_for('mba.assessor_acceptance_form', project_id=project.id, slot=slot.slot) }}" class="primary-button small-button">Complete Forms and Accept</a>
+                  <form action="{{ url_for('mba.invitation_response', project_id=project.id) }}" method="post" class="invitation-action-form">
+                    <input type="hidden" name="slot" value="{{ slot.slot }}">
+                    <button class="secondary-button small-button" name="decision" value="declined" type="submit">Decline invitation</button>
+                  </form>
+                </div>
+              {% endif %}
+              {% if slot.status == 'accepted' %}
+                <div class="invite-list invite-list--documents" style="margin-top:0.75rem;">
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Temporary Appointment Form</strong>
+                      <small>{% if appointment_doc %}Submitted{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if appointment_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=appointment_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=appointment_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Temporary Claim Form</strong>
+                      <small>{% if claim_doc %}Submitted{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if claim_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=claim_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=claim_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>External Examiner Nomination Form</strong>
+                      <small>{% if profile_doc %}Submitted{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if profile_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=profile_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=profile_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Curriculum Vitae</strong>
+                      <small>{% if cv_doc %}Uploaded{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if cv_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=cv_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=cv_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Highest Qualification Document</strong>
+                      <small>{% if highest_qualification_doc %}Uploaded{% else %}Pending{% endif %}</small>
+                    </div>
+                    {% if highest_qualification_doc %}
+                      <div class="document-action-row">
+                        <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=highest_qualification_doc.id) }}" class="secondary-button small-button">View</a>
+                        <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=highest_qualification_doc.id) }}" class="secondary-button small-button">Download</a>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <a href="{{ url_for('mba.assessor_acceptance_form', project_id=project.id, slot=slot.slot) }}"
+                   class="secondary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                  Edit Acceptance Forms
+                </a>
+                {% set result_doc = uploaded_doc_for(project, assessment_doc_type(slot.slot)) %}
+                {% set result_pack_complete = assessment_result_pack_complete(project, slot.slot) if assessment_result_pack_complete is defined else result_doc %}
+                {% if assessor_can_view_project_documents(project) %}
+                  {% set student_dissertation_docs = project.documents | selectattr('doc_type', 'equalto', 'dissertation') | list %}
+                  <div class="invite-list invite-list--documents" style="margin-top:0.75rem;">
+                    {% if assessor_can_view_student_dissertation(project) %}
+                      {% for doc in student_dissertation_docs %}
+                        <div class="invite-row invite-row--document">
+                          <div>
+                            <strong>{{ document_label(doc.doc_type) }}</strong>
+                            <small>{{ doc.original_name }}</small>
+                          </div>
+                          <div class="document-action-row">
+                            <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">View</a>
+                            <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">Download</a>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    {% elif student_dissertation_docs %}
+                      <p class="muted">The Capstone Manuscript is uploaded and waiting for MBA Admin to release it to assessors.</p>
+                    {% endif %}
+                    {% if not student_dissertation_docs %}
+                      <p class="muted">MBA Admin has not uploaded the Capstone Manuscript from Moodle yet.</p>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <p class="muted" style="margin-top:0.5rem;">Capstone Manuscript access opens after MBA Admin releases it to assessors.</p>
+                {% endif %}
+                {% if not assessor_can_view_student_dissertation(project) %}
+                  <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after MBA Admin releases the Capstone Manuscript to assessors.</p>
+                {% elif result_pack_complete %}
+                  <p class="muted" style="margin-top:0.5rem;">Assessment results already submitted.</p>
+                {% elif project.project_status in ['hdc_verified', 'results_submitted_to_hdc', 'results_declined'] %}
+                  <a href="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot.slot) }}"
+                     class="primary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                    Submit Results
+                  </a>
+                {% else %}
+                  <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after HDC verifies the assessor nominations.</p>
+                {% endif %}
+              {% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% if additional_assessment_required is defined and additional_assessment_required(project) %}
+          <section class="response-section">
+            <strong>Additional Assessment</strong>
+            <p class="muted" style="margin:0.5rem 0 0;">
+              This Capstone Project is in the additional assessment workflow. Current status: {{ additional_assessment_status_label(additional_assessment_stage(project)) }}.
+            </p>
+          </section>
+        {% endif %}
+      </div>
+      {% endcall %}
+    {% else %}
+      <p class="muted">{% if has_assessor_filters %}No assessor Capstone Projects match these filters.{% else %}No assessor Capstone Projects assigned yet.{% endif %}</p>
+    {% endfor %}
+  </div>
+  {% set pagination = assessor_pagination %}
+  {% set item_label = 'capstone projects' %}
+  {% include "mba/_project_pagination.html" %}
+</section>
+</div>
+{% endblock %}

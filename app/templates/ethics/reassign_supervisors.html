@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Reassign Supervisor{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Reassign Supervisor{% endblock %}
+{% block page_subheading %}Move a form and the student's Ethics profile to another supervisor{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Supervisor Assignment</h2>
+    <span>Admin tool</span>
+  </div>
+  <form method="post" class="form-stack admin-form">
+    <label>
+      Submission
+      <select name="submission_id" class="form-select" required>
+        <option value="">Choose a submission</option>
+        {% for submission in submissions %}
+          <option value="{{ submission.id }}">
+            Form {{ submission.form_type }} #{{ submission.id }} - {{ submission.student.email if submission.student else 'Unknown student' }} - {{ submission.status.replace('_', ' ').title() }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      New supervisor
+      <select name="supervisor_id" class="form-select" required>
+        <option value="">Choose a supervisor</option>
+        {% for supervisor in supervisors %}
+          <option value="{{ supervisor.id }}">{{ supervisor.email }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="primary-button" type="submit">Save supervisor reassignment</button>
+  </form>
+</section>
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Current Supervisors</h2>
+    <span>{{ submissions|length }} forms</span>
+  </div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Submission</th>
+          <th>Student</th>
+          <th>Supervisor</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for submission in submissions %}
+          <tr>
+            <td>
+              <a href="{{ url_for('ethics.submission_detail', submission_id=submission.id) }}" class="text-link">
+                Form {{ submission.form_type }} #{{ submission.id }}
+              </a>
+              <small>{{ submission.title }}</small>
+            </td>
+            <td>{{ submission.student.email if submission.student else '-' }}</td>
+            <td>{{ submission.supervisor.email if submission.supervisor else 'Unassigned' }}</td>
+            <td><span class="status-pill status-pill--{{ submission.status }}">{{ submission.status.replace('_', ' ').title() }}</span></td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="4" class="muted">No submissions available.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

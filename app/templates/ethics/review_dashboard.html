@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Reviewer Dashboard{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Reviewer Dashboard{% endblock %}
+{% block page_subheading %}Forms assigned to you for ethics review{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="ethics-panel" id="reviewer-queue">
+  <div class="panel-heading">
+    <h2>Submitted To Me</h2>
+    <span>{{ active_assignments|length }} awaiting review</span>
+  </div>
+  <div class="record-list">
+    {% for assignment in active_assignments %}
+      {% set submission = assignment.submission %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No reviewer assignments waiting for you.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="ethics-panel" id="old-forms">
+  <div class="panel-heading">
+    <h2>Old Reviews</h2>
+    <span>{{ old_assignments|length }}</span>
+  </div>
+  <div class="record-list">
+    {% for assignment in old_assignments %}
+      {% set submission = assignment.submission %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No completed reviews yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

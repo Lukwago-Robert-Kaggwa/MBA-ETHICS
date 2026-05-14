@@ -1,0 +1,20 @@
+{% set explicit_jbs5_hdc_feedback = project.jbs5_hdc_comments|default('', true) %}
+{% set hdc_nomination_review_started = project.assessor_1_hdc_decision or project.assessor_2_hdc_decision or project.project_status in ['hdc_verified', 'hdc_declined'] %}
+{% set fallback_jbs5_hdc_feedback = '' %}
+{% if not explicit_jbs5_hdc_feedback and project.hdc_comments and (project.project_status in ['jbs5_submitted_to_hdc', 'jbs5_hdc_approved', 'jbs5_hdc_declined'] or (project.jbs5_hdc_approved_at and not hdc_nomination_review_started)) %}
+  {% set fallback_jbs5_hdc_feedback = project.hdc_comments %}
+{% endif %}
+{% set jbs5_hdc_feedback = explicit_jbs5_hdc_feedback or fallback_jbs5_hdc_feedback %}
+{% if jbs5_hdc_feedback %}
+  <section class="response-section hdc-feedback hdc-feedback--jbs5 {% if project.project_status == 'jbs5_hdc_declined' %}hdc-feedback--urgent{% endif %}">
+    <div class="hdc-feedback__head">
+      <strong>HDC JBS5 Feedback</strong>
+      {% if project.project_status == 'jbs5_hdc_declined' %}
+        <span class="status-pill status-pill--jbs5_hdc_declined">Action required</span>
+      {% elif project.jbs5_hdc_approved_at %}
+        <span class="status-pill status-pill--jbs5_hdc_approved">Reviewed</span>
+      {% endif %}
+    </div>
+    <p class="hdc-feedback__body">{{ jbs5_hdc_feedback }}</p>
+  </section>
+{% endif %}

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Ethics Dashboard{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Ethics Workspace{% endblock %}
+{% block page_subheading %}Forms A/B/C, supervisor checks, reviewer assignment, REC and certificates{% endblock %}
+
+{% block body %}
+<section class="ethics-welcome-banner app-banner">
+  <div>
+    <p class="eyebrow">Ethics System</p>
+    <h1>Welcome, {{ current_user.email }}</h1>
+    <p>Role: {{ current_user.role.replace('_', ' ').title() }}</p>
+  </div>
+</section>
+
+<section class="workflow-strip ethics-flow">
+  <div class="workflow-step {% if current_user.role == 'student' %}is-current{% endif %}"><span>1</span><strong>Student</strong></div>
+  <div class="workflow-step {% if current_user.role == 'supervisor' %}is-current{% endif %}"><span>2</span><strong>Supervisor</strong></div>
+  <div class="workflow-step {% if current_user.role in ['admin', 'super_admin', 'dean'] %}is-current{% endif %}"><span>3</span><strong>Admin</strong></div>
+  <div class="workflow-step {% if current_user.role == 'reviewer' %}is-current{% endif %}"><span>4</span><strong>Reviewer</strong></div>
+  <div class="workflow-step {% if current_user.role == 'rec' %}is-current{% endif %}"><span>5</span><strong>REC</strong></div>
+  <div class="workflow-step"><span>6</span><strong>Certificate</strong></div>
+</section>
+
+<section class="kpi-grid">
+  <div><strong>{{ kpis.drafts }}</strong><span>Drafts</span></div>
+  <div><strong>{{ kpis.supervisor }}</strong><span>Supervisor</span></div>
+  <div><strong>{{ kpis.admin }}</strong><span>Admin</span></div>
+  <div><strong>{{ kpis.review }}</strong><span>Review</span></div>
+  <div><strong>{{ kpis.rec }}</strong><span>REC</span></div>
+  <div><strong>{{ kpis.certificates }}</strong><span>Certificates</span></div>
+</section>
+
+{% if current_user.role == 'student' %}
+<div class="grid-two">
+  <section class="ethics-panel" id="ethics-pack">
+    <div class="panel-heading">
+      <h2>Ethics Pack</h2>
+      <span>Form A/B/C</span>
+    </div>
+
+    {% if not current_user.supervisor_id %}
+      <form action="{{ url_for('ethics.choose_supervisor') }}" method="post" class="form-stack compact-form">
+        <label>
+          Supervisor
+          <select name="supervisor_id" required>
+            <option value="">Choose supervisor</option>
+            {% for supervisor in supervisors %}
+              <option value="{{ supervisor.id }}">{{ supervisor.first_name or supervisor.email }} {{ supervisor.last_name or '' }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="primary-button" type="submit">Save supervisor</button>
+      </form>
+    {% else %}
+      <div class="form-section">
+        <p class="muted">
+          Supervisor:
+          <strong>{{ current_user.supervisor.first_name or current_user.supervisor.email }} {{ current_user.supervisor.last_name or '' }}</strong>
+        </p>
+        <details>
+          <summary class="text-link">Replace supervisor</summary>
+          <form action="{{ url_for('ethics.choose_supervisor') }}" method="post" class="form-stack compact-form">
+            <input type="hidden" name="replace_supervisor" value="1">
+            <label>
+              New supervisor
+              <select name="supervisor_id" required>
+                <option value="">Choose supervisor</option>
+                {% for supervisor in supervisors %}
+                  <option value="{{ supervisor.id }}" {% if supervisor.id == current_user.supervisor_id %}selected{% endif %}>
+                    {{ supervisor.first_name or supervisor.email }} {{ supervisor.last_name or '' }}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+            <button class="secondary-button" type="submit">Replace supervisor</button>
+          </form>
+        </details>
+      </div>
+      <div class="form-section">
+        <h3>Start Ethics Pack</h3>
+        <p class="muted">Open the production-style ethics pack and complete Form A, Form B, or Form C in its own format.</p>
+        <a class="primary-button" href="{{ url_for('ethics.ethics_pack') }}">Open Ethics Pack</a>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="ethics-panel" id="my-submissions">
+    <div class="panel-heading">
+      <h2>My Submissions</h2>
+      <span>{{ student_submissions|length }}</span>
+    </div>
+    <div class="record-list">
+      {% for submission in student_submissions %}
+        <article class="record-card">
+          <div class="record-card__top">
+            <h3>Form {{ submission.form_type }}: {{ submission.title }}</h3>
+            <span class="status-pill status-pill--{{ submission.status }}">{{ submission.status.replace('_', ' ').title() }}</span>
+          </div>
+          <p>{{ submission.summary or 'No summary captured yet.' }}</p>
+          <span>{{ submission.risk_level.title() }} risk</span>
+          {% if submission.supervisor_comments %}
+            <p><strong>Supervisor:</strong> {{ submission.supervisor_comments }}</p>
+          {% endif %}
+          {% if submission.certificate_code %}
+            <p><strong>Certificate:</strong> {{ submission.certificate_code }}</p>
+          {% endif %}
+        </article>
+      {% else %}
+        <p class="muted">No Ethics submissions yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endif %}
+
+{% if current_user.role == 'supervisor' %}
+<section class="ethics-panel" id="supervisor-queue">
+  <div class="panel-heading">
+    <h2>Supervisor Queue</h2>
+    <span>{{ supervisor_queue|length }} awaiting review</span>
+  </div>
+  <div class="record-list">
+    {% for submission in supervisor_queue %}
+      <article class="record-card">
+        <div class="record-card__top">
+          <h3>Form {{ submission.form_type }}: {{ submission.title }}</h3>
+          <span class="status-pill status-pill--{{ submission.risk_level }}">{{ submission.risk_level.title() }} risk</span>
+        </div>
+        <p>{{ submission.student.email }}</p>
+        <form action="{{ url_for('ethics.supervisor_action', submission_id=submission.id) }}" method="post" class="inline-action">
+          <textarea name="comments" rows="2" placeholder="Supervisor comments"></textarea>
+          <button class="secondary-button small-button" name="decision" value="send_back">Send back</button>
+          <button class="primary-button small-button" name="decision" value="approve">Send to admin</button>
+        </form>
+      </article>
+    {% else %}
+      <p class="muted">No forms awaiting supervisor review.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if current_user.role in ['admin', 'super_admin', 'dean'] %}
+<section class="ethics-panel" id="admin-queue">
+  <div class="panel-heading">
+    <h2>Ethics Admin Queue</h2>
+    <span>{{ admin_queue|length }} active</span>
+  </div>
+  <div class="record-list">
+    {% for submission in admin_queue %}
+      <article class="record-card">
+        <div class="record-card__top">
+          <h3>Form {{ submission.form_type }}: {{ submission.title }}</h3>
+          <span class="status-pill status-pill--{{ submission.status }}">{{ submission.status.replace('_', ' ').title() }}</span>
+        </div>
+        <p>{{ submission.student.email }} &middot; {{ submission.risk_level.title() }} risk</p>
+
+        {% if submission.status in ['awaiting_admin', 'review_in_progress'] %}
+          <form action="{{ url_for('ethics.assign_reviewers', submission_id=submission.id) }}" method="post" class="inline-action">
+            <select name="reviewer_ids" multiple size="3">
+              {% for reviewer in reviewers %}
+                <option value="{{ reviewer.id }}">{{ reviewer.first_name or reviewer.email }} {{ reviewer.last_name or '' }}</option>
+              {% endfor %}
+            </select>
+            <button class="primary-button small-button" type="submit">Assign reviewers</button>
+          </form>
+        {% endif %}
+
+        {% if submission.status in ['approved', 'approved_with_minor_changes'] %}
+          <form action="{{ url_for('ethics.issue_certificate', submission_id=submission.id) }}" method="post" class="inline-action" id="certificates">
+            <input name="heading" value="Ethical Clearance Certificate">
+            <input name="valid_years" type="number" min="1" max="5" value="1">
+            <button class="primary-button small-button" type="submit">Issue certificate</button>
+          </form>
+        {% endif %}
+      </article>
+    {% else %}
+      <p class="muted">No active admin submissions.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if current_user.role == 'reviewer' %}
+<section class="ethics-panel" id="reviewer-queue">
+  <div class="panel-heading">
+    <h2>Reviewer Dashboard</h2>
+    <span>{{ reviewer_queue|length }} assigned</span>
+  </div>
+  <div class="record-list">
+    {% for assignment in reviewer_queue %}
+      <article class="record-card">
+        <div class="record-card__top">
+          <h3>Form {{ assignment.submission.form_type }}: {{ assignment.submission.title }}</h3>
+          <span class="status-pill status-pill--{{ assignment.submission.risk_level }}">{{ assignment.submission.risk_level.title() }} risk</span>
+        </div>
+        <p>{{ assignment.submission.student.email }}</p>
+        {% if assignment.completed_at %}
+          <span>{{ assignment.recommendation.replace('_', ' ').title() }}</span>
+          <p>{{ assignment.comments }}</p>
+        {% else %}
+          <form action="{{ url_for('ethics.reviewer_action', assignment_id=assignment.id) }}" method="post" class="inline-action">
+            <select name="recommendation">
+              <option value="approved">Approved</option>
+              <option value="approved_with_minor_changes">Approved with minor changes</option>
+              <option value="resubmission_required">Resubmission required</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <textarea name="comments" rows="2" placeholder="Reviewer comments"></textarea>
+            <button class="primary-button small-button" type="submit">Submit review</button>
+          </form>
+        {% endif %}
+      </article>
+    {% else %}
+      <p class="muted">No reviewer assignments.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if current_user.role == 'rec' %}
+<section class="ethics-panel" id="rec-queue">
+  <div class="panel-heading">
+    <h2>REC Dashboard</h2>
+    <span>{{ rec_queue|length }} awaiting REC</span>
+  </div>
+  <div class="record-list">
+    {% for submission in rec_queue %}
+      <article class="record-card">
+        <div class="record-card__top">
+          <h3>Form {{ submission.form_type }}: {{ submission.title }}</h3>
+          <span class="status-pill status-pill--{{ submission.risk_level }}">{{ submission.risk_level.title() }} risk</span>
+        </div>
+        <p>{{ submission.student.email }}</p>
+        <form action="{{ url_for('ethics.rec_action', submission_id=submission.id) }}" method="post" class="inline-action">
+          <select name="decision">
+            <option value="approved">Approved</option>
+            <option value="resubmission_required">Resubmission required</option>
+          </select>
+          <textarea name="comments" rows="2" placeholder="REC comments"></textarea>
+          <button class="primary-button small-button" type="submit">Save REC decision</button>
+        </form>
+      </article>
+    {% else %}
+      <p class="muted">No submissions awaiting REC.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

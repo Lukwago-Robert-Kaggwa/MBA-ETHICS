@@ -1,0 +1,46 @@
+<section class="response-section project-comments-section">
+  {% set hide_other_assessor_comments = hide_other_assessor_comments|default(false) %}
+  {% set assessor_author_ids = [project.assessor_1_id, project.assessor_2_id] %}
+  <div class="project-comments-head">
+    <strong>{{ project_comment_heading|default('Capstone Project Comments') }}</strong>
+  {% if not hide_other_assessor_comments %}<span>{{ project.project_comments|length }}</span>{% endif %}
+  </div>
+
+  <div class="project-comment-list">
+    {% set comment_state = namespace(visible=0) %}
+    {% for project_comment in project.project_comments|sort(attribute='created_at', reverse=true) %}
+      {% set author = project_comment.author %}
+      {% set hidden_other_assessor_comment = hide_other_assessor_comments and author and author.id != current_user.id and author.id in assessor_author_ids %}
+      {% if not hidden_other_assessor_comment %}
+      {% set comment_state.visible = comment_state.visible + 1 %}
+      {% if author %}
+        {% set author_name = ((author.first_name or '') ~ (' ' ~ author.last_name if author.last_name else '')) | trim %}
+      {% else %}
+        {% set author_name = '' %}
+      {% endif %}
+      <article class="project-comment">
+        <div class="project-comment__meta">
+          <strong>{% if author %}{{ author_name or author.email }}{% else %}Unknown user{% endif %}</strong>
+          <small>
+            {% if author %}{{ author.email }} &middot; {% endif %}
+            {{ project_comment.created_at.strftime('%d %b %Y %H:%M') }}
+          </small>
+        </div>
+        <p>{{ project_comment.comment }}</p>
+      </article>
+      {% endif %}
+    {% endfor %}
+    {% if comment_state.visible == 0 %}
+      <p class="muted">{{ empty_project_comments_message|default('No Capstone Project comments yet.') }}</p>
+    {% endif %}
+  </div>
+
+  {% if show_project_comment_form|default(false) %}
+    <form action="{{ url_for(project_comment_endpoint|default('mba.project_comment'), project_id=project.id) }}" method="post" class="form-stack compact-form project-comment-form">
+      <label>{{ project_comment_label|default('Add Capstone Project comment') }}
+        <textarea name="comment" rows="2" required placeholder="Add a Capstone Project comment"></textarea>
+      </label>
+      <button class="primary-button small-button" type="submit">Save comment</button>
+    </form>
+  {% endif %}
+</section>

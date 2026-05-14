@@ -1,0 +1,212 @@
+{% set readonly_mode = readonly_mode|default(false) %}
+{% set yes_no_values = yes_no_options if yes_no_options is defined else ['Yes', 'No'] %}
+{% set assessor_block_title = 'ASSESSOR ONE' %}
+{% if slot == 'assessor_2' %}
+  {% set assessor_block_title = 'ASSESSOR TWO' %}
+{% elif slot == 'assessor_3' %}
+  {% set assessor_block_title = 'ASSESSOR THREE' %}
+{% endif %}
+
+<div style="display:flex;justify-content:flex-end;margin-top:12px;">
+  <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+</div>
+<div style="text-align:center;margin-top:-4px;">
+  <div style="font-weight:700;font-size:1rem;letter-spacing:0;">UNIVERSITY OF JOHANNESBURG</div>
+  <div style="margin-top:0.25rem;">Johannesburg Business School</div>
+  <div style="margin-top:0.75rem;font-weight:700;font-size:1.05rem;">NOMINATION OF ASSESSORS</div>
+  <div style="margin-top:0.45rem;font-weight:700;text-decoration:underline;">*Please note that all the information must be typed in sentence case</div>
+  <div style="margin-top:0.35rem;">The supervisor is requested to complete all sections electronically.</div>
+</div>
+
+{% if not readonly_mode %}
+  <input type="hidden" name="slot_label" value="{{ prefill.get('slot_label', slot_label) }}">
+  <input type="hidden" name="student_name" value="{{ prefill.get('student_name', '') }}">
+  <input type="hidden" name="assessor_profile_date" value="{{ prefill.get('assessor_profile_date', '') }}">
+  <input type="hidden" name="assessor_signature_name" value="{{ prefill.get('assessor_signature_name', prefill.get('assessor_name', '')) }}">
+{% endif %}
+
+<table class="mba-doc-table" style="margin-top:1rem;">
+  <colgroup>
+    <col style="width:24%;">
+    <col style="width:26%;">
+    <col style="width:22%;">
+    <col style="width:28%;">
+  </colgroup>
+  <tr>
+    <td class="mba-doc-label">INITIALS AND SURNAME</td>
+    <td><input class="mba-doc-input" name="student_initials_surname" value="{{ prefill.get('student_initials_surname', '') }}" readonly></td>
+    <td class="mba-doc-label">STUDENT NUMBER</td>
+    <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">CURRENT DEGREE REGISTERED FOR</td>
+    <td colspan="3"><input class="mba-doc-input" name="current_degree_registered" value="{{ prefill.get('current_degree_registered', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">QUALIFICATION</td>
+    <td colspan="3"><input class="mba-doc-input" name="qualification_description" value="{{ prefill.get('qualification_description', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">FINAL TITLE ON SUBMISSION</td>
+    <td colspan="3"><textarea class="mba-doc-textarea" name="project_title" rows="3" readonly>{{ prefill.get('project_title', project.project_title) }}</textarea></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">SUPERVISOR</td>
+    <td><input class="mba-doc-input" name="supervisor_name" value="{{ prefill.get('supervisor_name', '') }}" readonly></td>
+    <td class="mba-doc-label">DEPARTMENT</td>
+    <td><input class="mba-doc-input" name="supervisor_department" value="{{ prefill.get('supervisor_department', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">PHONE/CELL PHONE</td>
+    <td><input class="mba-doc-input" name="supervisor_phone" value="{{ prefill.get('supervisor_phone', '') }}" readonly></td>
+    <td class="mba-doc-label">EMAIL ADDRESS</td>
+    <td><input class="mba-doc-input" name="supervisor_email" value="{{ prefill.get('supervisor_email', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">CO-SUPERVISOR</td>
+    <td><input class="mba-doc-input" name="co_supervisor_name" value="{{ prefill.get('co_supervisor_name', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+    <td class="mba-doc-label">DEPARTMENT</td>
+    <td><input class="mba-doc-input" name="co_supervisor_department" value="{{ prefill.get('co_supervisor_department', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">PHONE/CELL PHONE</td>
+    <td><input class="mba-doc-input" name="co_supervisor_phone" value="{{ prefill.get('co_supervisor_phone', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+    <td class="mba-doc-label">EMAIL ADDRESS</td>
+    <td><input class="mba-doc-input" name="co_supervisor_email" value="{{ prefill.get('co_supervisor_email', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+  </tr>
+</table>
+
+<p class="mba-doc-note" style="margin:0.85rem 0 0.45rem;">
+  <strong>*Attached:</strong> A comprehensive curriculum vitae of the assessors.
+</p>
+{% if not readonly_mode %}
+  <div class="mba-doc-muted-box" style="margin-bottom:0.95rem;">
+    {% if existing_cv_doc %}
+      <div class="invite-row invite-row--document" style="margin:0 0 0.6rem;">
+        <div>
+          <strong>Current CV</strong>
+          <small>{{ existing_cv_doc.original_name }}</small>
+        </div>
+        <div class="document-action-row">
+          <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=existing_cv_doc.id) }}" class="secondary-button small-button">View</a>
+          <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=existing_cv_doc.id) }}" class="secondary-button small-button">Download</a>
+        </div>
+      </div>
+    {% endif %}
+    <label class="upload-label" style="margin:0;">
+      Upload Curriculum Vitae PDF
+      <input type="file" name="cv_file" accept=".pdf,application/pdf" {% if not existing_cv_doc %}required{% endif %}>
+    </label>
+    {% if existing_highest_qualification_doc is defined and existing_highest_qualification_doc %}
+      <div class="invite-row invite-row--document" style="margin:0.75rem 0 0.6rem;">
+        <div>
+          <strong>Current Highest Qualification Document</strong>
+          <small>{{ existing_highest_qualification_doc.original_name }}</small>
+        </div>
+        <div class="document-action-row">
+          <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=existing_highest_qualification_doc.id) }}" class="secondary-button small-button">View</a>
+          <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=existing_highest_qualification_doc.id) }}" class="secondary-button small-button">Download</a>
+        </div>
+      </div>
+    {% endif %}
+    <label class="upload-label" style="margin-top:0.75rem;">
+      Upload Highest Qualification Document PDF
+      <input type="file" name="highest_qualification_file" accept=".pdf,application/pdf" {% if not existing_highest_qualification_doc %}required{% endif %}>
+    </label>
+  </div>
+{% endif %}
+
+<table class="mba-doc-table">
+  <colgroup>
+    <col style="width:27%;">
+    <col style="width:73%;">
+  </colgroup>
+  <tr>
+    <th class="mba-doc-section-title" colspan="2">{{ assessor_block_title }}</th>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Full name</td>
+    <td><input class="mba-doc-input" name="assessor_name" value="{{ prefill.get('assessor_name', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Qualification</td>
+    <td><input class="mba-doc-input" name="highest_qualification" value="{{ prefill.get('highest_qualification', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Affiliation</td>
+    <td><input class="mba-doc-input" name="assessor_affiliation" value="{{ prefill.get('assessor_affiliation', '') }}" {% if readonly_mode %}readonly{% else %}required{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Street Address</td>
+    <td><textarea class="mba-doc-textarea" name="assessor_address" rows="3" {% if readonly_mode %}readonly{% else %}required{% endif %}>{{ prefill.get('assessor_address', '') }}</textarea></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Telephone number</td>
+    <td><input class="mba-doc-input" name="assessor_telephone_number" value="{{ prefill.get('assessor_telephone_number', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Cell number</td>
+    <td><input class="mba-doc-input" name="assessor_contact" value="{{ prefill.get('assessor_contact', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Email address</td>
+    <td><input class="mba-doc-input" type="email" name="assessor_email" value="{{ prefill.get('assessor_email', '') }}" readonly></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Indicate the approximate number of postgraduate students, MSc &amp; PhD, supervised to completion</td>
+    <td><input class="mba-doc-input" type="number" min="0" name="students_supervised_total" value="{{ prefill.get('students_supervised_total', '') }}" {% if readonly_mode %}readonly{% else %}required{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Current affiliation with a university, (if not a motivation needs to be submitted)</td>
+    <td><input class="mba-doc-input" name="current_university_affiliation" value="{{ prefill.get('current_university_affiliation', '') }}" {% if readonly_mode %}readonly{% else %}required{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">Approximate number of publications</td>
+    <td><input class="mba-doc-input" type="number" min="0" name="publication_count" value="{{ prefill.get('publication_count', '') }}" {% if readonly_mode %}readonly{% else %}required{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">International assessor</td>
+    <td>
+      <select class="mba-doc-select" name="international_assessor" {% if readonly_mode %}disabled{% else %}required{% endif %}>
+        <option value="">Select</option>
+        {% for option in yes_no_values %}
+          <option value="{{ option }}" {% if prefill.get('international_assessor') == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </td>
+  </tr>
+</table>
+
+<table class="mba-doc-table mba-doc-table--tight">
+  <colgroup>
+    <col style="width:23%;">
+    <col style="width:39%;">
+    <col style="width:14%;">
+    <col style="width:24%;">
+  </colgroup>
+  <tr>
+    <td class="mba-doc-label">SUPERVISOR</td>
+    <td><input class="mba-doc-input" name="supervisor_signature_name" value="{{ prefill.get('supervisor_signature_name', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+    <td class="mba-doc-label">DATE</td>
+    <td><input class="mba-doc-input" type="date" name="supervisor_signature_date" value="{{ prefill.get('supervisor_signature_date', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">HEAD OF DEPARTMENT</td>
+    <td><input class="mba-doc-input" name="hod_signature_name" value="{{ prefill.get('hod_signature_name', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+    <td class="mba-doc-label">DATE</td>
+    <td><input class="mba-doc-input" type="date" name="hod_signature_date" value="{{ prefill.get('hod_signature_date', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+  </tr>
+  <tr>
+    <td class="mba-doc-label">EXECUTIVE DEAN</td>
+    <td><input class="mba-doc-input" name="executive_dean_signature_name" value="{{ prefill.get('executive_dean_signature_name', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+    <td class="mba-doc-label">DATE</td>
+    <td><input class="mba-doc-input" type="date" name="executive_dean_signature_date" value="{{ prefill.get('executive_dean_signature_date', '') }}" {% if readonly_mode %}readonly{% endif %}></td>
+  </tr>
+</table>
+
+{% if not readonly_mode %}
+  <label class="mba-doc-checkline" style="margin-top:1rem;">
+    <span>I confirm the external examiner nomination form above is complete and accurate. <span style="color:red;">*</span></span>
+    <input class="mba-doc-checkbox" type="checkbox" name="assessor_profile_declaration" value="1" {% if prefill.get('assessor_profile_declaration') %}checked{% endif %} required>
+  </label>
+{% endif %}

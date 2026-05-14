@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Supervisor Dashboard{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Supervisor Dashboard{% endblock %}
+{% block page_subheading %}Review submitted forms and open previous forms for each student{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="ethics-panel" id="supervisor-queue">
+  <div class="panel-heading">
+    <h2>Submitted To Me</h2>
+    <span>{{ active_submissions|length }} awaiting review</span>
+  </div>
+  <div class="record-list">
+    {% for submission in active_submissions %}
+      {% set show_previous_link = true %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No forms awaiting supervisor review.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="ethics-panel" id="old-forms">
+  <div class="panel-heading">
+    <h2>Old Forms</h2>
+    <span>{{ old_submissions|length }}</span>
+  </div>
+  <div class="record-list">
+    {% for submission in old_submissions %}
+      {% set show_previous_link = true %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No old supervisor forms yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Capstone Assessor Submission - {{ slot_label }}{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Capstone Assessor Submission{% endblock %}
+{% block page_subheading %}{{ project.project_title }} &mdash; {{ slot_label }}{% endblock %}
+
+{% block body %}
+{% set doc_variant = display_doc_variant|default('assessment_submission') %}
+{% if doc_variant == 'assessment_result' %}
+  {% set doc_title = 'Capstone Assessment Result Summary' %}
+  {% set doc_subtitle = 'Submitted assessor outcome summary for HDC review' %}
+  {% set doc_note = 'This summary reflects the submitted examination outcome, final mark, and supporting report entered by the assessor.' %}
+{% elif doc_variant == 'assessor_report' %}
+  {% set doc_title = 'Capstone Assessors Report Form 1' %}
+  {% set doc_subtitle = 'Submitted assessor report for HDC review' %}
+  {% set doc_note = 'This report reflects the submitted examination outcome and detailed report entered by the assessor.' %}
+{% elif doc_variant == 'assessor_narrative' %}
+  {% set doc_title = 'Capstone Assessors Report Form 2' %}
+  {% set doc_subtitle = 'Submitted companion assessor report for HDC review' %}
+  {% set doc_note = 'This companion report reflects the submitted examination outcome and detailed report entered by the assessor.' %}
+{% else %}
+  {% set doc_title = "Examiner's Report on a Capstone Research Report Submitted for the Degree of Master of Business Administration (MBA)" %}
+  {% set doc_subtitle = '(By capstone and coursework)' %}
+  {% set doc_note = 'Examiners should consider the following in assessing and reporting on the research report, bearing in mind with respect to all criteria that the report constitutes 26% of the MBA assessment.' %}
+{% endif %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header mba-doc-header--centered">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <h2 class="mba-doc-title">{{ doc_title }}</h2>
+          <div class="mba-doc-subtitle">{{ doc_subtitle }}</div>
+          <p class="mba-doc-note" style="margin-top:8px;">
+            {{ doc_note }}
+          </p>
+        </div>
+      </div>
+
+      <form action="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot) }}" method="post" class="mba-doc-form">
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:34%;">
+            <col style="width:66%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Name of Candidate:</td>
+            <td><input class="mba-doc-input" name="student_name" value="{{ prefill.get('student_name','') }}" readonly required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Student No.:</td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" readonly required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Title of Research:</td>
+            <td><textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="3" readonly required>{{ prefill.get('research_title','') }}</textarea></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Name of External Assessor (in full):</td>
+            <td><input class="mba-doc-input" name="assessor_name" value="{{ prefill.get('assessor_name','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Institutional affiliation:</td>
+            <td><input class="mba-doc-input" name="affiliation" value="{{ prefill.get('affiliation','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Email Address:</td>
+            <td><input class="mba-doc-input" name="assessor_email" type="email" value="{{ prefill.get('assessor_email','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Contact Number(s):</td>
+            <td><input class="mba-doc-input" name="assessor_contact" value="{{ prefill.get('assessor_contact','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">External Assessor's Signature:</td>
+            <td><input class="mba-doc-input" name="assessor_signature_name" value="{{ prefill.get('assessor_signature_name','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Date:</td>
+            <td><input class="mba-doc-input" type="date" name="certification_date" value="{{ prefill.get('certification_date','') }}" required></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:8%;">
+            <col style="width:74%;">
+            <col style="width:18%;">
+          </colgroup>
+          <tr>
+            <th colspan="3">EXAMINER'S RECOMMENDATION(S)</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-center">1.</td>
+            <td>Kindly indicate below, your recommendation of this examination outcome</td>
+            <td class="mba-doc-center">Select</td>
+          </tr>
+          {% for option in recommendation_options %}
+          <tr>
+            <td></td>
+            <td>{{ option }}</td>
+            <td class="mba-doc-center">
+              <input type="radio" name="recommendation" value="{{ option }}" required style="width:auto;margin:0;" {% if prefill.get('recommendation') == option %}checked{% endif %}>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr>
+            <td class="mba-doc-center">2.</td>
+            <td>Would you agree to your name being divulged to a successful candidate?</td>
+            <td class="mba-doc-center">
+              {% for option in yes_no_options %}
+                <label style="display:inline-flex;align-items:center;gap:4px;margin:0 6px;">
+                  <input type="radio" name="consent_name_disclosure" value="{{ option }}" required style="width:auto;margin:0;" {% if prefill.get('consent_name_disclosure') == option %}checked{% endif %}>
+                  <span>{{ option }}</span>
+                </label>
+              {% endfor %}
+            </td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight">
+          <tr>
+            <th colspan="3">GRADING</th>
+          </tr>
+          <tr>
+            <td><strong>75+</strong></td>
+            <td><strong>A</strong></td>
+            <td>Excellent</td>
+          </tr>
+          <tr>
+            <td><strong>70+</strong></td>
+            <td><strong>B</strong></td>
+            <td>Generally good, but with minor defects</td>
+          </tr>
+          <tr>
+            <td><strong>60+</strong></td>
+            <td><strong>C</strong></td>
+            <td>Generally sound, but with notable defects</td>
+          </tr>
+          <tr>
+            <td><strong>50+</strong></td>
+            <td><strong>D</strong></td>
+            <td>Satisfactory, but with major errors. Sufficient to pass.</td>
+          </tr>
+          <tr>
+            <td><strong>49 and below</strong></td>
+            <td><strong>F</strong></td>
+            <td>Unsatisfactory</td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight">
+          <tr>
+            <td class="mba-doc-label" style="width:24%;">FINAL MARK</td>
+            <td><input class="mba-doc-input" name="grade" type="number" min="0" max="100" step="1" value="{{ prefill.get('grade','') }}" required></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-form" style="gap:10px;">
+          <p class="mba-doc-paragraph">Please provide a detailed report which gives attention to the issues outlined below and any other points you would like to highlight:</p>
+          <ul class="mba-doc-bullets">
+            <li>Is the research topic appropriate?</li>
+            <li>Does it address a management, business, organisational, societal, relevant, and/or professional area?</li>
+            <li>Is the scope of research sufficiently deep and broad?</li>
+            <li>Are the statements of research problem, objective, research questions, propositions, or hypotheses clear and unambiguous?</li>
+            <li>Does the report indicate awareness of, familiarity with, and capability to integrate the appropriate literature into informing and directing the research?</li>
+            <li>Is there evidence of familiarity with appropriate elements of research methodology and correct application?</li>
+            <li>Has the appropriate quantitative and/or qualitative analysis been used objectively?</li>
+            <li>What is the quality and validity of the discussion and interpretation of the research results?</li>
+            <li>Does the overall structure of the report conform to the format of a master's research report?</li>
+            <li>Is the document appropriately referenced?</li>
+            <li>Does the literary style conform to correct English usage and academic writing?</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="mba-doc-label" style="margin-bottom:6px;">Examiner's Detailed Report</div>
+          <textarea class="mba-doc-textarea" name="written_assessment" rows="16" required>{{ prefill.get('written_assessment','') }}</textarea>
+        </div>
+
+        <label class="mba-doc-checkline">
+          <span>I confirm that this assessment represents my independent and impartial evaluation of the submitted capstone research report, and that I have no undisclosed conflict of interest. <span style="color:red;">*</span></span>
+          <input class="mba-doc-checkbox" type="checkbox" name="declaration" value="1" required {% if prefill.get('declaration') %}checked{% endif %}>
+        </label>
+
+        <div class="mba-doc-actions">
+          <button class="primary-button" type="submit">Submit Results</button>
+          <a href="{{ url_for('mba.dashboard') }}" class="secondary-button">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% endblock %}

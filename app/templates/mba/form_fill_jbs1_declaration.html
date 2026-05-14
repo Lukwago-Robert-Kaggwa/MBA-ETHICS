@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}JBS 1 Declaration{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}JBS 1 Declaration{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+{% set current_work_type = prefill.get('work_type','Capstone Project') %}
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <div class="mba-doc-kicker">Johannesburg Business School</div>
+          <h2 class="mba-doc-title">JBS 1 Sep 2022<br>Student Declaration</h2>
+        </div>
+      </div>
+
+      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs1_declaration') }}" method="post" class="mba-doc-form">
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:18%;">
+            <col style="width:32%;">
+            <col style="width:18%;">
+            <col style="width:32%;">
+          </colgroup>
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">Section A: Student information</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Surname</td>
+            <td><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname','') }}" required></td>
+            <td class="mba-doc-label">Title</td>
+            <td><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Initials</td>
+            <td><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials','') }}" required></td>
+            <td class="mba-doc-label">ID number</td>
+            <td><input class="mba-doc-input" name="student_id_number" value="{{ prefill.get('student_id_number','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Student number</td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" required></td>
+            <td class="mba-doc-label">Ethical Clearance number</td>
+            <td><input class="mba-doc-input" name="ethical_clearance_number" value="{{ prefill.get('ethical_clearance_number','') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Qualification (e.g. MBA)</td>
+            <td colspan="3"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Email Address</td>
+            <td><input class="mba-doc-input" name="email" type="email" value="{{ prefill.get('email','') }}" required></td>
+            <td class="mba-doc-label">Cell number</td>
+            <td><input class="mba-doc-input" name="contact" value="{{ prefill.get('contact','') }}" required></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table">
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">Section B: Declaration</th>
+          </tr>
+          <tr>
+            <td colspan="4">
+              <p class="mba-doc-paragraph">
+                I hereby declare that this
+                <select class="mba-doc-select" name="work_type" required style="display:inline-block;width:auto;min-width:220px;margin:0 4px;">
+                  <option value="">Select output type</option>
+                  {% for option in ['Capstone Project', 'Research Essay', 'Thesis'] %}
+                    <option value="{{ option }}" {% if current_work_type == option %}selected{% endif %}>{{ option }}</option>
+                  {% endfor %}
+                </select>
+                submitted for the qualification above, with the approved title below, is my own work apart from the sources recognised.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="4">
+              <div class="mba-doc-label" style="margin-bottom:6px;">Provide approved title of research</div>
+              <textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="3" readonly required>{{ prefill.get('research_title','') }}</textarea>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="4">
+              <p class="mba-doc-paragraph" style="margin-bottom:10px;">
+                In the Johannesburg Business School at the University of Johannesburg, I further declare that:
+              </p>
+              <ul class="mba-doc-bullets">
+                <li>This work has not previously been submitted to any other university for any degree.</li>
+                <li>The work has been language edited by a professional external language editor.</li>
+                <li>I adhered to the ethical obligations and principles of research ethics prescribed by JBS during all phases of the research process.</li>
+              </ul>
+            </td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight">
+          <colgroup>
+            <col style="width:24%;">
+            <col style="width:36%;">
+            <col style="width:14%;">
+            <col style="width:26%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Signature of Student</td>
+            <td><input class="mba-doc-input" name="signature_name" value="{{ prefill.get('signature_name','') }}" required></td>
+            <td class="mba-doc-label">Date</td>
+            <td><input class="mba-doc-input" name="signature_date" type="date" value="{{ prefill.get('signature_date','') }}" required></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-muted-box">
+          <p class="mba-doc-note" style="font-weight:700;color:#111827;margin-bottom:8px;">Declaration by Supervisor(s)</p>
+          <p class="mba-doc-note" style="margin-bottom:12px;">
+            Approval for submission of assessment copy is hereby granted to the abovementioned student. The title has officially been approved by the JBS Higher Degrees Committee.
+          </p>
+          <table class="mba-doc-table mba-doc-table--tight" style="margin-bottom:12px;">
+            <tr>
+              <td class="mba-doc-label">Signature of Supervisor</td>
+              <td><input class="mba-doc-input" name="supervisor_signature" value="{{ prefill.get('supervisor_signature','') }}"></td>
+              <td class="mba-doc-label">Date</td>
+              <td><input class="mba-doc-input" name="supervisor_signature_date" type="date" value="{{ prefill.get('supervisor_signature_date','') }}"></td>
+            </tr>
+            <tr>
+              <td class="mba-doc-label">Signature of Co-Supervisor</td>
+              <td><input class="mba-doc-input" name="co_supervisor_signature" value="{{ prefill.get('co_supervisor_signature','') }}"></td>
+              <td class="mba-doc-label">Date</td>
+              <td><input class="mba-doc-input" name="co_supervisor_signature_date" type="date" value="{{ prefill.get('co_supervisor_signature_date','') }}"></td>
+            </tr>
+          </table>
+
+          <p class="mba-doc-note" style="font-weight:700;color:#111827;margin-bottom:8px;">For Office Use</p>
+          <table class="mba-doc-table mba-doc-table--tight">
+            <tr>
+              <td class="mba-doc-label">Registration</td>
+              <td><input class="mba-doc-input" name="office_registration" value="{{ prefill.get('office_registration','') }}"></td>
+            </tr>
+            <tr>
+              <td class="mba-doc-label">Approved title</td>
+              <td><input class="mba-doc-input" name="office_approved_title" value="{{ prefill.get('office_approved_title','') }}"></td>
+            </tr>
+            <tr>
+              <td class="mba-doc-label">Affidavit</td>
+              <td><input class="mba-doc-input" name="office_affidavit" value="{{ prefill.get('office_affidavit','') }}"></td>
+            </tr>
+            <tr>
+              <td class="mba-doc-label">Language Edited</td>
+              <td><input class="mba-doc-input" name="office_language_edited" value="{{ prefill.get('office_language_edited','') }}"></td>
+            </tr>
+            <tr>
+              <td class="mba-doc-label">Turnitin report</td>
+              <td><input class="mba-doc-input" name="office_turnitin_report" value="{{ prefill.get('office_turnitin_report','') }}"></td>
+            </tr>
+            <tr>
+              <td class="mba-doc-label">Program Manager</td>
+              <td><input class="mba-doc-input" name="office_program_manager" value="{{ prefill.get('office_program_manager','') }}"></td>
+            </tr>
+          </table>
+        </div>
+
+        <label class="mba-doc-checkline">
+          <span>I confirm the JBS 1 declaration above. <span style="color:red;">*</span></span>
+          <input class="mba-doc-checkbox" type="checkbox" name="jbs1_consent" value="1" required {% if prefill.get('jbs1_consent') %}checked{% endif %}>
+        </label>
+
+        <div class="mba-doc-actions">
+          <button class="primary-button" type="submit">Submit JBS 1 Declaration</button>
+          <a href="{{ url_for('mba.student_dashboard') }}" class="secondary-button">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

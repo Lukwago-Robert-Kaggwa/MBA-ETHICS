@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}Notice of Intention to Submit{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Notice of Intention to Submit{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-header mba-doc-header--centered">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        <div class="mba-doc-title-stack">
+          <h2 class="mba-doc-title">NOTICE OF INTENTION TO SUBMIT DISSERTATION OR THESIS FOR EXAMINATION</h2>
+        </div>
+      </div>
+
+      <p class="mba-doc-paragraph" style="font-weight:700;margin-bottom:1rem;">
+        This notice should be submitted to
+        <span style="color:#ef6436;">program manager</span>
+        via email to
+        <span style="color:#ef6436;">................................</span>
+        or hand delivered to
+        <span style="color:#ef6436;">(staff member's physical office details).</span>
+      </p>
+
+      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='intent_to_submit') }}" method="post" class="mba-doc-form">
+        <table class="mba-doc-table">
+          <colgroup>
+            <col style="width:34%;">
+            <col style="width:21%;">
+            <col style="width:18%;">
+            <col style="width:2%;">
+            <col style="width:7%;">
+            <col style="width:8%;">
+            <col style="width:10%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Title, initials and surname</td>
+            <td colspan="6"><input class="mba-doc-input" name="full_name" value="{{ prefill.get('full_name','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Student number</td>
+            <td colspan="6"><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Email address</td>
+            <td colspan="2"><input class="mba-doc-input" name="email" type="email" value="{{ prefill.get('email','') }}" required></td>
+            <td colspan="2" class="mba-doc-label">Contact number</td>
+            <td colspan="2"><input class="mba-doc-input" name="contact" value="{{ prefill.get('contact','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Qualification</td>
+            <td colspan="6"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Final title of the Capstone Consultancy Project / thesis approved by JBS Higher Degree Committee</td>
+            <td colspan="6">
+              <textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="3" readonly required>{{ prefill.get('research_title','') }}</textarea>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Supervisor (Title, initials and surname)</td>
+            <td colspan="6"><input class="mba-doc-input" name="supervisor_name" value="{{ prefill.get('supervisor_name','') }}" readonly required></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Co-supervisor (if applicable)</td>
+            <td colspan="6"><input class="mba-doc-input" name="co_supervisor_name" value="{{ prefill.get('co_supervisor_name','') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Date on which this notice is given</td>
+            <td colspan="6"><input class="mba-doc-input" type="date" name="intended_date" value="{{ prefill.get('intended_date','') }}" required></td>
+          </tr>
+          <tr>
+            <td colspan="7">
+              <p class="mba-doc-paragraph" style="font-weight:700;">
+                I, hereby give notice that I intend to submit my Capstone Consultancy Project / Thesis for examination.
+                I hereby acknowledge that failure to submit the Capstone Consultancy Project / Thesis within the notice
+                period given will result in it being cancelled and a new notice will have to be submitted in this regard.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="7">
+              <p class="mba-doc-paragraph">
+                I am aware of all the requirements towards the submission and completion of the degree including submitting
+                my Capstone Consultancy Project / Thesis through <strong>Turnitin</strong> and submitting to my supervisor,
+                an <strong>article</strong> in the form that could be submitted for publication in the case of masters,
+                and evidence of <strong>two submitted articles to a journal</strong> in the case of a PhD.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Signature of student</td>
+            <td colspan="4"><input class="mba-doc-input" name="signature_name" value="{{ prefill.get('signature_name','') }}" required></td>
+            <td class="mba-doc-label">Date</td>
+            <td><input class="mba-doc-input" type="date" name="signature_date" value="{{ prefill.get('signature_date','') }}" required></td>
+          </tr>
+          <tr>
+            <th class="mba-doc-section-title" colspan="7" style="background:#111827;color:#ffffff;text-align:center;">To be completed by the supervisor(s) only</th>
+          </tr>
+          <tr>
+            <td colspan="4">
+              <p class="mba-doc-paragraph">
+                I, the supervisor, <strong><u>agree</u></strong> to the notice of intention to submit the
+                Capstone Consultancy Project / Thesis for examination purposes. The notice is supported on
+                the basis that the student has made substantial progress and the notice period is reasonable
+                enough for completion of the research.
+              </p>
+            </td>
+            <td colspan="3">
+              <div class="mba-doc-inline-field-group">
+                <label class="mba-doc-inline-field">
+                  <span>Signature</span>
+                  <input class="mba-doc-input" name="supervisor_agree_signature" value="{{ prefill.get('supervisor_agree_signature','') }}">
+                </label>
+                <label class="mba-doc-inline-field mba-doc-inline-field--date">
+                  <span>Date</span>
+                  <input class="mba-doc-input" type="date" name="supervisor_agree_date" value="{{ prefill.get('supervisor_agree_date','') }}">
+                </label>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="4">
+              <p class="mba-doc-paragraph">
+                I, the co-supervisor, <strong><u>agree</u></strong> to the notice of intention to submit the
+                Capstone Consultancy Project / Thesis for examination purposes.
+              </p>
+            </td>
+            <td colspan="3">
+              <div class="mba-doc-inline-field-group">
+                <label class="mba-doc-inline-field">
+                  <span>Signature</span>
+                  <input class="mba-doc-input" name="co_supervisor_agree_signature" value="{{ prefill.get('co_supervisor_agree_signature','') }}">
+                </label>
+                <label class="mba-doc-inline-field mba-doc-inline-field--date">
+                  <span>Date</span>
+                  <input class="mba-doc-input" type="date" name="co_supervisor_agree_date" value="{{ prefill.get('co_supervisor_agree_date','') }}">
+                </label>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="4">
+              <p class="mba-doc-paragraph">
+                I, the supervisor, <strong><u>do not agree</u></strong> to the notice of intention to submit
+                for examination purposes.
+              </p>
+            </td>
+            <td colspan="3">
+              <div class="mba-doc-inline-field-group">
+                <label class="mba-doc-inline-field">
+                  <span>Signature</span>
+                  <input class="mba-doc-input" name="supervisor_disagree_signature" value="{{ prefill.get('supervisor_disagree_signature','') }}">
+                </label>
+                <label class="mba-doc-inline-field mba-doc-inline-field--date">
+                  <span>Date</span>
+                  <input class="mba-doc-input" type="date" name="supervisor_disagree_signature_date" value="{{ prefill.get('supervisor_disagree_signature_date','') }}">
+                </label>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="4">
+              <p class="mba-doc-paragraph">
+                I, the co-supervisor, <strong><u>do not agree</u></strong> to the notice of intention to submit
+                for examination purposes.
+              </p>
+            </td>
+            <td colspan="3">
+              <div class="mba-doc-inline-field-group">
+                <label class="mba-doc-inline-field">
+                  <span>Signature</span>
+                  <input class="mba-doc-input" name="co_supervisor_disagree_signature" value="{{ prefill.get('co_supervisor_disagree_signature','') }}">
+                </label>
+                <label class="mba-doc-inline-field mba-doc-inline-field--date">
+                  <span>Date</span>
+                  <input class="mba-doc-input" type="date" name="co_supervisor_disagree_signature_date" value="{{ prefill.get('co_supervisor_disagree_signature_date','') }}">
+                </label>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Please provide reasons why you do not agree to the notice of intention to submit by the student.</td>
+            <td colspan="6" style="padding:0;">
+              <textarea class="mba-doc-textarea" name="disagree_reasons" rows="4">{{ prefill.get('disagree_reasons','') }}</textarea>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Date</td>
+            <td colspan="6"><input class="mba-doc-input" type="date" name="disagree_reasons_date" value="{{ prefill.get('disagree_reasons_date','') }}"></td>
+          </tr>
+          <tr>
+            <td colspan="5" style="background:#ef6436;color:#111827;font-weight:700;">This candidate's title has been approved by JBS HDC</td>
+            <td style="background:#ef6436;text-align:center;">
+              <label class="mba-doc-choice">
+                <input type="radio" name="title_approved_by_hdc" value="Yes" {% if prefill.get('title_approved_by_hdc','') == 'Yes' %}checked{% endif %}>
+                <span>Yes</span>
+              </label>
+            </td>
+            <td style="background:#ef6436;text-align:center;">
+              <label class="mba-doc-choice">
+                <input type="radio" name="title_approved_by_hdc" value="No" {% if prefill.get('title_approved_by_hdc','') == 'No' %}checked{% endif %}>
+                <span>No</span>
+              </label>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="5" style="background:#ef6436;color:#111827;font-weight:700;">Ethical clearance number / exempted</td>
+            <td colspan="2" style="background:#ef6436;padding:0;">
+              <input class="mba-doc-input mba-doc-input--orange" name="ethical_clearance_number" value="{{ prefill.get('ethical_clearance_number','') }}">
+            </td>
+          </tr>
+          <tr>
+            <td colspan="5" style="background:#ef6436;color:#111827;font-weight:700;">Examiners have been nominated and approved by JBS HDC</td>
+            <td style="background:#ef6436;text-align:center;">
+              <label class="mba-doc-choice">
+                <input type="radio" name="examiners_approved_by_hdc" value="Yes" {% if prefill.get('examiners_approved_by_hdc','') == 'Yes' %}checked{% endif %}>
+                <span>Yes</span>
+              </label>
+            </td>
+            <td style="background:#ef6436;text-align:center;">
+              <label class="mba-doc-choice">
+                <input type="radio" name="examiners_approved_by_hdc" value="No" {% if prefill.get('examiners_approved_by_hdc','') == 'No' %}checked{% endif %}>
+                <span>No</span>
+              </label>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="5" style="background:#ef6436;color:#111827;font-weight:700;">
+              I have nominated examiners for this candidate to accompany this notice
+              (<strong>only in the event where examiners have not been nominated</strong>)
+            </td>
+            <td style="background:#ef6436;text-align:center;">
+              <label class="mba-doc-choice">
+                <input type="radio" name="examiners_nominated_with_notice" value="Yes" {% if prefill.get('examiners_nominated_with_notice','') == 'Yes' %}checked{% endif %}>
+                <span>Yes</span>
+              </label>
+            </td>
+            <td style="background:#ef6436;text-align:center;">
+              <label class="mba-doc-choice">
+                <input type="radio" name="examiners_nominated_with_notice" value="No" {% if prefill.get('examiners_nominated_with_notice','') == 'No' %}checked{% endif %}>
+                <span>No</span>
+              </label>
+            </td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight" style="margin-top:1rem;">
+          <colgroup>
+            <col style="width:34%;">
+            <col style="width:16%;">
+            <col style="width:34%;">
+            <col style="width:16%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Signature: Head of Department</td>
+            <td><input class="mba-doc-input" name="hod_signature" value="{{ prefill.get('hod_signature','') }}"></td>
+            <td class="mba-doc-label">Signature: Director of School</td>
+            <td><input class="mba-doc-input" name="director_signature" value="{{ prefill.get('director_signature','') }}"></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Date</td>
+            <td><input class="mba-doc-input" type="date" name="hod_signature_date" value="{{ prefill.get('hod_signature_date','') }}"></td>
+            <td class="mba-doc-label">Date</td>
+            <td><input class="mba-doc-input" type="date" name="director_signature_date" value="{{ prefill.get('director_signature_date','') }}"></td>
+          </tr>
+        </table>
+
+        <div class="mba-doc-muted-box" style="border:1.5px solid #111827;background:#ffffff;margin-top:1rem;">
+          <p class="mba-doc-note" style="font-weight:700;color:#111827;">
+            Please note: This notice of intention to submit Capstone Consultancy Project / Thesis must be handed in
+            not later than 3 months for Master's degree candidates and 6 months for Doctoral candidates.
+          </p>
+        </div>
+
+        <div class="mba-doc-actions">
+          <button class="primary-button" type="submit">Submit Notice of Intention</button>
+          <a href="{{ url_for('mba.student_dashboard') }}" class="secondary-button">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% endblock %}

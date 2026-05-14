@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Module Completion Verification{% endblock %}
+{% block app_name %}MBA App{% endblock %}
+{% block page_heading %}Module Completion Verification{% endblock %}
+{% block page_subheading %}Marks Committee response{% endblock %}
+
+{% block body %}
+<section class="module-response-shell">
+  <article class="module-response-card module-response-card--{{ state }}">
+    <div class="module-response-card__mark" aria-hidden="true">
+      {% if state == 'confirmed' %}
+        OK
+      {% elif state == 'not-confirmed' %}
+        NO
+      {% elif state == 'already' %}
+        USED
+      {% else %}
+        !
+      {% endif %}
+    </div>
+    <div class="module-response-card__content">
+      <span class="module-response-card__eyebrow">
+        {% if state == 'confirmed' %}
+          Response Recorded
+        {% elif state == 'not-confirmed' %}
+          Response Recorded
+        {% elif state == 'already' %}
+          Link Closed
+        {% else %}
+          Link Unavailable
+        {% endif %}
+      </span>
+      <h2>{{ title }}</h2>
+      <p>{{ message }}</p>
+
+      {% if student_details %}
+        <dl class="module-response-details">
+          {% for line in student_details %}
+            {% set parts = line.split(': ', 1) %}
+            <div>
+              <dt>{{ parts[0] }}</dt>
+              <dd>{{ parts[1] if parts|length > 1 else line }}</dd>
+            </div>
+          {% endfor %}
+        </dl>
+      {% endif %}
+
+      <div class="module-response-card__footer">
+        <span>University of Johannesburg</span>
+        {% if project %}
+          <span>{{ project.project_title }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </article>
+</section>
+{% endblock %}

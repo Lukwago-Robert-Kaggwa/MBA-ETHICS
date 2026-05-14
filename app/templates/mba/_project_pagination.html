@@ -1,0 +1,47 @@
+{% if pagination and pagination.total %}
+  <div class="dashboard-pagination">
+    <div class="dashboard-pagination__meta">
+      <strong>Showing {{ pagination.start_index }}-{{ pagination.end_index }}</strong>
+      <span>of {{ pagination.total }} {{ item_label|default('projects') }}</span>
+      <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+    </div>
+    <form method="get" action="{{ pagination.form_action }}" class="dashboard-pagination__size-form">
+      {% for field in pagination.hidden_fields %}
+        <input type="hidden" name="{{ field.name }}" value="{{ field.value }}">
+      {% endfor %}
+      <input type="hidden" name="{{ pagination.page_param }}" value="1">
+      <label class="dashboard-pagination__size-label">
+        <span>Per page</span>
+        <select name="{{ pagination.per_page_param }}" class="admin-filter-input">
+          {% for option in pagination.page_size_options %}
+            <option value="{{ option }}" {% if option == pagination.per_page %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="secondary-button small-button">Update</button>
+    </form>
+    {% if pagination.has_multiple_pages %}
+      <nav class="dashboard-pagination__pages" aria-label="Project pagination">
+        {% if pagination.prev_url %}
+          <a href="{{ pagination.prev_url }}" class="dashboard-pagination__link">Previous</a>
+        {% else %}
+          <span class="dashboard-pagination__link is-disabled">Previous</span>
+        {% endif %}
+        {% for link in pagination.page_links %}
+          {% if link.is_gap %}
+            <span class="dashboard-pagination__gap">...</span>
+          {% elif link.is_active %}
+            <span class="dashboard-pagination__link is-active">{{ link.number }}</span>
+          {% else %}
+            <a href="{{ link.url }}" class="dashboard-pagination__link">{{ link.number }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if pagination.next_url %}
+          <a href="{{ pagination.next_url }}" class="dashboard-pagination__link">Next</a>
+        {% else %}
+          <span class="dashboard-pagination__link is-disabled">Next</span>
+        {% endif %}
+      </nav>
+    {% endif %}
+  </div>
+{% endif %}

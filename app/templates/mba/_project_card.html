@@ -1,0 +1,118 @@
+{% set hide_assessor_lineup = hide_assessor_lineup|default(false) %}
+{% set show_assessor_profile_hover = show_assessor_profile_hover|default(false) %}
+{% macro scholar_profile_hover(label, user) -%}
+  {%- set full_name = ((user.first_name or '') + (' ' + user.last_name if user.last_name else '')) | trim or user.email.split('@')[0] -%}
+  {%- set profile = user.scholar_profile -%}
+  <span>
+    {{ label }}:
+    {%- if show_assessor_profile_hover -%}
+      <span class="name-email hdc-profile-hover" tabindex="0" title="Hover to view assessor profile">
+        {{ full_name }} ({{ user.email }})
+        <span class="hover-profile-card">
+          <strong class="hover-profile-card__title">{{ ((profile.title or '') + ' ' if profile and profile.title else '') ~ full_name }}</strong>
+          <span class="hover-profile-card__grid">
+            <span class="hover-profile-card__row">
+              <strong>Email</strong>
+              {{ user.email }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Department</strong>
+              {{ profile.department if profile and profile.department else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Position</strong>
+              {{ profile.position if profile and profile.position else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Contact</strong>
+              {{ profile.contact if profile and profile.contact else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Affiliation</strong>
+              {{ profile.affiliation if profile and profile.affiliation else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Qualification</strong>
+              {{ profile.qualification if profile and profile.qualification else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Academic Experience</strong>
+              {{ profile.academic_experience ~ ' years' if profile and profile.academic_experience is not none else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Current Student Load</strong>
+              {{ profile.students if profile and profile.students is not none else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Students Supervised</strong>
+              {{ profile.students_supervised_total if profile and profile.students_supervised_total is not none else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Students Assessed</strong>
+              {{ profile.students_assessed_total if profile and profile.students_assessed_total is not none else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Publications</strong>
+              {{ profile.publication_count if profile and profile.publication_count is not none else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>Approved Before</strong>
+              {{ 'Yes' if profile and profile.approved_before else 'No' if profile else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row">
+              <strong>International Assessor</strong>
+              {{ 'Yes' if profile and profile.international_assessor else 'No' if profile else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row hover-profile-card__row--wide">
+              <strong>Skills</strong>
+              {{ profile.skills if profile and profile.skills else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row hover-profile-card__row--wide">
+              <strong>Research Themes</strong>
+              {{ profile.research_themes if profile and profile.research_themes else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row hover-profile-card__row--wide">
+              <strong>Research Interests</strong>
+              {{ profile.research_interests if profile and profile.research_interests else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row hover-profile-card__row--wide">
+              <strong>Research Disciplines</strong>
+              {{ profile.research_disciplines if profile and profile.research_disciplines else 'Not captured' }}
+            </span>
+            <span class="hover-profile-card__row hover-profile-card__row--wide">
+              <strong>Selected Publications</strong>
+              {{ profile.selected_publications if profile and profile.selected_publications else 'Not captured' }}
+            </span>
+          </span>
+        </span>
+      </span>
+    {%- else -%}
+      {{ full_name }} ({{ user.email }})
+    {%- endif -%}
+  </span>
+{%- endmacro %}
+<article class="record-card">
+  <div class="record-card__top">
+    <div>
+      <h3>{{ project.project_title }}</h3>
+      <p>{{ project.discipline_name }}</p>
+    </div>
+    {% set status_badge_class = project_status_badge_class(project.project_status) if project_status_badge_class is defined else project.project_status %}
+    <span class="status-pill status-pill--{{ status_badge_class }}">{{ project_status_label(project.project_status) if project_status_label is defined else project.project_status.replace('_', ' ').title() }}</span>
+  </div>
+  <p>{{ project.project_description }}</p>
+  <div class="feedback-summary">
+    <span>Student: {{ project.student.email if project.student else 'Unknown' }}</span>
+    {% if project.primary_supervisor %}
+      {% set sv = project.primary_supervisor %}
+      <span>Supervisor: {{ ((sv.first_name or '') + (' ' + sv.last_name if sv.last_name else '')) | trim or sv.email.split('@')[0] }} ({{ sv.email }})</span>
+    {% else %}
+      <span>Supervisor: Unassigned</span>
+    {% endif %}
+    {% if not hide_assessor_lineup %}
+      {% if project.assessor_1 %}{{ scholar_profile_hover('Assessor 1', project.assessor_1) }}{% endif %}
+      {% if project.assessor_2 %}{{ scholar_profile_hover('Assessor 2', project.assessor_2) }}{% endif %}
+      {% if project.assessor_3 %}{{ scholar_profile_hover('Assessor 3', project.assessor_3) }}{% endif %}
+    {% endif %}
+  </div>
+</article>

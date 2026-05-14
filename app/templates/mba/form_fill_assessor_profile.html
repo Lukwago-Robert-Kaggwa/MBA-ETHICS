@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}External Examiner Nomination Form{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}External Examiner Nomination Form{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <div class="mba-doc-paper">
+      <div class="mba-doc-form">
+        {% with readonly_mode=true, existing_cv_doc=existing_cv_doc, slot_label=slot_label, yes_no_options=yes_no_options %}
+          {% include "mba/_assessor_profile_section.html" %}
+        {% endwith %}
+      </div>
+    </div>
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% endblock %}

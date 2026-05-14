@@ -1,0 +1,8 @@
+<section class="workflow-strip ethics-flow">
+  <div class="workflow-step {% if current_user.role == 'student' %}is-current{% endif %}"><span>1</span><strong>Student</strong></div>
+  <div class="workflow-step {% if current_user.role == 'supervisor' %}is-current{% endif %}"><span>2</span><strong>Supervisor</strong></div>
+  <div class="workflow-step {% if current_user.role in ['admin', 'super_admin', 'dean'] %}is-current{% endif %}"><span>3</span><strong>Admin</strong></div>
+  <div class="workflow-step {% if current_user.role == 'reviewer' %}is-current{% endif %}"><span>4</span><strong>Reviewer</strong></div>
+  <div class="workflow-step {% if current_user.role == 'rec' %}is-current{% endif %}"><span>5</span><strong>REC</strong></div>
+  <div class="workflow-step"><span>6</span><strong>Certificate</strong></div>
+</section>

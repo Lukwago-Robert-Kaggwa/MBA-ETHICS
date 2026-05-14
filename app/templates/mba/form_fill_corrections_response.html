@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Response to Assessors' Comments{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Response to Assessors' Comments{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+
+{% block body %}
+{% set assessor_sections = [
+  {'number': 1, 'slot': 'assessor_1', 'rows': 30, 'title': 'ASSESSOR 1', 'suffix': ''},
+  {'number': 2, 'slot': 'assessor_2', 'rows': 15, 'title': 'ASSESSOR 2', 'suffix': ''},
+  {'number': 3, 'slot': 'assessor_3', 'rows': 5, 'title': 'ASSESSOR 3', 'suffix': '(If Applicable)'}
+] %}
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='corrections_response') }}" method="post" enctype="multipart/form-data" class="form-stack compact-form">
+      <!-- MBA_FORM_START -->
+      <div class="mba-doc-paper corrections-response-doc">
+        <style>
+          .corrections-response-doc {
+            font-family: Arial, Helvetica, sans-serif;
+            color: #000;
+            padding: 34px 42px;
+          }
+
+          .corrections-source-logo {
+            display: block;
+            width: 118px;
+            height: auto;
+            margin: 0 auto 22px;
+          }
+
+          .corrections-title-bar {
+            width: min(100%, 530pt);
+            margin: 0 auto 18px;
+            padding: 7px 16px;
+            border: 3px solid #000;
+            border-radius: 10px;
+            background: #000;
+            color: #fff;
+            text-align: center;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12pt;
+            line-height: 1.15;
+            font-weight: 700;
+            text-transform: uppercase;
+            box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+          }
+
+          .corrections-info-table,
+          .corrections-response-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin: 0 0 18px;
+          }
+
+          .corrections-info-table td,
+          .corrections-response-table th,
+          .corrections-response-table td {
+            border: 1px solid #000;
+            vertical-align: top;
+          }
+
+          .corrections-info-table td {
+            padding: 4px 7px;
+            font-size: 11pt;
+            line-height: 1.25;
+          }
+
+          .corrections-info-table .corrections-label {
+            width: 31.5%;
+            background: #f2f2f2;
+            font-weight: 400;
+          }
+
+          .corrections-info-table input,
+          .corrections-info-table textarea,
+          .corrections-response-table textarea {
+            display: block;
+            width: 100%;
+            min-width: 0;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            color: #000;
+            box-shadow: none;
+            resize: vertical;
+          }
+
+          .corrections-info-table input,
+          .corrections-info-table textarea {
+            padding: 0;
+            font: inherit;
+          }
+
+          .corrections-assessor-title {
+            margin: 18px 0 6px;
+            padding-left: 22%;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12pt;
+            line-height: 1.2;
+            font-weight: 700;
+          }
+
+          .corrections-assessor-title em {
+            font-size: 10pt;
+            font-style: italic;
+            font-weight: 400;
+          }
+
+          .corrections-response-table th {
+            padding: 5px 7px;
+            background: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12pt;
+            line-height: 1.2;
+            font-weight: 700;
+            text-align: left;
+          }
+
+          .corrections-response-table th:last-child {
+            text-align: right;
+          }
+
+          .corrections-response-table td {
+            padding: 5px 7px;
+          }
+
+          .corrections-response-table textarea {
+            min-height: 54px;
+            padding: 0;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 11.5pt;
+            line-height: 1.35;
+          }
+
+          .corrections-response-table textarea[readonly] {
+            opacity: 1;
+          }
+        </style>
+
+        <img class="corrections-source-logo" src="{{ url_for('static', filename='img/uj_orange_square.png') }}" alt="University of Johannesburg logo">
+        <div class="corrections-title-bar">RESPONSE TO ASSESSORS’ COMMENTS</div>
+
+        <table class="corrections-info-table">
+          <tr>
+            <td class="corrections-label">Student’s initials and Surname:</td>
+            <td><input name="student_initials_surname" value="{{ prefill.get('student_initials_surname','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="corrections-label">Student number:</td>
+            <td><input name="student_number" value="{{ prefill.get('student_number','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="corrections-label">Department:</td>
+            <td><input name="department" value="{{ prefill.get('department','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="corrections-label">Supervisor:</td>
+            <td><input name="supervisor_name" value="{{ prefill.get('supervisor_name','') }}" required></td>
+          </tr>
+          <tr>
+            <td class="corrections-label">Title of study:</td>
+            <td><textarea name="research_title" rows="2" required>{{ prefill.get('research_title','') }}</textarea></td>
+          </tr>
+        </table>
+
+        {% for section in assessor_sections %}
+          <h3 class="corrections-assessor-title">
+            {{ section.title }}{% if section.suffix %} <em>{{ section.suffix }}</em>{% endif %}
+          </h3>
+          <table class="corrections-response-table">
+            <colgroup>
+              <col style="width:51.3%;">
+              <col style="width:48.7%;">
+            </colgroup>
+            <tr>
+              <th>ASSESSOR’S COMMENT</th>
+              <th>STUDENT’S RESPONSE</th>
+            </tr>
+            {% for row_number in range(1, section.rows + 1) %}
+              {% set comment_key = section.slot ~ '_comment_' ~ row_number %}
+              {% set response_key = section.slot ~ '_response_' ~ row_number %}
+              {% set comment_value = prefill.get(comment_key, '') %}
+              {% set response_value = prefill.get(response_key, '') %}
+              {% set comment_rows = 2 if comment_value|length < 140 else 4 if comment_value|length < 360 else 7 if comment_value|length < 720 else 10 %}
+              {% set response_rows = 2 if response_value|length < 140 else 4 if response_value|length < 360 else 7 if response_value|length < 720 else 10 %}
+              <tr>
+                <td>
+                  <textarea name="{{ comment_key }}" rows="{{ comment_rows }}" readonly>{{ comment_value }}</textarea>
+                </td>
+                <td>
+                  <textarea name="{{ response_key }}" rows="{{ response_rows }}">{{ response_value }}</textarea>
+                </td>
+              </tr>
+            {% endfor %}
+          </table>
+        {% endfor %}
+      </div>
+      <!-- MBA_FORM_END -->
+
+      <section class="response-section">
+        <strong>Corrected Capstone Pack</strong>
+        <p class="muted" style="margin:0.5rem 0 0.75rem;">
+          Upload the corrected Capstone Manuscript and the resubmitted Turnitin report with this response form. The full pack goes to your supervisor for approval.
+        </p>
+        <label>Corrected Capstone Manuscript PDF
+          <input type="file" name="corrected_dissertation_file" accept=".pdf,application/pdf" required>
+        </label>
+        <label>Resubmitted Turnitin Report PDF
+          <input type="file" name="corrections_turnitin_report_file" accept=".pdf,application/pdf" required>
+        </label>
+      </section>
+
+      <div class="mba-doc-actions">
+        <button class="primary-button" type="submit">Submit Corrected Pack</button>
+        <a href="{{ url_for('mba.student_corrections') }}" class="secondary-button">Cancel</a>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

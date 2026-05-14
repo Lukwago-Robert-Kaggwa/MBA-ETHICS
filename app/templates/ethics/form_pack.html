@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}{{ definition.title }}{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Form {{ form_type }}{% endblock %}
+{% block page_subheading %}{{ definition.title }}{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+
+{% set draft_values = draft_values|default({}) %}
+<form action="{{ url_for('ethics.create_submission') }}" method="post" enctype="multipart/form-data" class="ethics-panel production-form" data-autosave-url="{{ url_for('ethics.autosave_ethics_form', form_type=form_type) }}">
+  <input type="hidden" name="form_type" value="{{ form_type }}">
+
+  <div class="panel-heading">
+    <h2>{{ definition.title }}</h2>
+    <span id="autosave-status">Autosave ready</span>
+  </div>
+
+  {% if definition.templates %}
+    <section class="form-section template-downloads">
+      <h3>Templates</h3>
+      <div class="template-chip-list">
+        {% for title, file_path in definition.templates %}
+          <a href="{{ url_for('static', filename=file_path) }}" class="text-link">{{ title }}</a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% for section in definition.sections %}
+    <section class="form-section production-section">
+      <h3>{{ section.title }}</h3>
+      {% for field in section.fields %}
+        {% set value = draft_values.get(field.name, field.default|default('')) %}
+        {% set condition_attrs = '' %}
+        {% if field.show_when|default(false) %}
+          {% set condition_attrs = ' data-show-when="' ~ field.show_when['field'] ~ '" data-show-values="' ~ (field.show_when['values']|join('|')) ~ '"' %}
+        {% endif %}
+        <div class="production-field{% if field.show_when|default(false) %} conditional-field is-hidden{% endif %}"{{ condition_attrs|safe }}>
+        {% if field.type == 'textarea' %}
+          <label class="form-label">{{ field.label }} <textarea class="form-control" name="{{ field.name }}" rows="4" {% if field.required|default(false) %}data-required-when-visible="1" required{% endif %}>{{ value }}</textarea></label>
+        {% elif field.type == 'select' %}
+          <label class="form-label">
+            {{ field.label }}
+            <select class="form-select" name="{{ field.name }}" {% if field.required|default(false) %}data-required-when-visible="1" required{% endif %}>
+              <option value="">Select</option>
+              {% for option in field.options %}
+                <option value="{{ option }}" {% if value == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        {% elif field.type == 'radio' %}
+          <fieldset class="nested-fieldset">
+            <legend>{{ field.label }}</legend>
+            <div class="inline-choice-grid">
+              {% for option in field.options %}
+                <label class="form-check-label"><input class="form-check-input" type="radio" name="{{ field.name }}" value="{{ option }}" {% if value == option %}checked{% endif %} {% if field.required|default(false) %}data-required-when-visible="1" required{% endif %}> {{ option }}</label>
+              {% endfor %}
+            </div>
+          </fieldset>
+        {% elif field.type == 'checkboxes' %}
+          <fieldset class="nested-fieldset">
+            <legend>{{ field.label }}</legend>
+            <div class="checkbox-grid">
+              {% for option in field.options %}
+                <label class="form-check-label"><input class="form-check-input" type="checkbox" name="{{ field.name }}" value="{{ option }}" {% if value is iterable and option in value %}checked{% endif %}> {{ option }}</label>
+              {% endfor %}
+            </div>
+          </fieldset>
+        {% elif field.type == 'table' %}
+          {% set rows = value if value else [{}] %}
+          <fieldset class="nested-fieldset repeatable-table" data-table-name="{{ field.name }}">
+            <legend>{{ field.label }}</legend>
+            <div class="table-wrap">
+              <table class="admin-table form-table">
+                <thead>
+                  <tr>
+                    {% for column in field.columns %}
+                      <th>{{ column.label }}</th>
+                    {% endfor %}
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in rows %}
+                    <tr>
+                      {% for column in field.columns %}
+                        <td>
+                          {% set cell_value = row.get(column.name, '') if row is mapping else '' %}
+                          {% if column.type|default('text') == 'textarea' %}
+                            <textarea class="form-control" name="{{ column.name }}[]" rows="2">{{ cell_value }}</textarea>
+                          {% else %}
+                            <input class="form-control" type="{{ column.type|default('text') }}" name="{{ column.name }}[]" value="{{ cell_value }}">
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                      <td><button type="button" class="secondary-button table-row-remove">Remove</button></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" class="primary-button small-button table-row-add">Add row</button>
+          </fieldset>
+        {% elif field.type == 'file' %}
+          <label class="form-label">{{ field.label }} <input class="form-control" type="file" name="{{ field.name }}" accept=".pdf,.doc,.docx" {% if field.multiple|default(false) %}multiple{% endif %} {% if field.required|default(false) %}data-required-when-visible="1" required{% endif %}></label>
+        {% else %}
+          <label class="form-label">{{ field.label }} <input class="form-control" type="{{ field.type }}" name="{{ field.name }}" value="{{ value }}" {% if field.required|default(false) %}data-required-when-visible="1" required{% endif %}></label>
+        {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+  {% endfor %}
+
+  <button class="primary-button" type="submit">Submit to supervisor</button>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.querySelector('.production-form');
+  if (!form) return;
+
+  function selectedValues(name) {
+    const controls = Array.from(form.querySelectorAll(`[name="${CSS.escape(name)}"]`));
+    if (!controls.length) return [];
+    const first = controls[0];
+    if (first.type === 'radio' || first.type === 'checkbox') {
+      return controls.filter(control => control.checked).map(control => control.value);
+    }
+    return [first.value];
+  }
+
+  function setRequiredState(container, visible) {
+    container.querySelectorAll('[data-required-when-visible="1"]').forEach(control => {
+      control.required = visible;
+      if (!visible && control.type !== 'file') {
+        if (control.type === 'radio' || control.type === 'checkbox') {
+          control.checked = false;
+        } else {
+          control.value = '';
+        }
+      }
+    });
+  }
+
+  function updateConditionalFields() {
+    form.querySelectorAll('.conditional-field').forEach(container => {
+      const sourceName = container.dataset.showWhen;
+      const expected = (container.dataset.showValues || '').split('|').filter(Boolean);
+      const actual = selectedValues(sourceName);
+      const visible = expected.some(value => actual.includes(value));
+      container.classList.toggle('is-hidden', !visible);
+      setRequiredState(container, visible);
+    });
+  }
+
+  form.addEventListener('change', updateConditionalFields);
+  updateConditionalFields();
+
+  function cloneTableRow(table) {
+    const tbody = table.querySelector('tbody');
+    const source = tbody && tbody.querySelector('tr');
+    if (!tbody || !source) return;
+    const row = source.cloneNode(true);
+    row.querySelectorAll('input, textarea, select').forEach(control => {
+      if (control.type === 'checkbox' || control.type === 'radio') {
+        control.checked = false;
+      } else {
+        control.value = '';
+      }
+    });
+    tbody.appendChild(row);
+    scheduleAutosave();
+  }
+
+  form.addEventListener('click', function (event) {
+    const addButton = event.target.closest('.table-row-add');
+    if (addButton) {
+      const table = addButton.closest('.repeatable-table').querySelector('table');
+      cloneTableRow(table);
+      return;
+    }
+
+    const removeButton = event.target.closest('.table-row-remove');
+    if (removeButton) {
+      const tbody = removeButton.closest('tbody');
+      if (tbody.querySelectorAll('tr').length > 1) {
+        removeButton.closest('tr').remove();
+      } else {
+        removeButton.closest('tr').querySelectorAll('input, textarea, select').forEach(control => {
+          control.value = '';
+        });
+      }
+      scheduleAutosave();
+    }
+  });
+
+  const autosaveUrl = form.dataset.autosaveUrl;
+  const autosaveStatus = document.getElementById('autosave-status');
+  let autosaveTimer = null;
+
+  function setAutosaveStatus(text, className) {
+    if (!autosaveStatus) return;
+    autosaveStatus.textContent = text;
+    autosaveStatus.className = className || '';
+  }
+
+  function autosave() {
+    if (!autosaveUrl) return;
+    const data = new FormData(form);
+    form.querySelectorAll('input[type="file"]').forEach(input => data.delete(input.name));
+    setAutosaveStatus('Saving...', 'autosave-status autosave-status--saving');
+    fetch(autosaveUrl, {
+      method: 'POST',
+      body: data,
+      credentials: 'same-origin'
+    })
+      .then(response => response.json())
+      .then(result => {
+        if (result.success) {
+          setAutosaveStatus('Saved', 'autosave-status autosave-status--saved');
+        } else {
+          setAutosaveStatus('Autosave failed', 'autosave-status autosave-status--error');
+        }
+      })
+      .catch(() => {
+        setAutosaveStatus('Autosave failed', 'autosave-status autosave-status--error');
+      });
+  }
+
+  function scheduleAutosave() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosave, 900);
+  }
+
+  form.querySelectorAll('input, textarea, select').forEach(control => {
+    if (!control.name || control.type === 'file' || control.type === 'submit' || control.type === 'button') return;
+    const eventName = control.type === 'checkbox' || control.type === 'radio' || control.tagName === 'SELECT' ? 'change' : 'input';
+    control.addEventListener(eventName, scheduleAutosave);
+    if (eventName !== 'change') {
+      control.addEventListener('change', scheduleAutosave);
+    }
+  });
+});
+</script>
+{% endblock %}

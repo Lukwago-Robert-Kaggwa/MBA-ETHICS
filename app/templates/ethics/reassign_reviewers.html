@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Reassign Reviewers{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Reassign Reviewers{% endblock %}
+{% block page_subheading %}Replace pending reviewer assignments without removing completed feedback{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Reviewer Assignment</h2>
+    <span>Admin tool</span>
+  </div>
+  <form method="post" class="form-stack admin-form">
+    <label>
+      Submission
+      <select name="submission_id" class="form-select" required>
+        <option value="">Choose a submission</option>
+        {% for submission in submissions %}
+          <option value="{{ submission.id }}">
+            Form {{ submission.form_type }} #{{ submission.id }} - {{ submission.student.email if submission.student else 'Unknown student' }} - {{ submission.status.replace('_', ' ').title() }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Reviewers
+      <select name="reviewer_ids" class="form-select" multiple size="8" required>
+        {% for reviewer in reviewers %}
+          <option value="{{ reviewer.id }}">{{ reviewer.email }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="primary-button" type="submit">Save reviewer reassignment</button>
+  </form>
+</section>
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Current Reviewer Assignments</h2>
+    <span>{{ submissions|length }} forms</span>
+  </div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Submission</th>
+          <th>Status</th>
+          <th>Reviewers</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for submission in submissions %}
+          <tr>
+            <td>
+              <a href="{{ url_for('ethics.submission_detail', submission_id=submission.id) }}" class="text-link">
+                Form {{ submission.form_type }} #{{ submission.id }}
+              </a>
+              <small>{{ submission.title }}</small>
+            </td>
+            <td><span class="status-pill status-pill--{{ submission.status }}">{{ submission.status.replace('_', ' ').title() }}</span></td>
+            <td>
+              {% for assignment in submission.reviewer_assignments %}
+                <span class="line-item">
+                  {{ assignment.reviewer.email }}
+                  {% if assignment.completed_at %}
+                    <span class="status-pill status-pill--approved">Completed</span>
+                  {% else %}
+                    <span class="status-pill">Pending</span>
+                  {% endif %}
+                </span>
+              {% else %}
+                <span class="muted">No reviewers assigned</span>
+              {% endfor %}
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="3" class="muted">No submissions available.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

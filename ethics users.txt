@@ -1,0 +1,7 @@
+fake.superadmin@uj.ac.za / SuperAdmin@12345
+ethics.supervisor@uj.ac.za / Admin@12345
+ethics.reviewer@uj.ac.za / Admin@12345
+ethics.rec@uj.ac.za / Admin@12345
+mba.admin@uj.ac.za / Admin@12345
+Email: 999000001@student.uj.ac.za
+Password: Student@12345

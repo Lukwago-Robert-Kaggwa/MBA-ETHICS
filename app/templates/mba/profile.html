@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}MBA Profile{% endblock %}
+{% block app_name %}MBA App{% endblock %}
+{% block page_heading %}My Profile{% endblock %}
+{% block page_subheading %}Keep your {{ role_label }} details up to date{% endblock %}
+
+{% block body %}
+<div class="mba-page-stack">
+<section class="ethics-welcome-banner app-banner">
+  <div>
+    <p class="eyebrow">MBA {{ role_label }}</p>
+    <h1>{{ current_user.first_name or current_user.email }}</h1>
+    <p>{{ current_user.email }}</p>
+  </div>
+  {% if current_user.has_profile %}
+    <div class="banner-actions">
+      <a href="{{ url_for('mba.dashboard') }}" class="banner-button">Back to Dashboard</a>
+    </div>
+  {% endif %}
+</section>
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>{{ role_label }} Profile</h2>
+    <span>{{ 'Student details' if is_student else 'Staff details' }}</span>
+  </div>
+
+  {% if is_student %}
+    <form action="{{ url_for('mba.profile') }}" method="post" class="form-stack compact-form">
+      <label>First name
+        <input name="name" value="{{ profile.name or current_user.first_name or '' }}" required>
+      </label>
+      <label>Surname
+        <input name="surname" value="{{ profile.surname or current_user.last_name or '' }}" required>
+      </label>
+      <label>Title
+        <input name="title" value="{{ profile.title or '' }}" placeholder="Mr, Ms, Dr">
+      </label>
+      <label>Contact number
+        <input name="contact" value="{{ profile.contact or '' }}" placeholder="e.g. 0720000000" required>
+      </label>
+      <label>Student number
+        <input name="student_number" value="{{ profile.student_number or '' }}" required>
+      </label>
+      <label>Secondary email
+        <input type="email" name="secondary_email" value="{{ profile.secondary_email or '' }}" placeholder="Optional non-UJ email">
+      </label>
+      <label>Module
+        <input name="module" value="{{ profile.module or '' }}" placeholder="Current MBA module" required>
+      </label>
+      <label>Block
+        <input name="block_id" value="{{ profile.block_id or '' }}" placeholder="Block or intake identifier" required>
+      </label>
+      <label>Degree
+        <input name="degree" value="{{ profile.degree or 'MBA' }}" required>
+      </label>
+      <label>Address
+        <textarea name="address" rows="3">{{ profile.address or '' }}</textarea>
+      </label>
+      <button class="primary-button" type="submit">Save Profile</button>
+    </form>
+  {% else %}
+    <form action="{{ url_for('mba.profile') }}" method="post" class="form-stack compact-form">
+      <label>First name
+        <input name="name" value="{{ profile.name or current_user.first_name or '' }}" required>
+      </label>
+      <label>Surname
+        <input name="surname" value="{{ profile.surname or current_user.last_name or '' }}" required>
+      </label>
+      <label>Title
+        <input name="title" value="{{ profile.title or '' }}" placeholder="Prof, Dr, Mr, Ms">
+      </label>
+      <label>Contact number
+        <input name="contact" value="{{ profile.contact or '' }}" placeholder="e.g. 0110000000" required>
+      </label>
+      <label>Department
+        <input name="department" value="{{ profile.department or '' }}" required>
+      </label>
+      <label>Position
+        <input name="position" value="{{ profile.position or '' }}" placeholder="Senior Lecturer, Admin Officer" required>
+      </label>
+      <label>Highest qualification
+        <input name="qualification" value="{{ profile.qualification or '' }}" required>
+      </label>
+      <label>Affiliation
+        <input name="affiliation" value="{{ profile.affiliation or '' }}" placeholder="University or partner institution" required>
+      </label>
+      <label>Areas of expertise
+        <textarea name="skills" rows="3" required>{{ profile.skills or '' }}</textarea>
+      </label>
+      <label>Research themes
+        <textarea name="research_themes" rows="2" required>{{ profile.research_themes or '' }}</textarea>
+      </label>
+      <label>Research interests
+        <textarea name="research_interests" rows="2" required>{{ profile.research_interests or '' }}</textarea>
+      </label>
+      <label>Research disciplines
+        <textarea name="research_disciplines" rows="2" required>{{ profile.research_disciplines or '' }}</textarea>
+      </label>
+      <label>Students supervised to completion
+        <input type="number" min="0" name="students_supervised_total" value="{{ profile.students_supervised_total or 0 }}">
+      </label>
+      <label>Students assessed / examined
+        <input type="number" min="0" name="students_assessed_total" value="{{ profile.students_assessed_total or 0 }}">
+      </label>
+      <label>Publication count
+        <input type="number" min="0" name="publication_count" value="{{ profile.publication_count or 0 }}">
+      </label>
+      <label>Selected publications
+        <textarea name="selected_publications" rows="4">{{ profile.selected_publications or '' }}</textarea>
+      </label>
+      <label>ORCID / Google Scholar / Research links
+        <textarea name="scholarly_profile_links" rows="3">{{ profile.scholarly_profile_links or '' }}</textarea>
+      </label>
+      <label>Address
+        <textarea name="address" rows="3">{{ profile.address or '' }}</textarea>
+      </label>
+      <label>Number of active students
+        <input type="number" min="0" name="students" value="{{ profile.students or 0 }}">
+      </label>
+      <label>Academic experience (years)
+        <input type="number" min="0" name="academic_experience" value="{{ profile.academic_experience or 0 }}">
+      </label>
+      <label class="inline-action" style="justify-content:flex-start;">
+        <input type="checkbox" name="approved_before" {% if profile.approved_before %}checked{% endif %}>
+        Approved MBA Capstone Projects before
+      </label>
+      <label class="inline-action" style="justify-content:flex-start;">
+        <input type="checkbox" name="international_assessor" {% if profile.international_assessor %}checked{% endif %}>
+        Available for international assessment
+      </label>
+      <button class="primary-button" type="submit">Save Profile</button>
+    </form>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

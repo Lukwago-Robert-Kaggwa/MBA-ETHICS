@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Previous Forms{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}{{ page_title }}{% endblock %}
+{% block page_subheading %}{% if student %}{{ student.email }}{% else %}Previous student submissions{% endif %}{% endblock %}
+
+{% block body %}
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Forms</h2>
+    <span>{{ submissions|length }}</span>
+  </div>
+  <div class="record-list">
+    {% for submission in submissions %}
+      {% include "ethics/_submission_card.html" %}
+    {% else %}
+      <p class="muted">No previous forms found.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

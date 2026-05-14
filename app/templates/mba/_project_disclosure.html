@@ -1,0 +1,44 @@
+{% macro user_name(user, fallback='Unassigned') -%}
+  {%- if user -%}
+    {%- set student_profile = user.student_profile if user.student_profile else none -%}
+    {%- set scholar_profile = user.scholar_profile if user.scholar_profile else none -%}
+    {%- set profile = student_profile or scholar_profile -%}
+    {%- set full_name = ((user.first_name or '') ~ (' ' ~ user.last_name if user.last_name else '')) | trim -%}
+    {%- set profile_name = ((profile.name or '') ~ (' ' ~ profile.surname if profile and profile.surname else '')) | trim if profile else '' -%}
+    {{- full_name or profile_name or user.email.split('@')[0] -}}
+  {%- else -%}
+    {{- fallback -}}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro project_disclosure(project, extra_class='') -%}
+<details class="project-disclosure{% if extra_class %} {{ extra_class }}{% endif %}">
+  <summary class="project-disclosure__summary">
+    <span class="project-disclosure__main">
+      <span class="project-disclosure__field project-disclosure__field--title">
+        <span class="project-disclosure__label">Project Title</span>
+        <span class="project-disclosure__value project-disclosure__title">{{ project.project_title }}</span>
+      </span>
+      <span class="project-disclosure__field">
+        <span class="project-disclosure__label">Student Name</span>
+        <span class="project-disclosure__value">{{ user_name(project.student, 'Unknown') }}</span>
+      </span>
+      <span class="project-disclosure__field">
+        <span class="project-disclosure__label">Supervisor</span>
+        <span class="project-disclosure__value">{{ user_name(project.primary_supervisor, 'Unassigned') }}</span>
+      </span>
+      <span class="project-disclosure__field project-disclosure__field--details">
+        <span class="project-disclosure__label">Project Details</span>
+        <span class="project-disclosure__value project-disclosure__details">{{ project.project_description or project.discipline_name or 'No project details captured yet.' }}</span>
+      </span>
+    </span>
+    <span class="project-disclosure__expand" aria-hidden="true">
+      <span class="project-disclosure__expand-closed">Expand</span>
+      <span class="project-disclosure__expand-open">Collapse</span>
+    </span>
+  </summary>
+  <div class="project-disclosure__content">
+    {{ caller() }}
+  </div>
+</details>
+{%- endmacro %}

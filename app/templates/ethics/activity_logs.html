@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Ethics Activity Logs{% endblock %}
+{% block app_name %}Ethics{% endblock %}
+{% block page_heading %}Activity Logs{% endblock %}
+{% block page_subheading %}All recorded Ethics user activity{% endblock %}
+
+{% block body %}
+{% include "ethics/_workflow.html" %}
+{% include "ethics/_kpis.html" %}
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Recent Activity</h2>
+    <span>{{ logs|length }} latest</span>
+  </div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Role</th>
+          <th>Action</th>
+          <th>Target</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+          <tr>
+            <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ log.user.email if log.user else 'Unknown' }}</td>
+            <td>{{ log.user.role.replace('_', ' ').title() if log.user else '-' }}</td>
+            <td><span class="status-pill">{{ log.action.replace('_', ' ').title() }}</span></td>
+            <td>{{ log.target_type or '-' }}{% if log.target_id %} #{{ log.target_id }}{% endif %}</td>
+            <td>{{ log.details or '-' }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="6" class="muted">No activity has been recorded yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

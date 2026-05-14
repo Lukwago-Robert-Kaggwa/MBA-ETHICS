@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}MBA Response to Assessors' Comments{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Response to Assessors' Comments{% endblock %}
+{% block page_subheading %}Review anonymous assessor comments and submit your corrected response pack{% endblock %}
+
+{% block body %}
+{% from "mba/_project_disclosure.html" import project_disclosure %}
+<div class="mba-page-stack">
+  <section class="ethics-panel">
+    <div class="panel-heading">
+      <h2>My Comment Response Capstone Projects</h2>
+      <span>{{ projects|length }}</span>
+    </div>
+    <div class="record-list">
+      {% for project in projects %}
+        {% set correction_status = project_corrections_status(project, forms_by_project=forms_by_project) %}
+        {% set corrected_doc = uploaded_doc_for(project, 'corrected_dissertation') %}
+        {% set response_doc = uploaded_doc_for(project, 'corrections_response') %}
+        {% set turnitin_doc = uploaded_doc_for(project, 'corrections_turnitin_report') %}
+        {% call project_disclosure(project, 'project-disclosure--student') %}
+        <article class="record-card">
+          <div class="record-card__top">
+            <div>
+              <h3>{{ project.project_title }}</h3>
+              <p>{{ project.discipline_name }}</p>
+            </div>
+            <span class="status-pill status-pill--{{ correction_status }}">{{ corrections_status_label(correction_status) }}</span>
+          </div>
+          <p class="muted" style="margin-top:-0.25rem;">
+            Capstone Project status: {{ project_status_label(project.project_status) }}
+            {% if correction_request_reference_time(project, forms_by_project=forms_by_project) %}
+            &middot; Comments released {{ project.corrections_released_to_student_at.strftime('%d %b %Y %H:%M') if project.corrections_released_to_student_at else correction_request_reference_time(project, forms_by_project=forms_by_project).strftime('%d %b %Y %H:%M') }}
+            {% endif %}
+          </p>
+
+          <details class="response-section" open>
+            <summary>Assessors' Comments</summary>
+            {% set anonymize_assessors = true %}
+            {% include "mba/_corrections_request_list.html" %}
+          </details>
+
+          <details class="response-section" open>
+            <summary>Your Resubmission</summary>
+            {% if corrected_doc or response_doc or turnitin_doc %}
+              <div class="invite-list" style="margin-top:0.5rem;">
+                {% if response_doc %}
+                  <div class="invite-row">
+                    <div>
+                      <strong>{{ document_label('corrections_response') }}</strong>
+                      <small>{{ response_doc.original_name }}</small>
+                    </div>
+                    <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=response_doc.id) }}" class="secondary-button small-button">Download</a>
+                  </div>
+                {% endif %}
+                {% if turnitin_doc %}
+                  <div class="invite-row">
+                    <div>
+                      <strong>{{ document_label('corrections_turnitin_report') }}</strong>
+                      <small>{{ turnitin_doc.original_name }}</small>
+                    </div>
+                    <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=turnitin_doc.id) }}" class="secondary-button small-button">Download</a>
+                  </div>
+                {% endif %}
+                {% if corrected_doc %}
+                  <div class="invite-row">
+                    <div>
+                      <strong>{{ document_label('corrected_dissertation') }}</strong>
+                      <small>{{ corrected_doc.original_name }}</small>
+                    </div>
+                    <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=corrected_doc.id) }}" class="secondary-button small-button">Download</a>
+                  </div>
+                {% endif %}
+              </div>
+            {% else %}
+              <p class="muted" style="margin-top:0.5rem;">No Response to Assessors' Comments submitted yet.</p>
+            {% endif %}
+
+            {% if supervisor_approved_corrections(project) %}
+              <p style="margin:0.75rem 0 0;color:var(--success,#2d7a3a);font-weight:600;">
+                Your supervisor approved this corrections submission{% if project.corrections_supervisor_approved_at %} on {{ project.corrections_supervisor_approved_at.strftime('%d %b %Y %H:%M') }}{% endif %}.
+              </p>
+              {% if project.corrections_supervisor_comments %}
+                <p class="muted" style="margin-top:0.35rem;white-space:pre-wrap;">{{ project.corrections_supervisor_comments }}</p>
+              {% endif %}
+            {% elif supervisor_rejected_corrections(project) %}
+              <p style="margin:0.75rem 0 0;color:var(--danger,#b91c1c);font-weight:700;">
+                Your supervisor returned this corrections submission{% if project.corrections_supervisor_rejected_at %} on {{ project.corrections_supervisor_rejected_at.strftime('%d %b %Y %H:%M') }}{% endif %}.
+              </p>
+              {% if project.corrections_supervisor_rejection_comments %}
+                <p class="muted" style="margin-top:0.35rem;white-space:pre-wrap;">{{ project.corrections_supervisor_rejection_comments }}</p>
+              {% endif %}
+            {% elif student_submitted_corrections_pack(project) %}
+              <p class="muted" style="margin-top:0.75rem;">Your corrections pack is uploaded and waiting for supervisor approval.</p>
+            {% elif student_submitted_corrections_response(project) %}
+              <p class="muted" style="margin-top:0.75rem;">Your response and resubmitted Turnitin report are on file. Please resubmit the full pack with the corrected Capstone Manuscript.</p>
+            {% endif %}
+          </details>
+
+          {% if not supervisor_approved_corrections(project) %}
+            <section class="response-section">
+              <strong>Response to Assessors' Comments</strong>
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                Upload the corrected Capstone Manuscript, fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report in the app.
+              </p>
+              <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='corrections_response') }}" class="primary-button small-button" style="display:inline-block;">
+                {% if supervisor_rejected_corrections(project) %}Revise and Resubmit Corrected Pack{% elif student_submitted_corrections_response(project) %}Edit and Resubmit Corrected Pack{% else %}Fill Response Form{% endif %}
+              </a>
+            </section>
+          {% endif %}
+        </article>
+        {% endcall %}
+      {% else %}
+        <p class="muted">No assessor comments have been released to you right now.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}
