@@ -1,6 +1,6 @@
 import csv
 from html import escape as html_escape
-from io import BytesIO, StringIO, TextIOWrapper
+from io import BytesIO, TextIOWrapper
 import secrets
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 import xml.etree.ElementTree as ET
@@ -277,39 +277,6 @@ def _staff_names_from_row(row):
     return (
         (row.get("first_name") or row.get("name") or "").strip() or None,
         (row.get("last_name") or row.get("surname") or "").strip() or None,
-    )
-
-
-def _build_csv_template(filename, sample_email):
-    output = StringIO()
-    writer = csv.DictWriter(output, fieldnames=STAFF_TEMPLATE_FIELDS, lineterminator="\n")
-    writer.writeheader()
-    writer.writerow(
-        {
-            "email": sample_email,
-            "first_name": "Jane",
-            "last_name": "Scholar",
-            "title": "Dr",
-            "contact": "0110000000",
-            "department": "Business Management",
-            "position": "Senior Lecturer",
-            "qualification": "PhD",
-            "affiliation": "University of Johannesburg",
-            "skills": "Qualitative research; strategy",
-            "research_themes": "Strategy; leadership",
-            "research_interests": "Digital transformation; governance",
-            "research_disciplines": "Strategic Management",
-            "students_supervised_total": "18",
-            "students_assessed_total": "27",
-            "publication_count": "14",
-            "selected_publications": "Strategic Innovation In Emerging Markets; Governance And Growth In Banking",
-            "scholarly_profile_links": "https://orcid.org/0000-0000-0000-0000",
-        }
-    )
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -937,22 +904,6 @@ def _read_xlsx_rows(uploaded_file):
     return rows
 
 
-def _xlsx_dict_rows(uploaded_file):
-    rows = _read_xlsx_rows(uploaded_file)
-    if not rows:
-        return []
-    headers = [str(value or "").strip().lower() for value in rows[0]]
-    return [
-        {
-            headers[index]: value
-            for index, value in enumerate(row)
-            if index < len(headers) and headers[index]
-        }
-        for row in rows[1:]
-        if any(str(value or "").strip() for value in row)
-    ]
-
-
 def _xlsx_dict_rows_and_fields(uploaded_file):
     rows = _read_xlsx_rows(uploaded_file)
     if not rows:
@@ -1158,6 +1109,11 @@ def admin_reminder_email_message(item):
         action_text = "Please sign in to the MBA system to accept or decline the supervisor invitation."
     elif kind == "assessor_invitation":
         action_text = "Please sign in to the MBA system to accept or decline the assessor invitation and submit the required acceptance pack."
+    elif kind == "moodle_manuscript_submission":
+        action_text = (
+            "Please submit the Capstone Manuscript through Moodle. Do not upload the Capstone Manuscript "
+            "in the MBA system; upload only the required supporting documents there."
+        )
     elif kind == "corrections_response":
         action_text = "Please upload the corrected Capstone Manuscript, fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report in the MBA system."
     elif kind == "assessment_summary_release":

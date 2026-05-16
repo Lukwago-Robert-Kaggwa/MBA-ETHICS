@@ -7,6 +7,7 @@
 {% block body %}
 {% set supervisor_signature_mode = supervisor_signature_mode|default(false) %}
 {% set hdc_signature_mode = hdc_signature_mode|default(false) %}
+{% set form_selection_saved = 'register_title_supervisors' in prefill or 'amend_title' in prefill or 'amend_supervisors' in prefill %}
 {% set current_study_type = prefill.get('study_type', 'Capstone Project') %}
 {% set current_4ir = prefill.get('is_4ir_research', 'No') %}
 {% set current_secondary_focus = prefill.get('has_secondary_focus', 'No') %}
@@ -34,7 +35,7 @@
           <tr>
             <td>
               <label style="display:flex;align-items:center;gap:10px;font-weight:700;">
-                <input type="checkbox" name="register_title_supervisors" value="1" style="width:auto;margin:0;" {% if prefill.get('register_title_supervisors') or (not prefill.get('amend_title') and not prefill.get('amend_supervisors')) %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
+                <input type="checkbox" name="register_title_supervisors" value="1" style="width:auto;margin:0;" {% if prefill.get('register_title_supervisors') or (not form_selection_saved and not prefill.get('amend_title') and not prefill.get('amend_supervisors')) %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
                 <span>Registration of Title / Supervisor/s (Section B)</span>
               </label>
             </td>
@@ -77,8 +78,8 @@
           <tr>
             <td class="mba-doc-label">Initials(s)</td>
             <td><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
-            <td class="mba-doc-label">Date of first registration (e.g. Feb 2021)</td>
-            <td><input class="mba-doc-input" name="date_of_first_registration" value="{{ prefill.get('date_of_first_registration', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td class="mba-doc-label">Date of first registration</td>
+            <td><input class="mba-doc-input" type="date" name="date_of_first_registration" value="{{ prefill.get('date_of_first_registration', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Student number</td>

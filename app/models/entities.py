@@ -255,35 +255,6 @@ class MbaProject(db.Model):
     supervisor_title_change_resolved_at = db.Column(db.DateTime, nullable=True)
 
     @property
-    def can_confirm_assessors(self):
-        # HDC must approve JBS5, then the student must submit JBS10 and Intent to Submit.
-        student_doc_types = {
-            doc.doc_type
-            for doc in self.documents
-            if doc.uploaded_by_id == self.student_id
-        }
-        hdc_declined_nomination = (
-            self.project_status == ProjectStatus.HDC_DECLINED.value or
-            self.assessor_1_hdc_decision == "declined" or
-            self.assessor_2_hdc_decision == "declined"
-        )
-        assessor_revision_needed = (
-            self.assessor_1_invitation_status == "declined" or
-            self.assessor_2_invitation_status == "declined"
-        )
-        return (
-            self.jbs5_hdc_approved_at is not None and
-            'jbs10' in student_doc_types and
-            'intent_to_submit' in student_doc_types and
-            (self.supervisor_confirmed or self.supervisor_accepted_at is not None) and
-            (not self.assessors_confirmed or hdc_declined_nomination or assessor_revision_needed) and
-            (hdc_declined_nomination or assessor_revision_needed or not (
-                self.assessor_1_invitation_status == "accepted" and
-                self.assessor_2_invitation_status == "accepted"
-            ))
-        )
-
-    @property
     def dissertation_pack_submitted(self):
         student_doc_types = {
             doc.doc_type

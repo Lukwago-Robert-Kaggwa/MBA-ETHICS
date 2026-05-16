@@ -1,6 +1,6 @@
 (function () {
   const invalidMessage =
-    "Please edit the Capstone Project title. Use full words only with letters, numbers, and spaces. Acronyms, abbreviations, and special characters are not allowed.";
+    "Please edit the Capstone Project title. Use full words only with letters, numbers, spaces, commas, and hyphens. Acronyms, abbreviations, and other special characters are not allowed.";
   const titleLengthMessage = "Capstone Project title must be 15 words or fewer.";
   const commonAcronyms = new Set([
     "ai",
@@ -48,16 +48,18 @@
   ]);
 
   function hasAcronymOrAbbreviation(word) {
-    const letters = word.replace(/[^A-Za-z]/g, "");
-    if (commonAcronyms.has(word.toLowerCase())) return true;
-    const uppercaseCount = Array.from(letters).filter((char) => /[A-Z]/.test(char)).length;
-    return letters.length > 1 && uppercaseCount >= 2;
+    return word.split(/[,-]+/).some((part) => {
+      const letters = part.replace(/[^A-Za-z]/g, "");
+      if (commonAcronyms.has(part.toLowerCase())) return true;
+      const uppercaseCount = Array.from(letters).filter((char) => /[A-Z]/.test(char)).length;
+      return letters.length > 1 && uppercaseCount >= 2;
+    });
   }
 
   function validationError(value) {
     const normalized = String(value || "").trim().replace(/\s+/g, " ");
     if (!normalized) return "";
-    if (/[^A-Za-z0-9\s]/.test(normalized)) return invalidMessage;
+    if (/[^A-Za-z0-9\s,-]/.test(normalized)) return invalidMessage;
     if (normalized.split(" ").some(hasAcronymOrAbbreviation)) return invalidMessage;
     const wordCount = normalized.split(" ").filter(Boolean).length;
     if (wordCount > 15) return titleLengthMessage;
@@ -65,13 +67,18 @@
   }
 
   function capitalizeWord(word) {
-    const lowered = word.toLowerCase();
-    for (let index = 0; index < lowered.length; index += 1) {
-      if (/[A-Za-z]/.test(lowered[index])) {
-        return lowered.slice(0, index) + lowered[index].toUpperCase() + lowered.slice(index + 1);
-      }
-    }
-    return lowered;
+    return word
+      .split("-")
+      .map((part) => {
+        const lowered = part.toLowerCase();
+        for (let index = 0; index < lowered.length; index += 1) {
+          if (/[A-Za-z]/.test(lowered[index])) {
+            return lowered.slice(0, index) + lowered[index].toUpperCase() + lowered.slice(index + 1);
+          }
+        }
+        return lowered;
+      })
+      .join("-");
   }
 
   function formatProjectTitle(value) {

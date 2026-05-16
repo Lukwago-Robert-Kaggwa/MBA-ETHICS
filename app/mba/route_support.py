@@ -102,12 +102,12 @@ HDC_DOCUMENT_ALLOWED_STATUSES = {
     ProjectStatus.GRADUATED.value,
 }
 PROJECT_TITLE_FORMAT_HELP = (
-    "Use full words only. Acronyms, abbreviations, and special characters are not allowed. "
+    "Use full words only. Acronyms, abbreviations, and special characters except commas and hyphens are not allowed. "
     "The system will capitalize the first letter of each word. Keep the title to 12 words where possible; maximum 15 words."
 )
 PROJECT_TITLE_INVALID_MESSAGE = (
-    "Please edit the Capstone Project title. Use full words only with letters, numbers, and spaces. "
-    "Acronyms, abbreviations, and special characters are not allowed."
+    "Please edit the Capstone Project title. Use full words only with letters, numbers, spaces, commas, and hyphens. "
+    "Acronyms, abbreviations, and other special characters are not allowed."
 )
 PROJECT_TITLE_RECOMMENDED_WORDS = 12
 PROJECT_TITLE_MAX_WORDS = 15
@@ -221,7 +221,7 @@ ADDITIONAL_ASSESSMENT_STATUS_LABELS = {
     "none": "No Additional Assessment",
 }
 
-FORM_RENDER_VERSION = "v7"
+FORM_RENDER_VERSION = "v8"
 FORM_HTML_PRINT_TEMPLATES = {
     "jbs5": "mba/form_fill_jbs5.html",
     "jbs10": "mba/form_fill_jbs10.html",
@@ -485,20 +485,26 @@ def append_comment(existing, comment):
 
 
 def _format_project_title_word(word):
-    lowered = word.lower()
-    for index, char in enumerate(lowered):
-        if char.isalpha():
-            return f"{lowered[:index]}{char.upper()}{lowered[index + 1:]}"
-    return lowered
+    parts = []
+    for part in word.split("-"):
+        lowered = part.lower()
+        for index, char in enumerate(lowered):
+            if char.isalpha():
+                parts.append(f"{lowered[:index]}{char.upper()}{lowered[index + 1:]}")
+                break
+        else:
+            parts.append(lowered)
+    return "-".join(parts)
 
 
 def _project_title_word_has_acronym_or_abbreviation(word):
-    letters = "".join(char for char in word if char.isalpha())
-    lowered = word.lower()
-    if lowered in PROJECT_TITLE_COMMON_ACRONYMS:
-        return True
-    if len(letters) > 1 and sum(1 for char in letters if char.isupper()) >= 2:
-        return True
+    for part in re.split(r"[,-]+", word):
+        letters = "".join(char for char in part if char.isalpha())
+        lowered = part.lower()
+        if lowered in PROJECT_TITLE_COMMON_ACRONYMS:
+            return True
+        if len(letters) > 1 and sum(1 for char in letters if char.isupper()) >= 2:
+            return True
     return False
 
 
@@ -506,7 +512,7 @@ def project_title_validation_error(title):
     normalized = " ".join(str(title or "").split())
     if not normalized:
         return "Capstone Project title is required."
-    if re.search(r"[^A-Za-z0-9\s]", normalized):
+    if re.search(r"[^A-Za-z0-9\s,-]", normalized):
         return PROJECT_TITLE_INVALID_MESSAGE
     if any(_project_title_word_has_acronym_or_abbreviation(word) for word in normalized.split()):
         return PROJECT_TITLE_INVALID_MESSAGE
@@ -590,6 +596,70 @@ def _form_print_styles():
         .mba-doc-paper { box-shadow: none; border-radius: 0; }
         .mba-doc-actions { display: none !important; }
         .primary-button, .secondary-button { display: none !important; }
+        body.mba-print-body .mba-doc-page {
+          width: 100%;
+          max-width: none;
+        }
+        body.mba-print-body .mba-doc-paper {
+          border: 0;
+          padding: 0;
+        }
+        body.mba-print-body .mba-doc-table {
+          width: 100%;
+          table-layout: fixed;
+        }
+        body.mba-print-body .mba-doc-table th,
+        body.mba-print-body .mba-doc-table td {
+          overflow-wrap: anywhere;
+          word-break: normal;
+        }
+        body.mba-print-body .mba-doc-checkline,
+        body.mba-print-body label {
+          break-inside: avoid;
+        }
+        body.mba-print-body .mba-print-value {
+          box-sizing: border-box;
+          display: block;
+          width: 100%;
+          min-width: 0;
+          min-height: 1.9em;
+          padding: 4px 2px;
+          border: 0;
+          border-bottom: 1px solid #111827;
+          color: #111827;
+          background: transparent;
+          line-height: 1.4;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          word-break: normal;
+        }
+        body.mba-print-body .mba-print-value--textarea {
+          min-height: 3.6em;
+          padding: 8px 10px;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+        }
+        body.mba-print-body .mba-print-check {
+          box-sizing: border-box;
+          display: inline-flex;
+          width: 14px;
+          height: 14px;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          margin: 0 6px 0 0;
+          border: 1px solid #111827;
+          color: #111827;
+          font-size: 10px;
+          line-height: 1;
+          vertical-align: -2px;
+        }
+        body.mba-print-body .mba-print-check--checkbox {
+          border-radius: 2px;
+        }
+        body.mba-print-body .mba-print-check--radio {
+          border-radius: 999px;
+        }
         input, textarea, select { caret-color: transparent; }
         body.mba-print-body input,
         body.mba-print-body textarea,
@@ -628,6 +698,90 @@ def _replace_form_logo(fragment, logo_mode="web"):
             encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
             data_uri = f"data:image/{logo_path.suffix.lstrip('.').lower() or 'png'};base64,{encoded}"
             fragment = fragment.replace(logo_url, data_uri)
+    return fragment
+
+
+def _html_attr_value(attrs, attr_name):
+    match = re.search(
+        rf'\b{re.escape(attr_name)}\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))',
+        attrs or "",
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    return next((value for value in match.groups() if value is not None), "")
+
+
+def _html_has_attr(attrs, attr_name):
+    return bool(
+        re.search(
+            rf'\b{re.escape(attr_name)}(?:\s*=|\b)',
+            attrs or "",
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _print_value_html(value_html, modifier=""):
+    value_html = value_html if str(value_html or "").strip() else "&nbsp;"
+    class_name = "mba-print-value"
+    if modifier:
+        class_name = f"{class_name} {class_name}--{modifier}"
+    return f'<div class="{class_name}">{value_html}</div>'
+
+
+def _replace_print_form_controls(fragment):
+    def replace_textarea(match):
+        return _print_value_html(match.group(2), "textarea")
+
+    def replace_select(match):
+        option_matches = list(
+            re.finditer(
+                r"<option\b([^>]*)>(.*?)</option>",
+                match.group(2),
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+        )
+        selected_option = next(
+            (option for option in option_matches if _html_has_attr(option.group(1), "selected")),
+            None,
+        )
+        if not selected_option and option_matches:
+            selected_option = option_matches[0]
+        selected_text = ""
+        if selected_option:
+            selected_text = re.sub(r"<[^>]+>", "", selected_option.group(2)).strip()
+            if not _html_attr_value(selected_option.group(1), "value") and selected_text.lower().startswith("select"):
+                selected_text = ""
+        return _print_value_html(selected_text)
+
+    def replace_input(match):
+        attrs = match.group(1)
+        input_type = (_html_attr_value(attrs, "type") or "text").lower()
+        if input_type in {"hidden", "submit", "button", "reset", "file"}:
+            return ""
+        if input_type in {"checkbox", "radio"}:
+            is_checked = _html_has_attr(attrs, "checked")
+            class_name = f"mba-print-check mba-print-check--{input_type}"
+            if is_checked:
+                class_name = f"{class_name} is-checked"
+            mark = "&#10003;" if input_type == "checkbox" and is_checked else ("&#9679;" if is_checked else "")
+            return f'<span class="{class_name}" aria-hidden="true">{mark}</span>'
+        return _print_value_html(_html_attr_value(attrs, "value"))
+
+    fragment = re.sub(
+        r"<textarea\b([^>]*)>(.*?)</textarea>",
+        replace_textarea,
+        fragment,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    fragment = re.sub(
+        r"<select\b([^>]*)>(.*?)</select>",
+        replace_select,
+        fragment,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    fragment = re.sub(r"<input\b([^>]*)>", replace_input, fragment, flags=re.IGNORECASE)
     return fragment
 
 
@@ -772,6 +926,8 @@ def _build_html_form_fragment(project, form_type, payload, logo_mode="web"):
         return None
     fragment = _replace_form_logo(fragment, logo_mode=logo_mode)
     fragment = re.sub(r"<script\b[^>]*>.*?</script>", "", fragment, flags=re.DOTALL)
+    if logo_mode != "web":
+        fragment = _replace_print_form_controls(fragment)
     return fragment
 
 
@@ -1003,35 +1159,6 @@ def _build_pdf_from_page_streams(page_streams, marker=None):
     return bytes(pdf)
 
 
-def generate_simple_pdf_bytes(title, lines):
-    """Generate a visible text PDF without external dependencies."""
-    visible_lines = []
-    for raw_line in [title, ""] + list(lines or []):
-        raw_line = str(raw_line or "")
-        if not raw_line:
-            visible_lines.append("")
-            continue
-        wrapped = textwrap.wrap(raw_line, width=88, break_long_words=False, replace_whitespace=False)
-        visible_lines.extend(wrapped or [raw_line])
-
-    lines_per_page = 42
-    pages = [
-        visible_lines[index : index + lines_per_page]
-        for index in range(0, max(len(visible_lines), 1), lines_per_page)
-    ]
-
-    page_streams = []
-    for index, page_lines in enumerate(pages):
-        commands = ["BT", "/F1 11 Tf", "54 742 Td"]
-        for line_index, line in enumerate(page_lines):
-            if line_index:
-                commands.append("0 -16 Td")
-            commands.append(f"({_pdf_text(line)}) Tj")
-        commands.append("ET")
-        page_streams.append("\n".join(commands))
-    return _build_pdf_from_page_streams(page_streams)
-
-
 FORM_PDF_DEFINITIONS = {
     "jbs5": {
         "title": "Form JBS5 - Registration of Title / Amendment of Title / Amendment of Supervisor(s)",
@@ -1052,7 +1179,7 @@ FORM_PDF_DEFINITIONS = {
                     ("surname", "Surname", "text"),
                     ("student_title", "Title (e.g. Mr / Mrs)", "text"),
                     ("student_initials", "Initials(s)", "text"),
-                    ("date_of_first_registration", "Date of first registration", "text"),
+                    ("date_of_first_registration", "Date of first registration", "date"),
                     ("student_number", "Student Number", "text"),
                     ("qualification", "Qualification (e.g. MBA)", "text"),
                     ("discipline", "Discipline / Qualifier", "text"),
@@ -2470,10 +2597,6 @@ def assessor_narrative_doc_type(slot):
     return f"assessor_narrative_{slot}"
 
 
-def assessor_banking_doc_type(slot):
-    return f"assessor_banking_{slot}"
-
-
 def assessor_temp_appointment_doc_type(slot):
     return f"assessor_temp_appointment_{slot}"
 
@@ -2903,32 +3026,6 @@ def hdc_can_access_document(project, doc_type):
     return False
 
 
-def hdc_review_state(project):
-    if not project:
-        return "all"
-    status = str(project.project_status or "")
-    if status in {
-        ProjectStatus.JBS5_SUBMITTED_TO_HDC.value,
-        ProjectStatus.ADMIN_APPROVED.value,
-        ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value,
-    }:
-        return "pending_review"
-    if status in {
-        ProjectStatus.JBS5_HDC_DECLINED.value,
-        ProjectStatus.HDC_DECLINED.value,
-        ProjectStatus.RESULTS_DECLINED.value,
-    }:
-        return "rejected"
-    if status in {
-        ProjectStatus.JBS5_HDC_APPROVED.value,
-        ProjectStatus.HDC_VERIFIED.value,
-        ProjectStatus.RESULTS_APPROVED.value,
-        ProjectStatus.GRADUATED.value,
-    }:
-        return "approved"
-    return "all"
-
-
 def student_has_uploaded_doc(project, doc_key):
     if project and project.id and project.student_id:
         return (
@@ -3182,14 +3279,6 @@ def supervisor_can_manage_corrections(project, user):
 
 def assessor_slots_for_user(project, user_id):
     return [slot for slot in ALL_ASSESSOR_SLOTS if getattr(project, f"{slot}_id") == user_id]
-
-
-def all_assessors_assigned(project):
-    return all(getattr(project, f"{slot}_id") for slot in ASSESSOR_SLOTS)
-
-
-def all_assessors_accepted(project):
-    return all(getattr(project, f"{slot}_invitation_status") == INVITATION_ACCEPTED for slot in ASSESSOR_SLOTS)
 
 
 def all_assessment_results_received(project):
@@ -3526,24 +3615,6 @@ def paginate_query(
     offset = max(pagination["start_index"] - 1, 0)
     items = query.offset(offset).limit(pagination["per_page"]).all()
     return items, pagination
-
-
-def sync_invitation_statuses(project, previous_assignments):
-    for slot, meta in INVITATION_SLOTS.items():
-        id_field = meta["id_field"]
-        status_field = meta["status_field"]
-        new_assignee_id = getattr(project, id_field)
-        old_assignee_id = previous_assignments.get(id_field)
-        current_status = getattr(project, status_field)
-
-        if not new_assignee_id:
-            setattr(project, status_field, None)
-            continue
-        if new_assignee_id != old_assignee_id:
-            setattr(project, status_field, INVITATION_PENDING)
-            continue
-        if current_status not in {INVITATION_PENDING, INVITATION_ACCEPTED, INVITATION_DECLINED}:
-            setattr(project, status_field, INVITATION_PENDING)
 
 
 def reset_invitation_tracking(project):
@@ -3964,6 +4035,10 @@ def reminder_elapsed_label(sent_at, reference_time=None):
     return f"{minutes} minute{'s' if minutes != 1 else ''}"
 
 
+def _reminder_reference_time(*timestamps):
+    return next((timestamp for timestamp in timestamps if timestamp), None)
+
+
 def _reminder_state_map():
     return {state.reminder_key: state for state in MbaReminderState.query.all()}
 
@@ -4033,9 +4108,15 @@ def admin_pending_reminder_items(reference_time=None):
     for project in projects:
         for invitation in getattr(project, "supervisor_invitations", []) or []:
             supervisor = invitation.supervisor
+            sent_at = _reminder_reference_time(
+                invitation.invited_at,
+                getattr(project, "invitations_sent_at", None),
+                getattr(project, "updated_at", None),
+                getattr(project, "created_at", None),
+            )
             if (
                 supervisor_invitation_is_still_valid(project, invitation)
-                and invitation.invited_at
+                and sent_at
                 and supervisor
                 and supervisor.email
             ):
@@ -4046,7 +4127,7 @@ def admin_pending_reminder_items(reference_time=None):
                     project=project,
                     recipient_email=supervisor.email,
                     recipient_name=_user_display(supervisor),
-                    sent_at=invitation.invited_at,
+                    sent_at=sent_at,
                     state_map=state_map,
                     reference_time=reference_time,
                     meta={"invitation_id": invitation.id},
@@ -4056,11 +4137,18 @@ def admin_pending_reminder_items(reference_time=None):
 
         for slot in required_assessor_slots(project):
             assessor = getattr(project, slot, None)
+            sent_at = _reminder_reference_time(
+                getattr(project, f"{slot}_invited_at", None),
+                getattr(project, "assessors_nominated_at", None),
+                getattr(project, "invitations_sent_at", None),
+                getattr(project, "updated_at", None),
+                getattr(project, "created_at", None),
+            )
             if (
                 assessor
                 and assessor.email
                 and getattr(project, f"{slot}_invitation_status") == INVITATION_PENDING
-                and getattr(project, f"{slot}_invited_at")
+                and sent_at
             ):
                 item = _reminder_item(
                     key=f"assessor_invitation:{project.id}:{slot}:{assessor.id}",
@@ -4069,7 +4157,7 @@ def admin_pending_reminder_items(reference_time=None):
                     project=project,
                     recipient_email=assessor.email,
                     recipient_name=_user_display(assessor),
-                    sent_at=getattr(project, f"{slot}_invited_at"),
+                    sent_at=sent_at,
                     state_map=state_map,
                     reference_time=reference_time,
                     meta={"slot": slot},
@@ -4095,6 +4183,29 @@ def admin_pending_reminder_items(reference_time=None):
                 state_map=state_map,
                 reference_time=reference_time,
                 meta={"token": project.module_completion_verification_token},
+            )
+            if item:
+                items.append(item)
+
+        if (
+            project.dissertation_moodle_request_sent_at
+            and project.student
+            and project.student.email
+            and not uploaded_doc_for(project, "dissertation")
+        ):
+            item = _reminder_item(
+                key=(
+                    "moodle_manuscript_submission:"
+                    f"{project.id}:{project.dissertation_moodle_request_sent_at.isoformat()}"
+                ),
+                kind="moodle_manuscript_submission",
+                type_label="Moodle Capstone Submission",
+                project=project,
+                recipient_email=project.student.email,
+                recipient_name=_user_display(project.student),
+                sent_at=project.dissertation_moodle_request_sent_at,
+                state_map=state_map,
+                reference_time=reference_time,
             )
             if item:
                 items.append(item)

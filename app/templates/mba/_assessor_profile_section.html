@@ -21,7 +21,6 @@
 {% if not readonly_mode %}
   <input type="hidden" name="slot_label" value="{{ prefill.get('slot_label', slot_label) }}">
   <input type="hidden" name="student_name" value="{{ prefill.get('student_name', '') }}">
-  <input type="hidden" name="assessor_profile_date" value="{{ prefill.get('assessor_profile_date', '') }}">
   <input type="hidden" name="assessor_signature_name" value="{{ prefill.get('assessor_signature_name', prefill.get('assessor_name', '')) }}">
 {% endif %}
 
@@ -205,6 +204,10 @@
 </table>
 
 {% if not readonly_mode %}
+  <label class="mba-doc-inline-field mba-doc-inline-field--date" style="margin-top:1rem;">
+    <span>Assessor profile date <span style="color:red;">*</span></span>
+    <input class="mba-doc-input" type="date" name="assessor_profile_date" value="{{ prefill.get('assessor_profile_date', '') }}" required>
+  </label>
   <label class="mba-doc-checkline" style="margin-top:1rem;">
     <span>I confirm the external examiner nomination form above is complete and accurate. <span style="color:red;">*</span></span>
     <input class="mba-doc-checkbox" type="checkbox" name="assessor_profile_declaration" value="1" {% if prefill.get('assessor_profile_declaration') %}checked{% endif %} required>

@@ -86,7 +86,7 @@
             <td class="mba-doc-label">Identity / Passport Number</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('identity_passport_number','') }}" readonly></td>
             <td class="mba-doc-label">Date of Birth</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('date_of_birth','') }}" readonly></td>
+            <td><input class="mba-doc-input" type="date" value="{{ prefill.get('date_of_birth','') }}" readonly></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Work Visa Number</td>
@@ -202,7 +202,7 @@
           </tr>
           <tr>
             <td class="mba-doc-label">Awarded Date</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('qualification_awarded_date','') }}" readonly></td>
+            <td><input class="mba-doc-input" type="date" value="{{ prefill.get('qualification_awarded_date','') }}" readonly></td>
             <td class="mba-doc-label">Status</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('qualification_status','') }}" readonly></td>
           </tr>
@@ -265,9 +265,9 @@
           </tr>
           <tr>
             <td class="mba-doc-label">Start Date</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('appointment_start_date','') }}" readonly></td>
+            <td><input class="mba-doc-input" type="date" value="{{ prefill.get('appointment_start_date','') }}" readonly></td>
             <td class="mba-doc-label">End Date</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('appointment_end_date','') }}" readonly></td>
+            <td><input class="mba-doc-input" type="date" value="{{ prefill.get('appointment_end_date','') }}" readonly></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Reason for Temporary Employment</td>
@@ -330,7 +330,7 @@
           <tr>
             <td><input class="mba-doc-input" value="{{ prefill.get('employee_signature_name','') }}" readonly></td>
             <td><input class="mba-doc-input" value="{{ prefill.get('employee_signature_name','') }}" readonly></td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('employee_signature_date','') }}" readonly></td>
+            <td><input class="mba-doc-input" type="date" value="{{ prefill.get('employee_signature_date','') }}" readonly></td>
           </tr>
         </table>
 

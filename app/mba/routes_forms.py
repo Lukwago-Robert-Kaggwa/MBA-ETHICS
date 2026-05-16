@@ -598,6 +598,8 @@ def fill_project_form(project_id, form_type):
         }
         title_was_formatted = False
         if form_type == "jbs5":
+            for checkbox_field in ("register_title_supervisors", "amend_title", "amend_supervisors"):
+                payload[checkbox_field] = "1" if request.form.get(checkbox_field) else ""
             raw_research_title = payload.get("research_title", "")
             title_error = project_title_validation_error(raw_research_title)
             if title_error:
@@ -870,11 +872,9 @@ def hdc_sign_project_form(project_id, form_type):
     allowed_statuses = {
         "jbs5": {
             ProjectStatus.JBS5_SUBMITTED_TO_HDC.value,
-            ProjectStatus.JBS5_HDC_DECLINED.value,
         },
         "jbs10": {
             ProjectStatus.ADMIN_APPROVED.value,
-            ProjectStatus.HDC_DECLINED.value,
         },
     }
     if project.project_status not in allowed_statuses[form_type]:

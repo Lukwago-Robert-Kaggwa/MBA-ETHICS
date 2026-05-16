@@ -188,7 +188,7 @@
           {% endif %}
         </details>
 
-        {% if project.project_status in ['jbs5_submitted_to_hdc', 'jbs5_hdc_declined'] %}
+        {% if project.project_status == 'jbs5_submitted_to_hdc' %}
           <section class="response-section">
             <strong>HDC JBS5 Review</strong>
             <p class="muted" style="margin:0.5rem 0 0.75rem;">
@@ -196,7 +196,11 @@
             </p>
             <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs5') }}" class="primary-button small-button">Open JBS5 for HDC Review</a>
           </section>
-        {% elif project.project_status in ['admin_approved', 'hdc_declined'] %}
+        {% elif project.project_status == 'jbs5_hdc_declined' %}
+          <p class="muted">
+            JBS5 was returned with HDC feedback. Wait for the student, supervisor, and MBA Admin to submit the corrected JBS5 before recording another HDC decision.
+          </p>
+        {% elif project.project_status == 'admin_approved' %}
           <form action="{{ url_for('mba.hdc_project_action', project_id=project.id) }}" method="post" class="form-stack compact-form">
             <label>HDC nomination comment <textarea name="comment" rows="2"></textarea></label>
             <div class="invite-list">
@@ -229,6 +233,10 @@
               Use the assessor buttons for individual nomination decisions. Final approval or return of the nomination set must be completed on the opened JBS10 form because it contains a JBS HDC signature section.
             </p>
           </form>
+        {% elif project.project_status == 'hdc_declined' %}
+          <p class="muted">
+            Assessor nominations were returned with HDC feedback. Wait for MBA Admin to replace any declined assessor and resubmit the nomination set before recording another HDC decision.
+          </p>
         {% elif project.project_status == 'results_submitted_to_hdc' %}
           <form action="{{ url_for('mba.hdc_project_action', project_id=project.id) }}" method="post" class="form-stack compact-form">
             <label>HDC results comment <textarea name="comment" rows="2"></textarea></label>

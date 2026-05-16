@@ -519,6 +519,15 @@ def admin_project_action(project_id):
         "apply_suggestions",
         "send_invitations",
         "unlock_supervisor",
+        "override_supervisor",
+        "revise_supervisors",
+        "multi_invite_supervisors",
+        "unlock_assessors",
+        "confirm_assessors",
+        "override_assessors",
+        "invite_single_assessor_1",
+        "invite_single_assessor_2",
+        "decline",
         "reopen_dissertation_submission",
         "mark_modules_completed",
         "set_marks_committee_awaiting",
@@ -530,157 +539,229 @@ def admin_project_action(project_id):
 
     supervisor_change_locked = _student_submitted_accepted_supervisor_agreement(project)
     supervisor_change_actions = {
-        "override_supervisor",
-        "revise_supervisors",
-        "multi_invite_supervisors",
+        "invite_selected_supervisors",
+        "invite_suggested_supervisors",
     }
     if action in supervisor_change_actions and supervisor_change_locked:
         flash(
-            "Supervisors can no longer be revised or overridden because the student has submitted the accepted Supervisor Agreement.",
+            "Supervisor invitations can no longer be changed because the student has submitted the accepted Supervisor Agreement.",
             "error",
         )
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
-    single_assessor_invite_actions = {
-        "invite_single_assessor_1": "assessor_1",
-        "invite_single_assessor_2": "assessor_2",
-    }
-    assessor_change_actions = {"unlock_assessors", "confirm_assessors", "override_assessors", *single_assessor_invite_actions}
+    assessor_invite_actions = {"invite_selected_assessors", "invite_suggested_assessors"}
     assessor_change_locked = (
         accepted_assessor_count(project) >= len(PRIMARY_ASSESSOR_SLOTS)
         and not hdc_declined_assessor_nomination(project)
         and not hdc_declined_assessor_slots(project)
     )
-    if action in assessor_change_actions and assessor_change_locked:
+    if action in assessor_invite_actions and assessor_change_locked:
         flash(
-            "Assessors can no longer be revised because both assessors have accepted their invitations.",
+            "Assessor invitations can no longer be changed because both assessors have accepted their invitations.",
             "error",
         )
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
-    if action == "decline":
-        reset_jbs5_review_state(project, clear_supervisor_signature=True, clear_hdc_signature=True)
-        project.project_status = ProjectStatus.ADMIN_DECLINED.value
-        if comment:
-            project.comments = append_comment(project.comments, f"{current_user.email}: {comment}")
-        db.session.commit()
-        flash("Project sent back to student.", "success")
-        return redirect(url_for("mba.admin_dashboard"))
-
-    supervisor_id = request.form.get("supervisor_id", type=int)
-    assessor_fields_present = any(f"assessor_{index}_id" in request.form for index in range(1, 3))
-    if assessor_fields_present and assessor_change_locked:
-        flash(
-            "Assessors can no longer be revised because both assessors have accepted their invitations.",
-            "error",
-        )
-        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+    selected_supervisor_ids = []
+    for supervisor_id in request.form.getlist("supervisor_ids"):
+        try:
+            selected_supervisor_ids.append(int(supervisor_id))
+        except (TypeError, ValueError):
+            continue
+    suggested_supervisor_ids = []
+    for supervisor_id in request.form.getlist("suggested_supervisor_ids"):
+        try:
+            suggested_supervisor_ids.append(int(supervisor_id))
+        except (TypeError, ValueError):
+            continue
     assessor_ids = (
         [request.form.get(f"assessor_{index}_id", type=int) for index in range(1, 3)]
-        if assessor_fields_present
+        if action == "invite_selected_assessors"
         else [project.assessor_1_id, project.assessor_2_id]
     )
     assessor_suggested_ids = (
         [request.form.get(f"assessor_{index}_suggested_id", type=int) for index in range(1, 3)]
-        if assessor_fields_present
+        if action == "invite_suggested_assessors"
         else assessor_ids
     )
-    manual_assessor_override_active = (
-        assessor_fields_present
-        and [assessor_id or None for assessor_id in assessor_ids]
-        != [assessor_id or None for assessor_id in assessor_suggested_ids]
-    )
+    valid_examiner_ids = None
 
-    selected_assessor_ids = [assessor_id for assessor_id in assessor_ids if assessor_id]
-    if len(selected_assessor_ids) != len(set(selected_assessor_ids)):
-        flash("Each assessor slot must have a different examiner.", "error")
-        return redirect(url_for("mba.admin_dashboard"))
+    def _valid_examiner_ids():
+        nonlocal valid_examiner_ids
+        if valid_examiner_ids is None:
+            valid_examiner_ids = {user.id for user in examiners_query().all()}
+        return valid_examiner_ids
 
-    valid_examiner_ids = {user.id for user in examiners_query().all()}
-    invalid_assessor_ids = [assessor_id for assessor_id in selected_assessor_ids if assessor_id not in valid_examiner_ids]
-    if invalid_assessor_ids:
-        flash("One or more selected assessors are invalid.", "error")
-        return redirect(url_for("mba.admin_dashboard"))
-
-    previous_assignments = {
-        meta["id_field"]: getattr(project, meta["id_field"])
-        for meta in INVITATION_SLOTS.values()
+    previous_assessor_assignments = {
+        f"{slot}_id": getattr(project, f"{slot}_id")
+        for slot in PRIMARY_ASSESSOR_SLOTS
     }
     previous_hdc_declined_assessor_slots = hdc_declined_assessor_slots(project)
+    hdc_rejection_without_slot_decisions = (
+        project.project_status == ProjectStatus.HDC_DECLINED.value
+        and not any(assessor_hdc_decision(project, slot) for slot in PRIMARY_ASSESSOR_SLOTS)
+    )
 
-    if action == "override_supervisor":
-        if not supervisor_id:
-            flash("Select a supervisor to assign.", "error")
-            return redirect(url_for("mba.admin_dashboard"))
-        supervisor = supervisors_query().filter(MbaUser.id == supervisor_id).first()
-        if not supervisor:
-            flash("Selected supervisor not found.", "error")
-            return redirect(url_for("mba.admin_dashboard"))
-        _clear_unaccepted_supervisor_agreement(project)
-        project.supervisor_invitations.clear()
-        invitation = MbaProjectSupervisorInvitation(
-            project=project,
-            supervisor=supervisor,
-            status="pending",
-            invited_at=datetime.utcnow(),
+    def _projects_redirect():
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    def _assessor_invitation_prerequisite_error():
+        if not project.jbs5_hdc_approved_at:
+            return "HDC must approve JBS5 before assessor invitations can be sent."
+        if not student_submitted_assessor_prerequisite_docs(project):
+            return "Both JBS10 and Intent to Submit must be submitted by the student before sending assessor invitations."
+        if not (project.supervisor_confirmed or project.supervisor_accepted_at):
+            return "Supervisor must be confirmed before assigning assessors."
+        return None
+
+    def _assessor_slot_has_active_invitation(slot):
+        return (
+            previous_assessor_assignments.get(f"{slot}_id")
+            and getattr(project, f"{slot}_invitation_status") in {INVITATION_PENDING, INVITATION_ACCEPTED}
+            and assessor_hdc_decision(project, slot) != HDC_ASSESSOR_DECLINED
+            and not hdc_rejection_without_slot_decisions
         )
-        project.supervisor_invitations.append(invitation)
-        project.primary_supervisor_id = supervisor.id
-        project.project_status = ProjectStatus.ADMIN_SUBMITTED.value
-        project.assignment_confirmed = False
-        project.supervisor_confirmed = False
-        project.supervisor_accepted_at = None
-        project.assessors_confirmed = False
-        project.assessors_nominated_at = None
-        project.nomination_form_submitted = False
-        reset_invitation_tracking(project)
-        project.primary_supervisor_invitation_status = INVITATION_PENDING
-        set_invitations_sent(project)
-        mark_supervisor_invitations_sent(project)
-        email_result = send_bulk_emails(invitation_email_messages(project, include_assessors=False))
+
+    def _invite_assessor_pairs(slot_id_pairs, source_label):
+        prerequisite_error = _assessor_invitation_prerequisite_error()
+        if prerequisite_error:
+            flash(prerequisite_error, "error")
+            return _projects_redirect()
+
+        selected_pairs = [(slot, assessor_id) for slot, assessor_id in slot_id_pairs if assessor_id]
+        selected_ids = [assessor_id for _, assessor_id in selected_pairs]
+        if not 1 <= len(selected_ids) <= len(PRIMARY_ASSESSOR_SLOTS):
+            flash("Select one or two assessors to invite.", "error")
+            return _projects_redirect()
+        if len(selected_ids) != len(set(selected_ids)):
+            flash("Each selected assessor must be different.", "error")
+            return _projects_redirect()
+
+        invalid_ids = [assessor_id for assessor_id in selected_ids if assessor_id not in _valid_examiner_ids()]
+        if invalid_ids:
+            flash("One or more selected assessors are invalid.", "error")
+            return _projects_redirect()
+
+        active_slots = [slot for slot in PRIMARY_ASSESSOR_SLOTS if _assessor_slot_has_active_invitation(slot)]
+        slots_to_invite = []
+        blocked_replacement = False
+        unchanged_declined_slot = None
+        for slot, assessor_id in selected_pairs:
+            current_id = previous_assessor_assignments.get(f"{slot}_id")
+            current_status = getattr(project, f"{slot}_invitation_status")
+            current_hdc_decision = assessor_hdc_decision(project, slot)
+            unchanged = current_id == assessor_id
+            slot_rejected_by_hdc = current_hdc_decision == HDC_ASSESSOR_DECLINED or hdc_rejection_without_slot_decisions
+
+            if (
+                current_status in {INVITATION_PENDING, INVITATION_ACCEPTED}
+                and not slot_rejected_by_hdc
+            ):
+                if unchanged:
+                    continue
+                blocked_replacement = True
+                break
+            if unchanged and (
+                current_status == INVITATION_DECLINED
+                or slot_rejected_by_hdc
+            ):
+                unchanged_declined_slot = slot
+                break
+            slots_to_invite.append(slot)
+
+        if blocked_replacement:
+            flash("An invited assessor cannot be replaced unless that assessor declines the invitation.", "error")
+            return _projects_redirect()
+        if unchanged_declined_slot:
+            label = INVITATION_SLOTS[unchanged_declined_slot]["label"]
+            flash(f"Choose a replacement for the declined {label} before sending a new invitation.", "error")
+            return _projects_redirect()
+        if not slots_to_invite:
+            if len(active_slots) >= len(PRIMARY_ASSESSOR_SLOTS):
+                flash("Two assessor invitations are already active. Wait for one assessor to decline before inviting another assessor.", "error")
+            else:
+                flash("Select an empty or declined assessor slot before sending a new invitation.", "error")
+            return _projects_redirect()
+        if len(active_slots) + len(slots_to_invite) > len(PRIMARY_ASSESSOR_SLOTS):
+            flash("Two assessor invitations are already active. Wait for one assessor to decline before inviting another assessor.", "error")
+            return _projects_redirect()
+
+        changed_slots = [
+            slot
+            for slot in slots_to_invite
+            if previous_assessor_assignments.get(f"{slot}_id") != dict(selected_pairs)[slot]
+        ]
+        if changed_slots:
+            reset_assessor_invitation_tracking(project, changed_slots)
+            clear_additional_assessment(project)
+            if previous_hdc_declined_assessor_slots or hdc_rejection_without_slot_decisions:
+                project.project_status = ProjectStatus.HDC_DECLINED.value
+                project.nomination_form_approved = False
+
+        selected_by_slot = dict(selected_pairs)
+        for slot in slots_to_invite:
+            setattr(project, f"{slot}_id", selected_by_slot[slot])
+            setattr(project, f"{slot}_invitation_status", INVITATION_PENDING)
+        project.assessor_3_id = None
+        project.assessor_3_invitation_status = None
+        project.assessor_3_invited_at = None
+        project.assessor_3_reminder_sent_at = None
+        project.assessors_confirmed = True
+        project.assessors_nominated_at = datetime.utcnow()
+        project.nomination_form_submitted = True
+        project.nomination_form_approved = False
+        mark_assessor_invitations_sent(project, slots=slots_to_invite)
+        email_result = send_bulk_emails(
+            invitation_email_messages(
+                project,
+                include_supervisors=False,
+                assessor_slots=slots_to_invite,
+            )
+        )
         delivered_count = len(email_result["delivered"])
         failed_count = len(email_result["failed"])
+        assessor_emails = ", ".join(
+            getattr(project, slot).email
+            for slot in slots_to_invite
+            if getattr(project, slot, None) and getattr(project, slot).email
+        )
+        project.comments = append_comment(
+            project.comments,
+            (
+                f"{current_user.email}: invited {source_label}: "
+                f"{assessor_emails or 'none'}; delivered={delivered_count}; failed={failed_count}"
+            ),
+        )
         db.session.commit()
         if delivered_count and not failed_count:
-            flash(f"Supervisor {supervisor.first_name} assigned and invited.", "success")
+            flash("Assessor invitation(s) sent.", "success")
         elif delivered_count and failed_count:
-            flash(
-                f"Supervisor {supervisor.first_name} assigned. Email sent to {delivered_count}; {failed_count} failed.",
-                "warning",
-            )
+            flash(f"Assessor invitation(s) recorded. Email sent to {delivered_count}; {failed_count} failed.", "warning")
         else:
-            flash(
-                f"Supervisor {supervisor.first_name} assigned. Email delivery is not configured or failed.",
-                "warning",
-            )
-        return redirect(url_for("mba.admin_dashboard"))
+            flash("Assessor invitation(s) recorded. Email delivery is not configured or failed.", "warning")
+        return _projects_redirect()
 
-    elif action == "revise_supervisors":
-        revised_supervisor_ids = [
-            request.form.get("revise_supervisor_1_id", type=int),
-            request.form.get("revise_supervisor_2_id", type=int),
-        ]
-        if not all(revised_supervisor_ids) or len(set(revised_supervisor_ids)) != 2:
-            flash("Select two different supervisors when revising supervisors.", "error")
+    if action == "invite_selected_supervisors":
+        if not 1 <= len(selected_supervisor_ids) <= 2:
+            flash("Select one or two supervisors to invite.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        selected_supervisors = (
-            supervisors_query()
-            .filter(MbaUser.id.in_(revised_supervisor_ids))
-            .all()
-        )
+        if len(selected_supervisor_ids) != len(set(selected_supervisor_ids)):
+            flash("Each selected supervisor must be different.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        selected_supervisors = supervisors_query().filter(MbaUser.id.in_(selected_supervisor_ids)).all()
         supervisors_by_id = {supervisor.id: supervisor for supervisor in selected_supervisors}
-        if set(revised_supervisor_ids) != set(supervisors_by_id):
+        if set(selected_supervisor_ids) != set(supervisors_by_id):
             flash("One or more selected supervisors are invalid.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
-
         _clear_unaccepted_supervisor_agreement(project)
         project.supervisor_invitations.clear()
-        for supervisor_id in revised_supervisor_ids:
+        invited_at = datetime.utcnow()
+        for supervisor_id in selected_supervisor_ids:
             project.supervisor_invitations.append(
                 MbaProjectSupervisorInvitation(
                     project=project,
                     supervisor=supervisors_by_id[supervisor_id],
                     status=INVITATION_PENDING,
-                    invited_at=datetime.utcnow(),
+                    invited_at=invited_at,
                 )
             )
         project.primary_supervisor_id = None
@@ -699,38 +780,62 @@ def admin_project_action(project_id):
         email_result = send_bulk_emails(invitation_email_messages(project, include_assessors=False))
         delivered_count = len(email_result["delivered"])
         failed_count = len(email_result["failed"])
-        supervisor_emails = ", ".join(supervisors_by_id[supervisor_id].email for supervisor_id in revised_supervisor_ids)
+        supervisor_emails = ", ".join(supervisors_by_id[supervisor_id].email for supervisor_id in selected_supervisor_ids)
         project.comments = append_comment(
             project.comments,
-            f"Admin revised supervisor invitations: {supervisor_emails}; delivered={delivered_count}; failed={failed_count}",
+            f"Admin invited selected supervisors: {supervisor_emails}; delivered={delivered_count}; failed={failed_count}",
         )
         db.session.commit()
         if delivered_count and not failed_count:
-            flash("Supervisor revision invitations sent.", "success")
+            flash("Selected supervisor invitation(s) sent.", "success")
         elif delivered_count and failed_count:
-            flash(f"Supervisor revision invitations recorded. Email sent to {delivered_count}; {failed_count} failed.", "warning")
+            flash(f"Selected supervisor invitation(s) recorded. Email sent to {delivered_count}; {failed_count} failed.", "warning")
         else:
-            flash("Supervisor revision invitations recorded. Email delivery is not configured or failed.", "warning")
+            flash("Selected supervisor invitation(s) recorded. Email delivery is not configured or failed.", "warning")
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
-    elif action == "multi_invite_supervisors":
-        manual_supervisor_override_active = (
-            project.primary_supervisor_id
-            and project.primary_supervisor_invitation_status == INVITATION_PENDING
-            and not project.supervisor_confirmed
-        )
-        if supervisor_id or manual_supervisor_override_active:
-            flash("Suggested supervisor invitations are disabled after a manual supervisor override.", "error")
+    elif action == "invite_suggested_supervisors":
+        supervisors = supervisors_query().all()
+        supervisor_ids = suggested_supervisor_ids[:SUPERVISOR_SUGGESTION_LIMIT]
+        if len(supervisor_ids) < SUPERVISOR_SUGGESTION_LIMIT:
+            recommendations = match_recommendations(project, supervisors, examiners_query().all())
+            supervisor_ids = [
+                item["user"].id
+                for item in recommendations["ranked_supervisors"][:SUPERVISOR_SUGGESTION_LIMIT]
+                if item.get("user")
+            ]
+        if (
+            len(supervisor_ids) != SUPERVISOR_SUGGESTION_LIMIT
+            or len(supervisor_ids) != len(set(supervisor_ids))
+        ):
+            flash("Two supervisor suggestions are required before inviting suggested supervisors.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        supervisors_by_id = {supervisor.id: supervisor for supervisor in supervisors if supervisor.id in supervisor_ids}
+        if set(supervisor_ids) != set(supervisors_by_id):
+            flash("One or more suggested supervisors are invalid.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         _clear_unaccepted_supervisor_agreement(project)
-        apply_auto_assignments(project, supervisors_query().all(), examiners_query().all())
-        if len(project.supervisor_invitations) != 2:
-            flash("Two supervisor suggestions are required before revising with suggested supervisors.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        project.supervisor_invitations.clear()
+        invited_at = datetime.utcnow()
+        for supervisor_id in supervisor_ids:
+            project.supervisor_invitations.append(
+                MbaProjectSupervisorInvitation(
+                    project=project,
+                    supervisor=supervisors_by_id[supervisor_id],
+                    status=INVITATION_PENDING,
+                    invited_at=invited_at,
+                )
+            )
+        project.primary_supervisor_id = None
         project.project_status = ProjectStatus.ADMIN_SUBMITTED.value
         project.supervisor_accepted_at = None
         project.assignment_confirmed = True
         project.supervisor_confirmed = True
+        project.assessors_confirmed = False
+        project.assessors_nominated_at = None
+        project.nomination_form_submitted = False
+        reset_assessor_invitation_tracking(project)
+        clear_additional_assessment(project)
         set_invitations_sent(project)
         for invitation in project.supervisor_invitations:
             invitation.status = INVITATION_PENDING
@@ -747,206 +852,58 @@ def admin_project_action(project_id):
             message = f"Invitations recorded. Email sent to {delivered_count} recipient(s); {failed_count} failed."
         else:
             message = "Invitations recorded in the system. Email delivery is not configured or failed."
+        supervisor_emails = ", ".join(invitation.supervisor.email for invitation in project.supervisor_invitations if invitation.supervisor and invitation.supervisor.email)
+        project.comments = append_comment(
+            project.comments,
+            f"Admin invited suggested supervisors: {supervisor_emails}; delivered={delivered_count}; failed={failed_count}",
+        )
         db.session.commit()
         flash(message, "success")
-        return redirect(url_for("mba.admin_dashboard"))
-
-    if assessor_fields_present:
-        for index, assessor_id in enumerate(assessor_ids, start=1):
-            setattr(project, f"assessor_{index}_id", assessor_id or None)
-        project.assessor_3_id = None
-        project.assessor_3_invitation_status = None
-        project.assessor_3_invited_at = None
-        project.assessor_3_reminder_sent_at = None
-
-    supervisor_assignment_changed = (
-        project.primary_supervisor_id != previous_assignments["primary_supervisor_id"]
-    )
-    changed_assessor_slots = [
-        slot
-        for slot, meta in INVITATION_SLOTS.items()
-        if slot in ASSESSOR_SLOTS
-        and getattr(project, meta["id_field"]) != previous_assignments[meta["id_field"]]
-    ]
-    assessor_assignments_changed = bool(changed_assessor_slots)
-    assignments_changed = any(
-        getattr(project, meta["id_field"]) != previous_assignments[meta["id_field"]]
-        for meta in INVITATION_SLOTS.values()
-    )
-
-    if assignments_changed:
-        project.assignment_confirmed = False
-        if supervisor_assignment_changed:
-            reset_invitation_tracking(project)
-            project.supervisor_confirmed = False
-            project.supervisor_accepted_at = None
-            project.assessors_confirmed = False
-            project.assessors_nominated_at = None
-            clear_additional_assessment(project)
-        elif assessor_assignments_changed:
-            project.assessors_confirmed = False
-            project.assessors_nominated_at = None
-            reset_assessor_invitation_tracking(project, changed_assessor_slots)
-            clear_additional_assessment(project)
-            if previous_hdc_declined_assessor_slots:
-                project.project_status = ProjectStatus.HDC_DECLINED.value
-                project.nomination_form_approved = False
-
-    invitation_state = project_invitation_snapshot(project)
-
-    if action == "unlock_assessors":
-        project.assessors_confirmed = False
-        project.assessors_nominated_at = None
-        project.nomination_form_submitted = False
-        db.session.commit()
-        flash("Assessor assignment unlocked. You can now edit and reconfirm.", "info")
-        return redirect(url_for("mba.admin_dashboard"))
-
-    if action in single_assessor_invite_actions:
-        target_slot = single_assessor_invite_actions[action]
-        target_label = INVITATION_SLOTS[target_slot]["label"]
-        student_doc_types = {
-            doc.doc_type
-            for doc in project.documents
-            if doc.uploaded_by_id == project.student_id
-        }
-        if not project.jbs5_hdc_approved_at:
-            flash("HDC must approve JBS5 before assessor invitations can be sent.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        if not ("jbs10" in student_doc_types and "intent_to_submit" in student_doc_types):
-            flash("Both JBS10 and Intent to Submit must be submitted by the student before sending assessor invitations.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        if not (project.supervisor_confirmed or project.supervisor_accepted_at):
-            flash("Supervisor must be confirmed before assigning assessors.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        target_assessor = getattr(project, target_slot)
-        if not target_assessor:
-            flash(f"Select {target_label} before sending the invitation.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        target_unchanged = target_slot not in changed_assessor_slots
-        target_status = getattr(project, f"{target_slot}_invitation_status")
-        target_hdc_decision = assessor_hdc_decision(project, target_slot)
-        if target_hdc_decision == HDC_ASSESSOR_DECLINED and target_unchanged:
-            flash(f"Replace the HDC-rejected {target_label} before sending a new invitation.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        if target_status == INVITATION_ACCEPTED and target_unchanged:
-            flash(f"{target_label} has already accepted. Choose a replacement assessor before sending a new invitation.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-
-        project.assessors_confirmed = True
-        project.assessors_nominated_at = datetime.utcnow()
-        project.nomination_form_submitted = True
-        project.nomination_form_approved = False
-        setattr(project, f"{target_slot}_invitation_status", INVITATION_PENDING)
-        project.assessor_3_invitation_status = None
-        mark_assessor_invitations_sent(project, slots=[target_slot])
-        email_result = send_bulk_emails(
-            invitation_email_messages(
-                project,
-                include_supervisors=False,
-                assessor_slots=[target_slot],
-            )
-        )
-        delivered_count = len(email_result["delivered"])
-        failed_count = len(email_result["failed"])
-        project.comments = append_comment(
-            project.comments,
-            (
-                f"{current_user.email}: sent invitation to {target_label} only "
-                f"({target_assessor.email}); delivered={delivered_count}; failed={failed_count}"
-            ),
-        )
-        db.session.commit()
-        if delivered_count and not failed_count:
-            flash(f"{target_label} invitation sent.", "success")
-        elif delivered_count and failed_count:
-            flash(f"{target_label} invitation recorded. Email sent; {failed_count} failed.", "warning")
-        else:
-            flash(f"{target_label} invitation recorded. Email delivery is not configured or failed.", "warning")
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
-    if action in {"confirm_assessors", "override_assessors"}:
-        student_doc_types = {
-            doc.doc_type
-            for doc in project.documents
-            if doc.uploaded_by_id == project.student_id
-        }
-        hdc_declined_nomination = project.project_status == ProjectStatus.HDC_DECLINED.value
-        if action == "confirm_assessors" and hdc_declined_nomination:
-            flash("Replace the HDC-declined assessor and use Override with Selected Assessors before resubmitting nominations.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        if action == "override_assessors" and hdc_declined_nomination and not changed_assessor_slots:
-            flash("Replace at least one HDC-declined assessor before resubmitting nominations.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        if not project.jbs5_hdc_approved_at:
-            flash("HDC must approve JBS5 before assessor nominations can be confirmed.", "error")
-            return redirect(url_for("mba.admin_dashboard"))
-        if not ("jbs10" in student_doc_types and "intent_to_submit" in student_doc_types):
-            flash("Both JBS10 and Intent to Submit must be submitted by the student before confirming assessors.", "error")
-            return redirect(url_for("mba.admin_dashboard"))
-        if not (project.supervisor_confirmed or project.supervisor_accepted_at):
-            flash("Supervisor must be confirmed before assigning assessors.", "error")
-            return redirect(url_for("mba.admin_dashboard"))
-        if action == "confirm_assessors" and manual_assessor_override_active:
-            flash("Suggested assessor confirmation is disabled after a manual assessor override. Use Override with Selected Assessors.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        if not all_assessors_assigned(project):
-            recommendations = match_recommendations(project, supervisors_query().all(), examiners_query().all())
-            suggested = recommendations["assessors"]
-            for index, assessor in enumerate(suggested, start=1):
-                if not getattr(project, f"assessor_{index}_id"):
-                    setattr(project, f"assessor_{index}_id", assessor.id)
-        if not all_assessors_assigned(project):
-            flash("Choose two assessors before sending nominations.", "error")
-            return redirect(url_for("mba.admin_dashboard", panel="projects"))
-        project.assessors_confirmed = True
-        project.assessors_nominated_at = datetime.utcnow()
-        project.nomination_form_submitted = True
-        slots_to_invite = changed_assessor_slots if action == "override_assessors" and changed_assessor_slots else list(PRIMARY_ASSESSOR_SLOTS)
-        for slot in PRIMARY_ASSESSOR_SLOTS:
-            if slot in slots_to_invite:
-                setattr(project, f"{slot}_invitation_status", INVITATION_PENDING if getattr(project, f"{slot}_id") else None)
-            elif not getattr(project, f"{slot}_id"):
-                setattr(project, f"{slot}_invitation_status", None)
-        project.assessor_3_invitation_status = None
-        project.nomination_form_approved = False
-        mark_assessor_invitations_sent(project, slots=slots_to_invite)
-        email_result = send_bulk_emails(
-            invitation_email_messages(
-                project,
-                include_supervisors=False,
-                assessor_slots=slots_to_invite,
-            )
+    if action == "invite_selected_assessors":
+        return _invite_assessor_pairs(
+            list(zip(PRIMARY_ASSESSOR_SLOTS, assessor_ids)),
+            "selected assessor(s)",
         )
-        delivered_count = len(email_result["delivered"])
-        failed_count = len(email_result["failed"])
-        if action == "override_assessors" and manual_assessor_override_active:
-            assessor_emails = ", ".join(
-                assessor.email
-                for assessor in [project.assessor_1, project.assessor_2]
-                if assessor and assessor.email
-            )
-            project.comments = append_comment(
-                project.comments,
-                f"Admin overrode assessor suggestions: assessors={assessor_emails or 'none'}",
-            )
-        project.comments = append_comment(
-            project.comments,
-            f"Assessor invitation email result: delivered={delivered_count}, failed={failed_count}",
+
+    if action == "invite_suggested_assessors":
+        examiners = examiners_query().all()
+        assessor_invitations_started = any(
+            getattr(project, f"{slot}_invitation_status") in {
+                INVITATION_PENDING,
+                INVITATION_ACCEPTED,
+                INVITATION_DECLINED,
+            }
+            for slot in PRIMARY_ASSESSOR_SLOTS
         )
-        db.session.commit()
-        if action == "override_assessors":
-            base_message = "Assessor override confirmed"
-        else:
-            base_message = "Assessor nominations confirmed"
-        if delivered_count and not failed_count:
-            flash(f"{base_message} and invitations sent.", "success")
-        elif delivered_count and failed_count:
-            flash(f"{base_message}. Email sent to {delivered_count}; {failed_count} failed.", "warning")
-        else:
-            flash(f"{base_message}. Email delivery is not configured or failed.", "warning")
-        return redirect(url_for("mba.admin_dashboard"))
-    elif action == "forward_jbs5_to_hdc":
+        if (
+            assessor_invitations_started
+            or project.project_status == ProjectStatus.HDC_DECLINED.value
+            or previous_hdc_declined_assessor_slots
+        ):
+            flash("Use Invite Selected Assessors to add or replace one assessor after invitations have started.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        suggested_assessor_ids = [assessor_id for assessor_id in assessor_suggested_ids if assessor_id]
+        if len(suggested_assessor_ids) < len(PRIMARY_ASSESSOR_SLOTS):
+            recommendations = match_recommendations(project, supervisors_query().all(), examiners)
+            suggested_assessor_ids = [
+                assessor.id
+                for assessor in recommendations["assessors"][: len(PRIMARY_ASSESSOR_SLOTS)]
+                if assessor
+            ]
+        if (
+            len(suggested_assessor_ids) != len(PRIMARY_ASSESSOR_SLOTS)
+            or len(suggested_assessor_ids) != len(set(suggested_assessor_ids))
+        ):
+            flash("Two assessor suggestions are required before inviting suggested assessors.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        return _invite_assessor_pairs(
+            list(zip(PRIMARY_ASSESSOR_SLOTS, suggested_assessor_ids[: len(PRIMARY_ASSESSOR_SLOTS)])),
+            "suggested assessor(s)",
+        )
+
+    if action == "forward_jbs5_to_hdc":
         if project.jbs5_hdc_approved_at:
             flash("JBS5 has already been approved by HDC.", "info")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
@@ -973,6 +930,9 @@ def admin_project_action(project_id):
         if not project.jbs5_hdc_approved_at:
             flash("Forward JBS5 to HDC and wait for HDC approval before forwarding assessor nominations.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if not student_submitted_assessor_prerequisite_docs(project):
+            flash("JBS10 and Intent to Submit must be submitted by the student before nominations can be forwarded to HDC.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
         declined_hdc_slots = hdc_declined_assessor_slots(project)
         if declined_hdc_slots:
             declined_labels = ", ".join(INVITATION_SLOTS[slot]["label"] for slot in declined_hdc_slots)
@@ -984,6 +944,7 @@ def admin_project_action(project_id):
         if accepted_assessor_count(project) < len(PRIMARY_ASSESSOR_SLOTS):
             flash("Forward nominations to HDC is only available after two assessors have accepted their invitations.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        invitation_state = project_invitation_snapshot(project)
         if not invitation_state["can_approve_to_hdc"]:
             flash("Forward nominations to HDC is only available after all invitations are accepted and each assessor has submitted the acceptance pack, external examiner nomination form, CV, and highest qualification document.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
@@ -1298,33 +1259,39 @@ def hdc_project_action(project_id):
         "decline_assessor_2_nomination": ("assessor_2", HDC_ASSESSOR_DECLINED),
     }
     if action == "verify":
-        if project.project_status in {
-            ProjectStatus.JBS5_SUBMITTED_TO_HDC.value,
-            ProjectStatus.JBS5_HDC_DECLINED.value,
-        }:
+        if project.project_status == ProjectStatus.JBS5_SUBMITTED_TO_HDC.value:
             flash("Open JBS5 and complete the HDC signature section before approving it.", "info")
             return redirect(url_for("mba.hdc_sign_project_form", project_id=project.id, form_type="jbs5"))
-        elif project.project_status in {ProjectStatus.ADMIN_APPROVED.value, ProjectStatus.HDC_DECLINED.value}:
+        elif project.project_status == ProjectStatus.ADMIN_APPROVED.value:
             flash("Open JBS10 and complete the HDC signature section before approving all nominations.", "info")
             return redirect(url_for("mba.hdc_sign_project_form", project_id=project.id, form_type="jbs10"))
+        elif project.project_status == ProjectStatus.JBS5_HDC_DECLINED.value:
+            flash("JBS5 has been returned. Wait for the student, supervisor, and MBA Admin to resubmit it before another HDC decision.", "info")
+            return redirect(url_for("mba.hdc_dashboard"))
+        elif project.project_status == ProjectStatus.HDC_DECLINED.value:
+            flash("Assessor nominations have been returned. Wait for MBA Admin to replace and resubmit the nomination set before another HDC decision.", "info")
+            return redirect(url_for("mba.hdc_dashboard"))
         else:
             flash("This Capstone Project is not waiting for HDC approval.", "error")
             return redirect(url_for("mba.hdc_dashboard"))
     elif action == "decline":
-        if project.project_status in {
-            ProjectStatus.JBS5_SUBMITTED_TO_HDC.value,
-            ProjectStatus.JBS5_HDC_DECLINED.value,
-        }:
+        if project.project_status == ProjectStatus.JBS5_SUBMITTED_TO_HDC.value:
             flash("Open JBS5 before returning it with HDC feedback.", "info")
             return redirect(url_for("mba.hdc_sign_project_form", project_id=project.id, form_type="jbs5"))
-        elif project.project_status in {ProjectStatus.ADMIN_APPROVED.value, ProjectStatus.HDC_DECLINED.value}:
+        elif project.project_status == ProjectStatus.ADMIN_APPROVED.value:
             flash("Open JBS10 before returning all nominations with HDC feedback.", "info")
             return redirect(url_for("mba.hdc_sign_project_form", project_id=project.id, form_type="jbs10"))
+        elif project.project_status == ProjectStatus.JBS5_HDC_DECLINED.value:
+            flash("JBS5 has already been returned. Wait for a corrected resubmission before another HDC decision.", "info")
+            return redirect(url_for("mba.hdc_dashboard"))
+        elif project.project_status == ProjectStatus.HDC_DECLINED.value:
+            flash("Assessor nominations have already been returned. Wait for MBA Admin to resubmit them before another HDC decision.", "info")
+            return redirect(url_for("mba.hdc_dashboard"))
         else:
             flash("This Capstone Project is not waiting for HDC approval.", "error")
             return redirect(url_for("mba.hdc_dashboard"))
     elif action in single_assessor_nomination_actions:
-        if project.project_status not in {ProjectStatus.ADMIN_APPROVED.value, ProjectStatus.HDC_DECLINED.value}:
+        if project.project_status != ProjectStatus.ADMIN_APPROVED.value:
             flash("This Capstone Project is not waiting for HDC nomination review.", "error")
             return redirect(url_for("mba.hdc_dashboard"))
         if not project.jbs5_hdc_approved_at:

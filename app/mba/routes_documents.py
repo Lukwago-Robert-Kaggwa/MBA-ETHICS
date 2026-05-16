@@ -29,13 +29,24 @@ def _project_document_db_response(doc, *, as_attachment):
     )
 
 
+def _payload_for_live_form_render(project, doc, form):
+    payload = dict(form.payload or {})
+    if doc.doc_type == "supervisor_agreement" and doc.uploaded_by_id == project.student_id:
+        payload["_student_acceptance"] = "1"
+    return payload
+
+
 def _live_form_html_response(project, doc, as_attachment=False):
     if not supports_exact_form_render(doc.doc_type):
         return None
     form = MbaForm.query.filter_by(project_id=project.id, form_type=doc.doc_type).first()
     if not form or not isinstance(form.payload, dict):
         return None
-    html = build_form_display_html(project, doc.doc_type, form.payload)
+    html = build_form_display_html(
+        project,
+        doc.doc_type,
+        _payload_for_live_form_render(project, doc, form),
+    )
     if not html:
         return None
     if as_attachment:
@@ -55,7 +66,11 @@ def _live_form_pdf_response(project, doc):
     if not form or not isinstance(form.payload, dict):
         return None
     try:
-        pdf_bytes = generate_exact_html_pdf_bytes(project, doc.doc_type, form.payload)
+        pdf_bytes = generate_exact_html_pdf_bytes(
+            project,
+            doc.doc_type,
+            _payload_for_live_form_render(project, doc, form),
+        )
     except Exception:
         current_app.logger.exception("Unable to generate exact PDF for document %s", doc.id)
         pdf_bytes = None
@@ -97,21 +112,6 @@ MOODLE_CAPSTONE_SUBMISSION_MESSAGE = (
 def _jbs5_signed_by_supervisor(project):
     jbs5_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs5").first()
     return bool(jbs5_form and jbs5_form.supervisor_signed)
-
-
-def _validate_uploaded_file(uploaded_file, label, allowed_extensions, required=True):
-    if not uploaded_file or not uploaded_file.filename:
-        return f"{label} is required." if required else None
-    extension = uploaded_file.filename.rsplit(".", 1)[-1].lower() if "." in uploaded_file.filename else ""
-    if extension not in allowed_extensions:
-        allowed = ", ".join(f".{item}" for item in sorted(allowed_extensions))
-        return f"{label}: only {allowed} files are accepted."
-    uploaded_file.seek(0, 2)
-    file_size = uploaded_file.tell()
-    uploaded_file.seek(0)
-    if file_size > UPLOAD_MAX_BYTES:
-        return f"{label}: file exceeds the 10 MB limit."
-    return None
 
 
 def dissertation_assessor_email_messages(project, dissertation_doc, assessor_user_ids=None):
@@ -869,22 +869,27 @@ def download_project_document(project_id, doc_id):
     if redirect_response:
         return redirect_response
 
+    if supports_exact_form_render(doc.doc_type):
+        live_form_response = _live_form_pdf_response(project, doc)
+        if live_form_response and getattr(live_form_response, "status_code", 200) < 400:
+            return live_form_response
+
+        live_html_response = _live_form_html_response(project, doc, as_attachment=True)
+        if live_html_response:
+            return live_html_response
+
+        return current_app.response_class(
+            "Unable to generate a download from the submitted form HTML right now.",
+            status=503,
+            mimetype="text/plain",
+        )
+
     project_dir = os.path.join(_uploads_dir(), str(project_id))
     _regenerate_generated_document_if_needed(project, doc, project_dir)
     db_response = _project_document_db_response(doc, as_attachment=True)
     if db_response:
         db.session.commit()
         return db_response
-
-    if supports_exact_form_render(doc.doc_type):
-        live_form_response = _live_form_pdf_response(project, doc)
-        if live_form_response:
-            return live_form_response
-        return current_app.response_class(
-            "Unable to generate a PDF from the submitted form HTML right now.",
-            status=503,
-            mimetype="text/plain",
-        )
 
     return send_from_directory(project_dir, doc.stored_name, as_attachment=True, download_name=doc.original_name)
 

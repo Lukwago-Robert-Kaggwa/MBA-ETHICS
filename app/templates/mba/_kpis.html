@@ -1,10 +1,10 @@
-<section class="kpi-grid">
-  <div><strong>{{ kpis.students }}</strong><span>Students</span></div>
-  <div><strong>{{ kpis.supervisors }}</strong><span>Supervisors</span></div>
-  <div><strong>{{ kpis.examiners }}</strong><span>Examiners</span></div>
-  <div><strong>{{ kpis.projects }}</strong><span>All Capstone Projects</span></div>
-  <div><strong>{{ kpis.submitted_projects }}</strong><span>Submitted Capstone Projects</span></div>
-  <div><strong>{{ kpis.draft_projects }}</strong><span>Draft Capstone Projects</span></div>
-  <div><strong>{{ kpis.admin_queue }}</strong><span>Admin Queue</span></div>
-  <div><strong>{{ kpis.hdc_queue }}</strong><span>HDC Queue</span></div>
+<section class="kpi-grid kpi-grid--professional" id="admin-overview">
+  <div class="kpi-card kpi-card--blue"><span>Students</span><strong>{{ kpis.students }}</strong><small>Total registered</small><b aria-hidden="true">S</b></div>
+  <div class="kpi-card kpi-card--green"><span>Supervisors</span><strong>{{ kpis.supervisors }}</strong><small>Available pool</small><b aria-hidden="true">V</b></div>
+  <div class="kpi-card kpi-card--violet"><span>Examiners</span><strong>{{ kpis.examiners }}</strong><small>Assessment panel</small><b aria-hidden="true">E</b></div>
+  <div class="kpi-card kpi-card--orange"><span>All Capstone Projects</span><strong>{{ kpis.projects }}</strong><small>Across workflow</small><b aria-hidden="true">P</b></div>
+  <div class="kpi-card kpi-card--green"><span>Submitted Capstone Projects</span><strong>{{ kpis.submitted_projects }}</strong><small>Ready or active</small><b aria-hidden="true">C</b></div>
+  <div class="kpi-card kpi-card--gray"><span>Draft Capstone Projects</span><strong>{{ kpis.draft_projects }}</strong><small>Student drafts</small><b aria-hidden="true">D</b></div>
+  <div class="kpi-card kpi-card--amber"><span>Admin Queue</span><strong>{{ kpis.admin_queue }}</strong><small>Needs action</small><b aria-hidden="true">A</b></div>
+  <div class="kpi-card kpi-card--red"><span>HDC Queue</span><strong>{{ kpis.hdc_queue }}</strong><small>Pending HDC</small><b aria-hidden="true">H</b></div>
 </section>

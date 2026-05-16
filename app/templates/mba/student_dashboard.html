@@ -7,18 +7,60 @@
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
 <div class="mba-page-stack mba-student-dashboard">
-<section class="ethics-welcome-banner app-banner">
-  <div>
-    <p class="eyebrow">MBA Student</p>
-    <h1>Welcome, {{ current_user.first_name }}</h1>
-    <p>Your Capstone Projects move from JBS 5 submission to admin, HDC, assessors, and Ethics.</p>
-  </div>
-  <div class="banner-actions">
-    <a href="{{ url_for('mba.download_manuscript_template') }}" class="banner-button">Capstone Manuscript Template</a>
-  </div>
+{% set correction_alert_count = pending_correction_projects|length if pending_correction_projects is defined else 0 %}
+<section class="dashboard-stats-grid">
+  <article class="dashboard-stat-card dashboard-stat-card--orange">
+    <div>
+      <span>My Projects</span>
+      <strong>{{ projects|length }}</strong>
+      <small>Capstone workspace</small>
+    </div>
+    <b aria-hidden="true">P</b>
+  </article>
+  <article class="dashboard-stat-card dashboard-stat-card--amber">
+    <div>
+      <span>Corrections</span>
+      <strong>{{ correction_alert_count }}</strong>
+      <small>Awaiting response</small>
+    </div>
+    <b aria-hidden="true">C</b>
+  </article>
+  <article class="dashboard-stat-card dashboard-stat-card--green">
+    <div>
+      <span>Submitted</span>
+      <strong>{{ projects|selectattr('project_status', 'ne', 'created')|list|length }}</strong>
+      <small>Past draft stage</small>
+    </div>
+    <b aria-hidden="true">S</b>
+  </article>
+  <article class="dashboard-stat-card dashboard-stat-card--blue">
+    <div>
+      <span>Next Step</span>
+      <strong>JBS 5</strong>
+      <small>Complete and submit</small>
+    </div>
+    <b aria-hidden="true">5</b>
+  </article>
 </section>
 
-{% set correction_alert_count = pending_correction_projects|length if pending_correction_projects is defined else 0 %}
+<section class="quick-action-grid">
+  <a href="{{ url_for('mba.download_manuscript_template') }}" class="quick-action-card quick-action-card--orange">
+    <span aria-hidden="true">D</span>
+    <strong>Capstone Manuscript Template</strong>
+    <small>Download the required manuscript template.</small>
+  </a>
+  <a href="#create-capstone-project" class="quick-action-card quick-action-card--blue">
+    <span aria-hidden="true">N</span>
+    <strong>New Project</strong>
+    <small>Create a capstone project record.</small>
+  </a>
+  <a href="{{ url_for('mba.student_corrections') }}" class="quick-action-card quick-action-card--green">
+    <span aria-hidden="true">C</span>
+    <strong>Corrections</strong>
+    <small>Open response and corrections tasks.</small>
+  </a>
+</section>
+
 {% if correction_alert_count %}
 {% set returned_correction_count = pending_correction_projects|selectattr('corrections_supervisor_rejected_at')|list|length %}
 <section class="student-correction-alert" role="status" aria-live="polite">
@@ -50,7 +92,7 @@
 </section>
 
 <div class="mba-student-layout">
-  <section class="ethics-panel mba-student-create-panel">
+  <section class="ethics-panel mba-student-create-panel" id="create-capstone-project">
     <div class="panel-heading">
       <h2>Create Capstone Project</h2>
       <span>Student Action</span>
@@ -59,7 +101,7 @@
       <label>Title
         <input name="project_title" required data-project-title-input>
         <small style="color:var(--text-muted,#666);font-weight:500;">
-          Use full words only. Acronyms, abbreviations, and special characters are not allowed. Keep the title to 12 words where possible; maximum 15 words.
+          Use full words only. Acronyms, abbreviations, and special characters except commas and hyphens are not allowed. Keep the title to 12 words where possible; maximum 15 words.
         </small>
       </label>
       <label>Discipline
@@ -255,9 +297,14 @@
                     JBS10 and Intent to Submit are in. Submit the Capstone Manuscript through Moodle. On this system, upload only supporting documents, including the Global Document and combined Turnitin-AI report. MBA Admin will upload the Capstone Manuscript here after downloading it from Moodle.
                   </p>
                   {% if project.dissertation_moodle_request_sent_at and not dissertation_docs %}
-                    <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
-                      MBA Admin requested your Capstone Manuscript submission on Moodle on {{ project.dissertation_moodle_request_sent_at.strftime('%d %b %Y %H:%M') }}.
-                    </p>
+                    <div style="margin:0.75rem 0 1rem;padding:0.9rem 1rem;border-left:4px solid var(--accent,#f97316);background:#fff7ed;border-radius:8px;color:var(--text,#1f2937);font-size:0.9rem;line-height:1.55;">
+                      <strong>Action required: Submit your Capstone Manuscript on Moodle.</strong>
+                      <p style="margin:0.35rem 0 0;">
+                        MBA Admin requested this Moodle submission on {{ project.dissertation_moodle_request_sent_at.strftime('%d %b %Y %H:%M') }}. Please log in to Moodle and upload your final Capstone Manuscript there as soon as possible.
+                      </p>
+                      <p style="margin:0.35rem 0 0;">
+                        Do not upload the Capstone Manuscript in this MBA system.</p>
+                    </div>
                   {% endif %}
                   {% for doc_key, doc_info in [('jbs1_declaration', 'JBS 1 Declaration'), ('plagiarism_declaration', 'Combined Plagiarism, Turnitin and AI Declaration'), ('affidavit', 'JBS 2 Affidavit')] %}
                     <div class="form-download-row">

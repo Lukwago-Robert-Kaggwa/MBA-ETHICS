@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from flask import request, url_for
 from flask_login import current_user
 from werkzeug.routing import BuildError
@@ -174,10 +176,18 @@ def inject_auth_flags_factory(app):
             )
             return nav
 
+        def asset_version(filename):
+            try:
+                static_path = Path(app.static_folder or "") / filename
+                return str(int(static_path.stat().st_mtime))
+            except OSError:
+                return "1"
+
         return {
             "microsoft_login_enabled": bool(
                 app.config["MICROSOFT_CLIENT_ID"] and app.config["MICROSOFT_CLIENT_SECRET"]
             ),
+            "asset_version": asset_version,
             "mba_profile_url": mba_profile_url,
             "mba_edit_project_url": mba_edit_project_url,
             "mba_submit_project_title_url": mba_submit_project_title_url,
