@@ -1,13 +1,12 @@
-from flask import abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
-from ..models import MbaDiscipline, MbaForm, MbaProject, MbaProjectDocument, MbaRole, MbaScholarProfile, MbaStudentProfile, MbaUser, MbaProjectSupervisorInvitation, ProjectStatus
+from ..models import MbaForm, MbaProject, MbaRole, MbaScholarProfile, MbaStudentProfile, MbaUser, MbaProjectSupervisorInvitation, ProjectStatus
 from .route_support import *  # noqa: F403
-from .routes_documents import MBA_FORM_TEMPLATES
 from .grading import project_grade_summary
 
 
@@ -173,7 +172,6 @@ def student_dashboard():
         document_label=document_label,
         uploaded_doc_for=uploaded_doc_for,
         student_has_uploaded_doc=student_has_uploaded_doc,
-        form_templates=MBA_FORM_TEMPLATES,
         project_activity_entries=project_activity_entries,
         project_status_label=public_project_status_label,
         project_status_badge_class=public_project_status_badge_class,
@@ -221,7 +219,6 @@ def student_corrections():
         corrections_status_label=corrections_status_label,
         uploaded_doc_for=uploaded_doc_for,
         student_submitted_corrections_response=student_submitted_corrections_response,
-        admin_uploaded_corrected_dissertation=admin_uploaded_corrected_dissertation,
         student_submitted_corrections_pack=student_submitted_corrections_pack,
         supervisor_approved_corrections=supervisor_approved_corrections,
         supervisor_rejected_corrections=supervisor_rejected_corrections,
@@ -552,7 +549,6 @@ def scholar_corrections():
         corrections_status_label=corrections_status_label,
         uploaded_doc_for=uploaded_doc_for,
         student_submitted_corrections_response=student_submitted_corrections_response,
-        admin_uploaded_corrected_dissertation=admin_uploaded_corrected_dissertation,
         student_submitted_corrections_pack=student_submitted_corrections_pack,
         supervisor_approved_corrections=supervisor_approved_corrections,
         correction_request_reference_time=correction_request_reference_time,

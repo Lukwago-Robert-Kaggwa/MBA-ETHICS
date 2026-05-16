@@ -115,7 +115,8 @@
       <h2>Project Queue</h2>
       <span>{{ project_pagination.total }} capstone projects</span>
     </div>
-    {% set has_project_filters = request.args.get('student_number') or request.args.get('status') or sv != 'all' %}
+    {% set project_search = request.args.get('q') %}
+    {% set has_project_filters = project_search or request.args.get('student_number') or request.args.get('status') or sv != 'all' %}
     <div class="admin-supervisor-pool-panel admin-supervisor-pool-panel--sticky">
       <div>
         <strong>Release to Supervisors</strong>
@@ -135,19 +136,19 @@
     </div>
     <div class="admin-project-toolbar">
       <div class="admin-project-toolbar__views" role="tablist" aria-label="Project filters">
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all', student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'all' %}is-active{% endif %}">
           All <strong>{{ vc.all }}</strong>
         </a>
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='awaiting', student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='awaiting', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'awaiting' %}is-active{% endif %}">
           Awaiting <strong>{{ vc.awaiting }}</strong>
         </a>
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='declined', student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='declined', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'declined' %}is-active{% endif %}">
           Declined <strong>{{ vc.declined }}</strong>
         </a>
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='accepted', student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='accepted', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'accepted' %}is-active{% endif %}">
           Accepted <strong>{{ vc.accepted }}</strong>
         </a>

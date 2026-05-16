@@ -9,7 +9,7 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
 from ..extensions import db
-from .form_definitions import FORM_DEFINITIONS, form_definition, iter_fields
+from .form_definitions import FORM_DEFINITIONS, form_definition
 from ..models import (
     EthicsActivityLog,
     EthicsFormDraft,

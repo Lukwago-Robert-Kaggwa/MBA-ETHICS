@@ -30,14 +30,8 @@ from ..models import (
 )
 from .recommendation import (
     SUPERVISOR_RECOMMENDATION_LIMIT,
-    candidate_profile_terms,
-    candidate_profile_terms as candidate_expertise_terms,
     match_recommendations,
-    project_theme_terms,
-    project_theme_terms as project_interest_terms,
-    rank_candidates,
     recommend_assessors,
-    tokenize,
 )
 
 ALLOWED_UPLOAD_EXTENSIONS = {"pdf"}
@@ -2399,10 +2393,6 @@ def generate_form_submission_document_bytes(project, form_type, payload):
     return generate_form_submission_pdf_bytes(form_type, payload)
 
 
-def generate_jbs10_template_pdf_bytes():
-    return generate_form_submission_pdf_bytes("jbs10", {})
-
-
 _ACTIVITY_START_RE = re.compile(r"(?m)(?=^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}: )")
 _ACTIVITY_TIMESTAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}):\s*(.*)$", re.DOTALL)
 _ACTIVITY_EMAIL_PREFIX_RE = re.compile(r"^([^\s:@]+@[^\s:@]+)\s+(.*)$", re.DOTALL)
@@ -2763,10 +2753,6 @@ def supervisor_rejected_corrections(project):
     student_submitted_at = getattr(project, "corrections_student_resubmitted_at", None)
     rejected_at = getattr(project, "corrections_supervisor_rejected_at", None)
     return bool(student_submitted_at and rejected_at and rejected_at >= student_submitted_at)
-
-
-def admin_uploaded_corrected_dissertation(project):
-    return student_uploaded_corrected_dissertation(project)
 
 
 def supervisor_approved_corrections(project):

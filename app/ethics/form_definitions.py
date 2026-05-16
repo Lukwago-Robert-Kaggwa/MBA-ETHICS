@@ -291,9 +291,3 @@ FORM_DEFINITIONS = {
 
 def form_definition(form_type):
     return FORM_DEFINITIONS.get((form_type or "").upper())
-
-
-def iter_fields(definition):
-    for section in definition["sections"]:
-        for field in section["fields"]:
-            yield section, field

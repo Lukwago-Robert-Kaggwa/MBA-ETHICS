@@ -1,4 +1,3 @@
-from datetime import datetime
 import os
 import uuid
 from io import BytesIO
@@ -88,18 +87,14 @@ def _live_form_pdf_response(project, doc):
     )
 
 MBA_FORM_TEMPLATES = {
-    "supervisor_agreement": {
-        "filename": None,
-        "label": document_label("supervisor_agreement"),
-        "downloadable": False,
-    },
-    "jbs10": {"filename": "JBS10.pdf", "label": document_label("jbs10"), "downloadable": False},
-    "intent_to_submit": {"filename": None, "label": document_label("intent_to_submit"), "downloadable": False},
-    "ethics_certificate": {"filename": None, "label": document_label("ethics_certificate"), "downloadable": False},
-    "ethics_exemption_form": {"filename": None, "label": document_label("ethics_exemption_form"), "downloadable": False},
-    "dissertation": {"filename": None, "label": document_label("dissertation"), "downloadable": False},
-    "global_document": {"filename": None, "label": document_label("global_document"), "downloadable": False},
-    "combined_turnitin_ai_report": {"filename": None, "label": document_label("combined_turnitin_ai_report"), "downloadable": False},
+    "supervisor_agreement": {"label": document_label("supervisor_agreement")},
+    "jbs10": {"label": document_label("jbs10")},
+    "intent_to_submit": {"label": document_label("intent_to_submit")},
+    "ethics_certificate": {"label": document_label("ethics_certificate")},
+    "ethics_exemption_form": {"label": document_label("ethics_exemption_form")},
+    "dissertation": {"label": document_label("dissertation")},
+    "global_document": {"label": document_label("global_document")},
+    "combined_turnitin_ai_report": {"label": document_label("combined_turnitin_ai_report")},
 }
 
 MOODLE_CAPSTONE_SUBMISSION_MESSAGE = (
@@ -233,55 +228,6 @@ def corrections_approval_admin_email_messages(project, response_doc, turnitin_do
     ]
 
 
-def corrected_dissertation_supervisor_email_messages(project, corrected_doc):
-    turnitin_doc = uploaded_doc_for(project, "corrections_turnitin_report")
-    turnitin_line = (
-        f"Resubmitted Turnitin report: {turnitin_doc.original_name}\n"
-        if turnitin_doc
-        else ""
-    )
-    return [
-        {
-            "recipient": supervisor_email,
-            "subject": f"Corrected Capstone Manuscript Ready for Review: {project.project_title}",
-            "body": (
-                f"The corrected Capstone Manuscript is ready for review for '{project.project_title}'.\n\n"
-                f"File: {corrected_doc.original_name}\n"
-                f"{turnitin_line}"
-                f"Student: {project.student.email if project.student else 'Unknown'}\n\n"
-                "Please sign in to the MBA system and review the corrected Capstone Manuscript together with the "
-                "student's Response to Assessors' Comments and resubmitted Turnitin report."
-            ),
-        }
-        for supervisor_email in project_supervisor_notification_emails(project)
-    ]
-
-
-@mba_bp.route("/forms/download/<doc_key>")
-@login_required
-def download_form_template(doc_key):
-    """Let authenticated MBA users download a blank form template."""
-    if not require_mba_user():
-        return redirect(url_for("auth.login"))
-    template_info = MBA_FORM_TEMPLATES.get(doc_key)
-    if not template_info or not template_info.get("downloadable") or not template_info.get("filename"):
-        abort(404)
-    docs_dir = os.path.join(current_app.root_path, "static", "docs")
-    template_path = os.path.join(docs_dir, template_info["filename"])
-    if doc_key == "jbs10" and (
-        not os.path.exists(template_path)
-        or os.path.getsize(template_path) < 500
-        or not _file_starts_with_pdf_header(template_path)
-    ):
-        return send_file(
-            BytesIO(generate_jbs10_template_pdf_bytes()),
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=template_info["filename"],
-        )
-    return send_from_directory(docs_dir, template_info["filename"], as_attachment=True)
-
-
 @mba_bp.route("/resources/paper-template-manuscript")
 @login_required
 def download_manuscript_template():
@@ -300,14 +246,6 @@ def download_manuscript_template():
         download_name="Capstone Manuscript Template.docx",
         conditional=False,
     )
-
-
-def _file_starts_with_pdf_header(path):
-    try:
-        with open(path, "rb") as fh:
-            return fh.read(5) == b"%PDF-"
-    except OSError:
-        return False
 
 
 def _pdf_head(path, byte_count=2048):
@@ -380,52 +318,6 @@ def _regenerate_generated_document_if_needed(project, doc, project_dir):
     doc.file_data = file_bytes
     doc.mime_type = "application/pdf"
     doc.file_size = len(file_bytes)
-
-
-@mba_bp.route("/projects/<int:project_id>/request-dissertation-resubmission", methods=["POST"])
-@login_required
-def request_dissertation_resubmission(project_id):
-    project = db.session.get(MbaProject, project_id)
-    if not project:
-        abort(404)
-
-    is_student = current_user.role == MbaRole.STUDENT.value and project.student_id == current_user.id
-    if not is_student:
-        return redirect(role_landing_url())
-
-    flash(MOODLE_CAPSTONE_SUBMISSION_MESSAGE, "info")
-    return redirect(url_for("mba.student_dashboard"))
-
-
-@mba_bp.route("/projects/<int:project_id>/upload-corrections-pack", methods=["POST"])
-@login_required
-def upload_corrections_pack(project_id):
-    """Compatibility guard for the retired upload-only corrections endpoint."""
-    project = db.session.get(MbaProject, project_id)
-    if not project:
-        abort(404)
-
-    is_student = current_user.role == MbaRole.STUDENT.value and project.student_id == current_user.id
-    if not is_student:
-        return redirect(role_landing_url())
-    if not project_has_active_corrections(project):
-        flash("There are no active assessor comments on this Capstone Project.", "error")
-        return redirect(url_for("mba.student_corrections"))
-    if not corrections_released_to_student(project):
-        flash("Your supervisor has not released assessor comments for response yet.", "error")
-        return redirect(url_for("mba.student_corrections"))
-    if project.project_status in DISSERTATION_CORRECTIONS_CLOSED_STATUSES:
-        flash("The response workflow is closed for this Capstone Project.", "error")
-        return redirect(url_for("mba.student_corrections"))
-    if supervisor_approved_corrections(project):
-        flash("Your supervisor has already approved this corrections submission.", "info")
-        return redirect(url_for("mba.student_corrections"))
-
-    flash(
-        "Use the in-app Response to Assessors' Comments form to submit the corrected pack.",
-        "info",
-    )
-    return redirect(url_for("mba.fill_project_form", project_id=project.id, form_type="corrections_response"))
 
 
 @mba_bp.route("/projects/<int:project_id>/upload-form", methods=["POST"])
@@ -550,52 +442,6 @@ def upload_project_form(project_id):
     return redirect(url_for("mba.student_dashboard"))
 
 
-@mba_bp.route("/projects/<int:project_id>/assessor-result", methods=["POST"])
-@login_required
-def assessor_submit_result(project_id):
-    if not require_mba_role(MbaRole.SCHOLAR.value, MbaRole.EXAMINER.value):
-        return redirect(role_landing_url())
-
-    project = db.session.get(MbaProject, project_id)
-    if not project:
-        abort(404)
-
-    if project.project_status not in {
-        ProjectStatus.HDC_VERIFIED.value,
-        ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value,
-        ProjectStatus.RESULTS_DECLINED.value,
-    }:
-        flash("Assessment results can be uploaded after HDC approves the assessor nominations.", "error")
-        return redirect(role_landing_url())
-
-    slot = (request.form.get("slot") or "").strip()
-    user_slots = assessor_slots_for_user(project, current_user.id)
-    if slot not in user_slots:
-        abort(403)
-    if getattr(project, f"{slot}_invitation_status") != INVITATION_ACCEPTED:
-        flash("Accept the assessor invitation before uploading your assessment result.", "error")
-        return redirect(role_landing_url())
-
-    uploaded_file = request.files.get("form_file")
-    file_error = _validate_uploaded_pdf(uploaded_file)
-    if file_error:
-        flash(file_error, "error")
-        return redirect(role_landing_url())
-
-    try:
-        _store_project_document(project, assessment_doc_type(slot), uploaded_file)
-        if all_assessment_results_received(project):
-            project.comments = append_comment(project.comments, "All assessor results have been received.")
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        flash("Assessment result upload failed.", "error")
-        return redirect(role_landing_url())
-
-    flash("Assessment result uploaded.", "success")
-    return redirect(role_landing_url())
-
-
 def _combined_declaration_ready(project):
     form = MbaForm.query.filter_by(project_id=project.id, form_type="plagiarism_declaration").first()
     payload = form.payload if form and isinstance(form.payload, dict) else {}
@@ -649,60 +495,6 @@ def admin_upload_capstone_submission(project_id):
 
     flash("Capstone Manuscript uploaded.", "success")
     return redirect(url_for("mba.admin_dashboard", panel="projects"))
-
-
-@mba_bp.route("/projects/<int:project_id>/admin-corrected-dissertation", methods=["POST"])
-@login_required
-def admin_upload_corrected_dissertation(project_id):
-    if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
-        return redirect(role_landing_url())
-
-    project = db.session.get(MbaProject, project_id)
-    if not project:
-        abort(404)
-
-    if not project_has_active_corrections(project):
-        flash("There are no active assessor comments on this Capstone Project.", "error")
-        return redirect(url_for("mba.admin_corrections"))
-    if not student_submitted_corrections_response(project):
-        flash("The student must submit the Response to Assessors' Comments and resubmitted Turnitin report before the corrected Capstone Manuscript can be updated.", "error")
-        return redirect(url_for("mba.admin_corrections"))
-    if supervisor_approved_corrections(project):
-        flash("The supervisor has already approved this corrections submission.", "info")
-        return redirect(url_for("mba.admin_corrections"))
-
-    corrected_dissertation_file = request.files.get("corrected_dissertation_file")
-    corrected_dissertation_error = _validate_required_pdf(
-        corrected_dissertation_file,
-        document_label("corrected_dissertation"),
-    )
-    if corrected_dissertation_error:
-        flash(corrected_dissertation_error, "error")
-        return redirect(url_for("mba.admin_corrections"))
-
-    try:
-        corrected_doc = _store_project_document(project, "corrected_dissertation", corrected_dissertation_file)
-        project.corrections_supervisor_approved_at = None
-        project.corrections_supervisor_comments = None
-        project.corrections_supervisor_rejected_at = None
-        project.corrections_supervisor_rejection_comments = None
-        project.comments = append_comment(
-            project.comments,
-            f"{current_user.email}: uploaded the corrected Capstone Manuscript for the assessor comments response workflow.",
-        )
-        email_result = send_bulk_emails(corrected_dissertation_supervisor_email_messages(project, corrected_doc))
-        project.comments = append_comment(
-            project.comments,
-            f"Corrected Capstone supervisor email result: delivered={len(email_result['delivered'])}, failed={len(email_result['failed'])}",
-        )
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        flash("Corrected Capstone Manuscript upload failed.", "error")
-        return redirect(url_for("mba.admin_corrections"))
-
-    flash("Corrected Capstone Manuscript uploaded. The supervisor can now review the response pack.", "success")
-    return redirect(url_for("mba.admin_corrections", corrections_status="awaiting_supervisor"))
 
 
 @mba_bp.route("/projects/<int:project_id>/admin-supporting-document", methods=["POST"])

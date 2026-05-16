@@ -10,6 +10,7 @@ from datetime import datetime
 
 from flask import Response, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
@@ -560,40 +561,75 @@ def admin_dashboard():
     allowed_views = {"all", "awaiting", "declined", "accepted"}
     if selected_view not in allowed_views:
         selected_view = "all"
+    search_text = (request.args.get("q") or "").strip()
     student_number = (request.args.get("student_number") or "").strip()
     status_filter = (request.args.get("status") or "").strip()
     project_page = parse_positive_int(request.args.get("project_page"), 1)
     project_per_page = parse_page_size(request.args.get("project_per_page"), 5)
-    query = MbaProject.query.filter(MbaProject.project_status != ProjectStatus.CREATED.value).order_by(MbaProject.updated_at.desc())
-    if student_number:
-        query = query.join(MbaStudentProfile, MbaStudentProfile.user_id == MbaProject.student_id)
-        query = query.filter(MbaStudentProfile.student_number.ilike(f"%{student_number}%"))
-    if status_filter == "declined":
-        query = query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_1_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_2_invitation_status == INVITATION_DECLINED))
-    elif status_filter == "admin_submitted":
-        query = query.filter(MbaProject.project_status == ProjectStatus.ADMIN_SUBMITTED.value)
-    elif status_filter == "supervisor_accepted":
-        query = query.filter(MbaProject.project_status == ProjectStatus.SUPERVISOR_ACCEPTED.value)
-    elif status_filter == "jbs5_pending_hdc":
-        query = query.filter(MbaProject.project_status == ProjectStatus.JBS5_SUBMITTED_TO_HDC.value)
-    elif status_filter == "jbs5_approved_hdc":
-        query = query.filter(MbaProject.jbs5_hdc_approved_at.isnot(None))
-    elif status_filter == "jbs5_declined_hdc":
-        query = query.filter(MbaProject.project_status == ProjectStatus.JBS5_HDC_DECLINED.value)
-    elif status_filter == "approved_hdc":
-        query = query.filter(MbaProject.project_status == ProjectStatus.HDC_VERIFIED.value)
-    elif status_filter == "results_approved":
-        query = query.filter(MbaProject.project_status == ProjectStatus.RESULTS_APPROVED.value)
-    elif status_filter == "results_declined":
-        query = query.filter(MbaProject.project_status == ProjectStatus.RESULTS_DECLINED.value)
-    elif status_filter == "awaiting":
-        query = query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_1_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_2_invitation_status == INVITATION_PENDING))
-    if selected_view == "awaiting":
-        query = query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_1_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_2_invitation_status == INVITATION_PENDING))
-    elif selected_view == "declined":
-        query = query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_1_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_2_invitation_status == INVITATION_DECLINED))
-    elif selected_view == "accepted":
-        query = query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_ACCEPTED) & (MbaProject.assessor_1_invitation_status == INVITATION_ACCEPTED) & (MbaProject.assessor_2_invitation_status == INVITATION_ACCEPTED))
+
+    def apply_project_filters(base_query, view=None):
+        if search_text:
+            search_like = f"%{search_text}%"
+            base_query = (
+                base_query.join(MbaUser, MbaUser.id == MbaProject.student_id)
+                .outerjoin(MbaStudentProfile, MbaStudentProfile.user_id == MbaProject.student_id)
+                .outerjoin(MbaProjectDocument, MbaProjectDocument.project_id == MbaProject.id)
+                .filter(
+                    or_(
+                        MbaProject.project_title.ilike(search_like),
+                        MbaProject.project_description.ilike(search_like),
+                        MbaProject.discipline.ilike(search_like),
+                        MbaProject.qualification.ilike(search_like),
+                        MbaProject.project_status.ilike(search_like),
+                        MbaUser.email.ilike(search_like),
+                        MbaUser.first_name.ilike(search_like),
+                        MbaUser.last_name.ilike(search_like),
+                        MbaStudentProfile.student_number.ilike(search_like),
+                        MbaProjectDocument.original_name.ilike(search_like),
+                        MbaProjectDocument.doc_type.ilike(search_like),
+                    )
+                )
+                .distinct()
+            )
+        elif student_number:
+            base_query = base_query.join(MbaStudentProfile, MbaStudentProfile.user_id == MbaProject.student_id)
+
+        if student_number:
+            base_query = base_query.filter(MbaStudentProfile.student_number.ilike(f"%{student_number}%"))
+
+        if status_filter == "declined":
+            base_query = base_query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_1_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_2_invitation_status == INVITATION_DECLINED))
+        elif status_filter == "admin_submitted":
+            base_query = base_query.filter(MbaProject.project_status == ProjectStatus.ADMIN_SUBMITTED.value)
+        elif status_filter == "supervisor_accepted":
+            base_query = base_query.filter(MbaProject.project_status == ProjectStatus.SUPERVISOR_ACCEPTED.value)
+        elif status_filter == "jbs5_pending_hdc":
+            base_query = base_query.filter(MbaProject.project_status == ProjectStatus.JBS5_SUBMITTED_TO_HDC.value)
+        elif status_filter == "jbs5_approved_hdc":
+            base_query = base_query.filter(MbaProject.jbs5_hdc_approved_at.isnot(None))
+        elif status_filter == "jbs5_declined_hdc":
+            base_query = base_query.filter(MbaProject.project_status == ProjectStatus.JBS5_HDC_DECLINED.value)
+        elif status_filter == "approved_hdc":
+            base_query = base_query.filter(MbaProject.project_status == ProjectStatus.HDC_VERIFIED.value)
+        elif status_filter == "results_approved":
+            base_query = base_query.filter(MbaProject.project_status == ProjectStatus.RESULTS_APPROVED.value)
+        elif status_filter == "results_declined":
+            base_query = base_query.filter(MbaProject.project_status == ProjectStatus.RESULTS_DECLINED.value)
+        elif status_filter == "awaiting":
+            base_query = base_query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_1_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_2_invitation_status == INVITATION_PENDING))
+
+        active_view = selected_view if view is None else view
+        if active_view == "awaiting":
+            base_query = base_query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_1_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_2_invitation_status == INVITATION_PENDING))
+        elif active_view == "declined":
+            base_query = base_query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_1_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_2_invitation_status == INVITATION_DECLINED))
+        elif active_view == "accepted":
+            base_query = base_query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_ACCEPTED) & (MbaProject.assessor_1_invitation_status == INVITATION_ACCEPTED) & (MbaProject.assessor_2_invitation_status == INVITATION_ACCEPTED))
+        return base_query
+
+    query = apply_project_filters(
+        MbaProject.query.filter(MbaProject.project_status != ProjectStatus.CREATED.value)
+    ).order_by(MbaProject.updated_at.desc())
     admin_pagination_args = request_query_args({"project_page", "project_per_page"})
     admin_pagination_args["panel"] = "projects"
     projects, project_pagination = paginate_query(
@@ -667,37 +703,10 @@ def admin_dashboard():
         db.session.commit()
 
     def view_count_for(view):
-        q = MbaProject.query.filter(MbaProject.project_status != ProjectStatus.CREATED.value)
-        if student_number:
-            q = q.join(MbaStudentProfile, MbaStudentProfile.user_id == MbaProject.student_id)
-            q = q.filter(MbaStudentProfile.student_number.ilike(f"%{student_number}%"))
-        if status_filter == "declined":
-            q = q.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_1_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_2_invitation_status == INVITATION_DECLINED))
-        elif status_filter == "admin_submitted":
-            q = q.filter(MbaProject.project_status == ProjectStatus.ADMIN_SUBMITTED.value)
-        elif status_filter == "supervisor_accepted":
-            q = q.filter(MbaProject.project_status == ProjectStatus.SUPERVISOR_ACCEPTED.value)
-        elif status_filter == "jbs5_pending_hdc":
-            q = q.filter(MbaProject.project_status == ProjectStatus.JBS5_SUBMITTED_TO_HDC.value)
-        elif status_filter == "jbs5_approved_hdc":
-            q = q.filter(MbaProject.jbs5_hdc_approved_at.isnot(None))
-        elif status_filter == "jbs5_declined_hdc":
-            q = q.filter(MbaProject.project_status == ProjectStatus.JBS5_HDC_DECLINED.value)
-        elif status_filter == "approved_hdc":
-            q = q.filter(MbaProject.project_status == ProjectStatus.HDC_VERIFIED.value)
-        elif status_filter == "results_approved":
-            q = q.filter(MbaProject.project_status == ProjectStatus.RESULTS_APPROVED.value)
-        elif status_filter == "results_declined":
-            q = q.filter(MbaProject.project_status == ProjectStatus.RESULTS_DECLINED.value)
-        elif status_filter == "awaiting":
-            q = q.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_1_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_2_invitation_status == INVITATION_PENDING))
-        if view == "awaiting":
-            q = q.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_1_invitation_status == INVITATION_PENDING) | (MbaProject.assessor_2_invitation_status == INVITATION_PENDING))
-        elif view == "declined":
-            q = q.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_1_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_2_invitation_status == INVITATION_DECLINED))
-        elif view == "accepted":
-            q = q.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_ACCEPTED) & (MbaProject.assessor_1_invitation_status == INVITATION_ACCEPTED) & (MbaProject.assessor_2_invitation_status == INVITATION_ACCEPTED))
-        return q.count()
+        return apply_project_filters(
+            MbaProject.query.filter(MbaProject.project_status != ProjectStatus.CREATED.value),
+            view=view,
+        ).count()
 
     view_counts = {"all": view_count_for("all"), "awaiting": view_count_for("awaiting"), "declined": view_count_for("declined"), "accepted": view_count_for("accepted")}
     invitation_state_by_project = {project.id: project_invitation_snapshot(project) for project in projects}
@@ -1022,7 +1031,6 @@ def admin_corrections():
         corrections_status_label=corrections_status_label,
         uploaded_doc_for=uploaded_doc_for,
         student_submitted_corrections_response=student_submitted_corrections_response,
-        admin_uploaded_corrected_dissertation=admin_uploaded_corrected_dissertation,
         student_submitted_corrections_pack=student_submitted_corrections_pack,
         supervisor_approved_corrections=supervisor_approved_corrections,
         correction_request_reference_time=correction_request_reference_time,

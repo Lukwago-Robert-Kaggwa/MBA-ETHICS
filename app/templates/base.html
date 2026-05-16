@@ -202,6 +202,11 @@
             {% endfor %}
             <span class="ethics-topbar__search-icon" aria-hidden="true">S</span>
             <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search projects, students, documents...">
+            {% if request.args.get('q') %}
+              {% set clear_search_args = request.args.to_dict(flat=False) %}
+              {% set _removed_q = clear_search_args.pop('q', None) %}
+              <a class="ethics-topbar__search-clear" href="{{ url_for(request.endpoint, **clear_search_args) }}" aria-label="Clear search">Clear</a>
+            {% endif %}
           </form>
           <div class="ethics-topbar__actions">
             {% if topbar_reminders_nav and topbar_reminders_nav.url %}
