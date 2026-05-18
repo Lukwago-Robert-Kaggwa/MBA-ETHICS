@@ -663,6 +663,7 @@ def admin_dashboard():
     supervisor_pool_available_projects = [
         project for project in supervisor_pool_candidates if project_available_for_supervisor_pool(project)
     ]
+<<<<<<< HEAD
     supervisor_student_counts = dict(
         db.session.query(
             MbaProject.primary_supervisor_id,
@@ -682,6 +683,16 @@ def admin_dashboard():
         for item in recommendations["ranked_supervisors"]:
             item["supervised_student_count"] = supervisor_student_counts.get(item["user"].id, 0)
         return recommendations
+=======
+    def build_project_suggestions(project):
+        return match_recommendations(
+            project,
+            supervisors,
+            examiners,
+            supervisor_workload_by_user_id=supervisor_workload_counts(exclude_project_id=project.id),
+            assessor_workload_by_user_id=assessor_workload_counts(exclude_project_id=project.id),
+        )
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
 
     updated_auto_assignments = False
     for project in projects:

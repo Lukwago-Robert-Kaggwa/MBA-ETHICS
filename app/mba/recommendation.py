@@ -22,16 +22,82 @@ MATCH_STOPWORDS = {
     "were",
 }
 
+<<<<<<< HEAD
+=======
+SHORT_MATCH_TERMS = {
+    "ai",
+    "esg",
+    "hr",
+    "jse",
+    "roi",
+    "sme",
+}
+
+PHRASE_ALIASES = {
+    "artificial intelligence": {"ai", "machine", "learning", "data", "science", "analytics"},
+    "business intelligence": {"analytics", "data"},
+    "computer vision": {"ai", "image", "imaging", "machine", "learning"},
+    "data science": {"ai", "analytics", "artificial", "intelligence", "machine", "learning"},
+    "human resource": {"hr", "people", "talent"},
+    "human resources": {"hr", "people", "talent"},
+    "machine learning": {"ai", "analytics", "artificial", "data", "intelligence", "science"},
+    "small and medium enterprises": {"sme", "enterprise"},
+    "small medium enterprises": {"sme", "enterprise"},
+}
+
+TERM_ALIASES = {
+    "bank": {"banking"},
+    "banking": {"bank"},
+    "employee": {"staff"},
+    "finance": {"financial"},
+    "financial": {"finance"},
+    "organisation": {"organization", "organisational", "organizational"},
+    "organisational": {"organisation", "organization", "organizational"},
+    "organization": {"organisation", "organisational", "organizational"},
+    "organizational": {"organisation", "organisational", "organization"},
+    "performance": {"performing"},
+    "staff": {"employee"},
+    "strategic": {"strategy"},
+    "strategy": {"strategic"},
+}
+
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
 SUPERVISOR_RECOMMENDATION_LIMIT = 2
 ASSESSOR_RECOMMENDATION_LIMIT = 2
 
 
+<<<<<<< HEAD
+=======
+def term_variants(word):
+    variants = {word}
+    if word.endswith("ies") and len(word) > 4:
+        variants.add(f"{word[:-3]}y")
+    elif word.endswith("s") and len(word) > 3 and not word.endswith("ss"):
+        variants.add(word[:-1])
+    variants |= TERM_ALIASES.get(word, set())
+    return variants
+
+
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
 def tokenize(value):
     text = (value or "").strip().lower()
     if not text:
         return set()
     words = re.findall(r"[a-z0-9]+", text)
+<<<<<<< HEAD
     return {word for word in words if len(word) >= 3 and word not in MATCH_STOPWORDS}
+=======
+    terms = set()
+    for word in words:
+        if word in MATCH_STOPWORDS:
+            continue
+        if len(word) >= 3 or word in SHORT_MATCH_TERMS:
+            terms |= term_variants(word)
+    for phrase, aliases in PHRASE_ALIASES.items():
+        if phrase in text:
+            terms |= aliases
+    return terms
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
 
 
 def project_theme_terms(project):
@@ -61,14 +127,38 @@ def candidate_profile_terms(user):
     return terms
 
 
+<<<<<<< HEAD
 def rank_candidates(project, candidates):
+=======
+def candidate_workload(user, workload_by_user_id=None):
+    workload_by_user_id = workload_by_user_id or {}
+    try:
+        return int(workload_by_user_id.get(user.id, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def rank_candidates(project, candidates, workload_by_user_id=None):
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     project_terms = project_theme_terms(project)
     ranked = []
     for candidate in candidates:
         expertise_terms = candidate_profile_terms(candidate)
         matches = sorted(project_terms & expertise_terms)
+<<<<<<< HEAD
         ranked.append({"user": candidate, "score": len(matches), "matches": matches[:8]})
     ranked.sort(key=lambda item: (-item["score"], item["user"].email))
+=======
+        ranked.append(
+            {
+                "user": candidate,
+                "score": len(matches),
+                "matches": matches[:8],
+                "workload_count": candidate_workload(candidate, workload_by_user_id),
+            }
+        )
+    ranked.sort(key=lambda item: (item["workload_count"], -item["score"], item["user"].email))
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     return ranked
 
 
@@ -77,6 +167,7 @@ def filter_ranked_matches(ranked):
     return positive_matches or ranked
 
 
+<<<<<<< HEAD
 def recommend_supervisors(project, supervisors, limit=SUPERVISOR_RECOMMENDATION_LIMIT):
     return filter_ranked_matches(rank_candidates(project, supervisors))[:limit]
 
@@ -85,6 +176,22 @@ def recommend_assessors(project, examiners, excluded_user_ids=None, limit=ASSESS
     excluded_user_ids = set(excluded_user_ids or [])
     recommendations = []
     for item in filter_ranked_matches(rank_candidates(project, examiners)):
+=======
+def recommend_supervisors(project, supervisors, limit=SUPERVISOR_RECOMMENDATION_LIMIT, workload_by_user_id=None):
+    return filter_ranked_matches(rank_candidates(project, supervisors, workload_by_user_id=workload_by_user_id))[:limit]
+
+
+def recommend_assessors(
+    project,
+    examiners,
+    excluded_user_ids=None,
+    limit=ASSESSOR_RECOMMENDATION_LIMIT,
+    workload_by_user_id=None,
+):
+    excluded_user_ids = set(excluded_user_ids or [])
+    recommendations = []
+    for item in filter_ranked_matches(rank_candidates(project, examiners, workload_by_user_id=workload_by_user_id)):
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
         user = item["user"]
         if user.id in excluded_user_ids:
             continue
@@ -101,8 +208,20 @@ def match_recommendations(
     examiners,
     supervisor_limit=SUPERVISOR_RECOMMENDATION_LIMIT,
     assessor_limit=ASSESSOR_RECOMMENDATION_LIMIT,
+<<<<<<< HEAD
 ):
     ranked_supervisors = recommend_supervisors(project, supervisors, limit=supervisor_limit)
+=======
+    supervisor_workload_by_user_id=None,
+    assessor_workload_by_user_id=None,
+):
+    ranked_supervisors = recommend_supervisors(
+        project,
+        supervisors,
+        limit=supervisor_limit,
+        workload_by_user_id=supervisor_workload_by_user_id,
+    )
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     supervisor_choice = ranked_supervisors[0]["user"] if ranked_supervisors else None
     if getattr(project, "primary_supervisor_id", None):
         excluded_ids = {project.primary_supervisor_id}
@@ -113,6 +232,10 @@ def match_recommendations(
         examiners,
         excluded_user_ids=excluded_ids,
         limit=assessor_limit,
+<<<<<<< HEAD
+=======
+        workload_by_user_id=assessor_workload_by_user_id,
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     )
 
     return {

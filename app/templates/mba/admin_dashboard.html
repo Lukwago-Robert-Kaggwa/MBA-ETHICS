@@ -681,8 +681,13 @@
                         <div class="assignment-summary-card">
                           <strong><span class="name-email" tabindex="0">{{ person_name(suggestion.user) }}<span
                                 class="hover-email">{{ suggestion.user.email }}</span></span></strong>
+<<<<<<< HEAD
                           <span>Currently supervising {{ suggestion.supervised_student_count }} student{{ '' if
                             suggestion.supervised_student_count == 1 else 's' }}</span>
+=======
+                          <span>Current workload: supervising {{ suggestion.workload_count }} student{{ '' if
+                            suggestion.workload_count == 1 else 's' }}</span>
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
                           {% if suggestion.matches %}
                           <small>Matched areas: {{ suggestion.matches|join(', ') }}</small>
                           {% else %}
@@ -884,6 +889,12 @@
                             <small class="muted">Suggested: <span class="name-email" tabindex="0">{{
                                 person_name(suggestions.assessors[index - 1]) }}<span class="hover-email">{{
                                   suggestions.assessors[index - 1].email }}</span></span></small>
+<<<<<<< HEAD
+=======
+                            <small class="muted">Current workload: assessing {{
+                              suggestions.ranked_examiners[index - 1].workload_count }} student{{ '' if
+                              suggestions.ranked_examiners[index - 1].workload_count == 1 else 's' }}</small>
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
                             {% endif %}
                             {% if assessor_slot_locked %}
                             <input type="hidden" name="assessor_{{ index }}_id" value="{{ current_assessor_id }}">
@@ -1324,8 +1335,13 @@
 
       <div class="admin-form-section">
         <h4>Recommendation Data</h4>
+<<<<<<< HEAD
         <p class="muted">Assessor recommendations use the profile research themes, interests, disciplines, skills,
           department, qualification, and affiliation captured here or entered by assessors after login.</p>
+=======
+        <p class="muted">Assessor recommendations use profile research themes, interests, disciplines, skills,
+          department, qualification, affiliation, and current assessment workload captured by active assignments.</p>
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
       </div>
     </div>
 
@@ -1386,8 +1402,13 @@
 
       <div class="admin-form-section">
         <h4>Matching Data</h4>
+<<<<<<< HEAD
         <p class="muted">Supervisor recommendations use the profile research themes, interests, disciplines, skills,
           department, qualification, and affiliation captured here or entered by supervisors after login.</p>
+=======
+        <p class="muted">Supervisor recommendations use profile research themes, interests, disciplines, skills,
+          department, qualification, affiliation, and current supervision workload captured by active assignments.</p>
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
       </div>
     </div>
 

@@ -133,5 +133,31 @@
     </form>
   {% endif %}
 </section>
+<<<<<<< HEAD
+=======
+
+<section class="ethics-panel">
+  <div class="panel-heading">
+    <h2>Password</h2>
+    <span>{{ 'Change password' if current_user.password_hash else 'Set password' }}</span>
+  </div>
+
+  <form action="{{ url_for('mba.profile') }}" method="post" class="form-stack compact-form">
+    <input type="hidden" name="action" value="change_password">
+    {% if current_user.password_hash %}
+      <label>Current password
+        <input type="password" name="current_password" autocomplete="current-password" required>
+      </label>
+    {% endif %}
+    <label>New password
+      <input type="password" name="new_password" autocomplete="new-password" minlength="8" required>
+    </label>
+    <label>Confirm new password
+      <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required>
+    </label>
+    <button class="primary-button" type="submit">{{ 'Update Password' if current_user.password_hash else 'Set Password' }}</button>
+  </form>
+</section>
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
 </div>
 {% endblock %}

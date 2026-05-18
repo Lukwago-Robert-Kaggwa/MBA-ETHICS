@@ -728,7 +728,18 @@ def register_cli(app):
         def get_or_create_project(student_id, title):
             p = MbaProject.query.filter_by(student_id=student_id, project_title=title).first()
             if not p:
+<<<<<<< HEAD
                 p = MbaProject(student_id=student_id, project_title=title, project_description="Demo project.")
+=======
+                general_discipline = disciplines.get("General")
+                p = MbaProject(
+                    student_id=student_id,
+                    project_title=title,
+                    project_description="Demo project.",
+                    discipline=general_discipline.name if general_discipline else "General",
+                    discipline_id=general_discipline.id if general_discipline else None,
+                )
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
                 db.session.add(p)
                 db.session.flush()
             return p

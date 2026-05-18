@@ -245,6 +245,77 @@ HDC_ASSESSOR_APPROVED = "approved"
 HDC_ASSESSOR_DECLINED = "declined"
 HDC_ASSESSOR_DECISIONS = {HDC_ASSESSOR_APPROVED, HDC_ASSESSOR_DECLINED}
 
+<<<<<<< HEAD
+=======
+ACTIVE_WORKLOAD_PROJECT_STATUSES = {
+    ProjectStatus.ADMIN_SUBMITTED.value,
+    ProjectStatus.JBS5_SUBMITTED_TO_HDC.value,
+    ProjectStatus.JBS5_HDC_APPROVED.value,
+    ProjectStatus.ADMIN_APPROVED.value,
+    ProjectStatus.SUPERVISOR_ACCEPTED.value,
+    ProjectStatus.HDC_DECLINED.value,
+    ProjectStatus.HDC_VERIFIED.value,
+    ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value,
+    ProjectStatus.RESULTS_DECLINED.value,
+    ProjectStatus.RESULTS_APPROVED.value,
+}
+WORKLOAD_INVITATION_STATUSES = {INVITATION_PENDING, INVITATION_ACCEPTED}
+
+
+def _add_student_workload(workloads, user_id, student_id):
+    if user_id and student_id:
+        workloads.setdefault(user_id, set()).add(student_id)
+
+
+def _active_workload_projects(exclude_project_id=None):
+    query = (
+        MbaProject.query.options(joinedload(MbaProject.supervisor_invitations))
+        .filter(MbaProject.project_status.in_(ACTIVE_WORKLOAD_PROJECT_STATUSES))
+    )
+    if exclude_project_id:
+        query = query.filter(MbaProject.id != exclude_project_id)
+    return query.all()
+
+
+def supervisor_workload_counts(exclude_project_id=None):
+    workloads = {}
+    for project in _active_workload_projects(exclude_project_id=exclude_project_id):
+        primary_status = getattr(project, "primary_supervisor_invitation_status", None)
+        if (
+            getattr(project, "primary_supervisor_id", None)
+            and primary_status != INVITATION_DECLINED
+            and (
+                primary_status in WORKLOAD_INVITATION_STATUSES
+                or getattr(project, "supervisor_accepted_at", None)
+                or getattr(project, "supervisor_confirmed", False)
+            )
+        ):
+            _add_student_workload(workloads, project.primary_supervisor_id, project.student_id)
+
+        for invitation in getattr(project, "supervisor_invitations", []) or []:
+            if invitation.status in WORKLOAD_INVITATION_STATUSES:
+                _add_student_workload(workloads, invitation.supervisor_id, project.student_id)
+    return {user_id: len(student_ids) for user_id, student_ids in workloads.items()}
+
+
+def assessor_workload_counts(exclude_project_id=None):
+    workloads = {}
+    for project in _active_workload_projects(exclude_project_id=exclude_project_id):
+        for slot in ALL_ASSESSOR_SLOTS:
+            assessor_id = getattr(project, f"{slot}_id", None)
+            if not assessor_id:
+                continue
+            invitation_status = getattr(project, f"{slot}_invitation_status", None)
+            hdc_decision = getattr(project, f"{slot}_hdc_decision", None)
+            if hdc_decision == HDC_ASSESSOR_DECLINED or invitation_status == INVITATION_DECLINED:
+                continue
+            if invitation_status in WORKLOAD_INVITATION_STATUSES or (
+                slot in PRIMARY_ASSESSOR_SLOTS and getattr(project, "assessors_confirmed", False)
+            ):
+                _add_student_workload(workloads, assessor_id, project.student_id)
+    return {user_id: len(student_ids) for user_id, student_ids in workloads.items()}
+
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
 INVITATION_SLOTS = {
     "primary_supervisor": {
         "id_field": "primary_supervisor_id",
@@ -2956,6 +3027,10 @@ def suggested_additional_assessor(project, examiners=None):
         examiners or examiners_query().all(),
         excluded_user_ids=excluded_ids,
         limit=1,
+<<<<<<< HEAD
+=======
+        workload_by_user_id=assessor_workload_counts(exclude_project_id=getattr(project, "id", None)),
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     )
     return ranked[0]["user"] if ranked else None
 
@@ -3089,6 +3164,10 @@ def apply_assessor_suggestions_if_ready(project):
         examiners_query().all(),
         excluded_user_ids=excluded_user_ids,
         limit=len(ASSESSOR_SLOTS),
+<<<<<<< HEAD
+=======
+        workload_by_user_id=assessor_workload_counts(exclude_project_id=getattr(project, "id", None)),
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     )
     suggested_assessors = [item["user"] for item in ranked_assessors]
     if not suggested_assessors:
@@ -3672,7 +3751,17 @@ def project_available_for_supervisor_pool(project):
 
 
 def apply_auto_assignments(project, supervisors, examiners):
+<<<<<<< HEAD
     recommendations = match_recommendations(project, supervisors, examiners)
+=======
+    recommendations = match_recommendations(
+        project,
+        supervisors,
+        examiners,
+        supervisor_workload_by_user_id=supervisor_workload_counts(exclude_project_id=getattr(project, "id", None)),
+        assessor_workload_by_user_id=assessor_workload_counts(exclude_project_id=getattr(project, "id", None)),
+    )
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     invited_supervisors = [item["user"] for item in recommendations["ranked_supervisors"][:SUPERVISOR_SUGGESTION_LIMIT]]
     project.supervisor_invitations.clear()
     for sup in invited_supervisors:

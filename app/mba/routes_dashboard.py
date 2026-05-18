@@ -54,12 +54,48 @@ def _staff_profile_missing_fields(profile):
     )
 
 
+<<<<<<< HEAD
+=======
+def _change_current_user_password():
+    current_password = request.form.get("current_password") or ""
+    new_password = request.form.get("new_password") or ""
+    confirm_password = request.form.get("confirm_password") or ""
+
+    if current_user.password_hash and not current_user.check_password(current_password):
+        flash("Current password is incorrect.", "error")
+        return False
+
+    if len(new_password) < 8:
+        flash("New password must be at least 8 characters.", "error")
+        return False
+
+    if new_password != confirm_password:
+        flash("New passwords do not match.", "error")
+        return False
+
+    if current_user.password_hash and current_user.check_password(new_password):
+        flash("New password must be different from the current password.", "error")
+        return False
+
+    current_user.set_password(new_password)
+    db.session.commit()
+    flash("Your password has been updated.", "success")
+    return True
+
+
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
 @mba_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     if not require_mba_user():
         return redirect(url_for("auth.login"))
     is_student = current_user.role == MbaRole.STUDENT.value
+<<<<<<< HEAD
+=======
+    if request.method == "POST" and request.form.get("action") == "change_password":
+        _change_current_user_password()
+        return redirect(url_for("mba.profile"))
+>>>>>>> b7f3a1a (added password update and recommendation engine updates)
     if is_student:
         profile = current_user.student_profile
         if not profile:
