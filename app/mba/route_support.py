@@ -2925,6 +2925,7 @@ def activate_project_corrections(project, requested_at=None):
     requested_at = requested_at or datetime.utcnow()
     project.corrections_requested_at = requested_at
     project.corrections_student_resubmitted_at = None
+    project.corrections_released_to_student_at = None
     project.corrections_supervisor_approved_at = None
     project.corrections_supervisor_comments = None
     project.corrections_supervisor_rejected_at = None
@@ -2934,6 +2935,7 @@ def activate_project_corrections(project, requested_at=None):
 def clear_project_corrections(project):
     project.corrections_requested_at = None
     project.corrections_student_resubmitted_at = None
+    project.corrections_released_to_student_at = None
     project.corrections_supervisor_approved_at = None
     project.corrections_supervisor_comments = None
     project.corrections_supervisor_rejected_at = None

@@ -53,6 +53,7 @@ from .route_support import (
     assessor_temp_claim_doc_type,
     clear_project_corrections,
     corrections_released_to_student,
+    correction_request_reference_time,
     corrections_requested_email_messages,
     all_assessment_results_received,
     document_label,
@@ -242,7 +243,7 @@ def _build_corrections_response_prefill(project, saved_payload=None):
         if len(comment_lines) > limit:
             comment_lines = comment_lines[: limit - 1] + ["\n".join(comment_lines[limit - 1 :])]
         for row_index, comment_line in enumerate(comment_lines, start=1):
-            prefill.setdefault(f"{slot}_comment_{row_index}", comment_line)
+            prefill[f"{slot}_comment_{row_index}"] = comment_line
     return prefill
 
 
@@ -566,6 +567,16 @@ def fill_project_form(project_id, form_type):
     # Pre-fill
     existing_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
     saved_payload = existing_form.payload if existing_form and isinstance(existing_form.payload, dict) else {}
+    if form_type == "corrections_response":
+        corrections_reference_at = correction_request_reference_time(project)
+        saved_response_is_current = bool(
+            existing_form
+            and corrections_reference_at
+            and existing_form.submitted_at
+            and existing_form.submitted_at >= corrections_reference_at
+        )
+        if not saved_response_is_current:
+            saved_payload = {}
     if form_type == "jbs5" and existing_form and existing_form.supervisor_signed:
         flash("JBS5 has already been signed by the supervisor and can no longer be edited.", "error")
         return redirect(url_for("mba.student_dashboard"))
@@ -2235,19 +2246,27 @@ def assessor_grade_form(project_id, slot):
         }
         report_payload = dict(assessment_payload)
         narrative_payload = dict(assessment_payload)
-        correction_request_triggered = (
-            recommendation_requests_corrections(assessment_payload.get("recommendation"))
-            and not recommendation_requests_corrections(previous_assessment_payload.get("recommendation"))
+        assessment_requests_corrections = recommendation_requests_corrections(
+            assessment_payload.get("recommendation")
+        )
+        previous_assessment_requested_corrections = recommendation_requests_corrections(
+            previous_assessment_payload.get("recommendation")
+        )
+        had_active_corrections = project_has_active_corrections(project)
+        correction_request_triggered = assessment_requests_corrections and (
+            not previous_assessment_requested_corrections or not had_active_corrections
         )
 
         try:
             _save_form_as_document(project, form_type, form_type, assessment_payload)
             _save_form_as_document(project, report_form_type, report_form_type, report_payload)
             _save_form_as_document(project, narrative_form_type, narrative_form_type, narrative_payload)
+            db.session.flush()
             if primary_assessment_conflict_detected(project):
                 activate_additional_assessment(project)
-            if recommendation_requests_corrections(assessment_payload.get("recommendation")):
-                activate_project_corrections(project)
+            if assessment_requests_corrections:
+                if correction_request_triggered:
+                    activate_project_corrections(project)
             elif not project_correction_requests(project):
                 clear_project_corrections(project)
             if all_assessment_results_received(project):

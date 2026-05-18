@@ -2,7 +2,7 @@
 {% block title %}MBA Response Review{% endblock %}
 {% block app_name %}MBA{% endblock %}
 {% block page_heading %}Response to Assessors' Comments Review{% endblock %}
-{% block page_subheading %}Release anonymous assessor comments, review student responses, and approve before results go to HDC{% endblock %}
+{% block page_subheading %}Release assessor comments, review student responses, and approve before results go to HDC{% endblock %}
 
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
@@ -90,7 +90,7 @@
             <section class="response-section">
               <strong>Release Comments to Student</strong>
               <p class="muted" style="margin:0.5rem 0 0.75rem;">
-                Release the anonymous assessment summary and assessor comments to the student so they can complete the Response to Assessors' Comments form.
+                Release the assessment summary and assessor comments to the student so they can complete the Response to Assessors' Comments form.
               </p>
               <form action="{{ url_for('mba.supervisor_release_corrections', project_id=project.id) }}" method="post" class="inline-action">
                 <button class="primary-button small-button" type="submit">Release Comments</button>

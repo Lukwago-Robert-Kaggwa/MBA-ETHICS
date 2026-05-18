@@ -139,7 +139,7 @@
             <strong>Admin Readiness</strong>
             {% if correction_status_value == 'awaiting_student' %}
               <p class="muted" style="margin:0.5rem 0 0;">
-                Hold results at admin level until the supervisor releases anonymous comments and the student submits the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report.
+                Hold results at admin level until the supervisor releases comments and the student submits the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report.
               </p>
               {% if not assessment_results_forwarded_to_supervisor(project) %}
                 <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="inline-action" style="margin-top:0.75rem;">

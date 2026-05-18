@@ -479,7 +479,7 @@ def supervisor_release_corrections(project_id):
     project.corrections_released_to_student_at = datetime.utcnow()
     project.comments = append_comment(
         project.comments,
-        f"{current_user.email}: released anonymous assessor comments to the student.",
+        f"{current_user.email}: released assessor comments to the student.",
     )
     db.session.commit()
 
@@ -490,7 +490,7 @@ def supervisor_release_corrections(project_id):
                 "recipient": project.student.email,
                 "subject": f"Response to Assessors' Comments Required: {project.project_title}",
                 "body": (
-                    f"Your supervisor has released anonymous assessor comments for your MBA Capstone Project "
+                    f"Your supervisor has released assessor comments for your MBA Capstone Project "
                     f"'{project.project_title}'.\n\n"
                     "Please sign in to the MBA system, open the Response to Assessors' Comments section, "
                     "upload the corrected Capstone Manuscript, fill the Response to Assessors' Comments form, "
@@ -499,7 +499,7 @@ def supervisor_release_corrections(project_id):
             }
         )
     send_bulk_emails(messages)
-    flash("Anonymous assessor comments released to the student.", "success")
+    flash("Assessor comments released to the student.", "success")
     return redirect(url_for("mba.scholar_corrections"))
 
 
@@ -1151,7 +1151,7 @@ def admin_project_action(project_id):
         project.assessment_results_forwarded_to_supervisor_at = datetime.utcnow()
         project.comments = append_comment(
             project.comments,
-            f"{current_user.email}: forwarded the anonymous assessment summary to the supervisor.",
+            f"{current_user.email}: forwarded the assessment summary to the supervisor.",
         )
         messages = []
         for supervisor_email in project_supervisor_notification_emails(project):
@@ -1160,10 +1160,10 @@ def admin_project_action(project_id):
                     "recipient": supervisor_email,
                     "subject": f"Assessment Summary Ready for Supervisor Review: {project.project_title}",
                     "body": (
-                        f"MBA Admin has forwarded the anonymous assessment summary for the Capstone Project "
+                        f"MBA Admin has forwarded the assessment summary for the Capstone Project "
                         f"'{project.project_title}'.\n\n"
                         "If assessors requested corrections or raised comments, only the supervisor may release "
-                        "those anonymous comments to the student."
+                        "those comments to the student."
                     ),
                 }
             )

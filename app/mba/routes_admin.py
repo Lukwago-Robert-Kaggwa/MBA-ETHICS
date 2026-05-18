@@ -1115,7 +1115,7 @@ def admin_reminder_email_message(item):
     elif kind == "corrections_response":
         action_text = "Please upload the corrected Capstone Manuscript, fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report in the MBA system."
     elif kind == "assessment_summary_release":
-        action_text = "Please review the anonymous assessment summary and release the assessor comments to the student when ready."
+        action_text = "Please review the assessment summary and release the assessor comments to the student when ready."
     elif kind == "corrections_supervisor_approval":
         action_text = "Please review and approve the corrected submission in the MBA system."
     elif kind == "assessor_result":
