@@ -741,6 +741,7 @@ def admin_dashboard():
         assessor_hdc_decision_label=assessor_hdc_decision_label,
         assessor_hdc_decision_alert_label=assessor_hdc_decision_alert_label,
         hdc_declined_assessor_slots=hdc_declined_assessor_slots,
+        hdc_rejection_without_slot_decisions_requires_replacement=hdc_rejection_without_slot_decisions_requires_replacement,
         supervisor_pool_release_count=len(supervisor_pool_release_candidates),
         supervisor_pool_available_count=len(supervisor_pool_available_projects),
     )

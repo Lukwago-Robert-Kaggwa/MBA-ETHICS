@@ -304,8 +304,10 @@ def assessor_workload_counts(exclude_project_id=None):
             if not assessor_id:
                 continue
             invitation_status = getattr(project, f"{slot}_invitation_status", None)
-            hdc_decision = getattr(project, f"{slot}_hdc_decision", None)
-            if hdc_decision == HDC_ASSESSOR_DECLINED or invitation_status == INVITATION_DECLINED:
+            if (
+                invitation_status == INVITATION_DECLINED
+                or (slot in PRIMARY_ASSESSOR_SLOTS and assessor_hdc_decline_requires_replacement(project, slot))
+            ):
                 continue
             if invitation_status in WORKLOAD_INVITATION_STATUSES or (
                 slot in PRIMARY_ASSESSOR_SLOTS and getattr(project, "assessors_confirmed", False)
@@ -459,6 +461,17 @@ def hdc_declined_assessor_nomination(project):
     return project.project_status == ProjectStatus.HDC_DECLINED.value
 
 
+def hdc_rejection_without_slot_decisions_requires_replacement(project):
+    if project.project_status != ProjectStatus.HDC_DECLINED.value:
+        return False
+    if any(assessor_hdc_decision(project, slot) for slot in PRIMARY_ASSESSOR_SLOTS):
+        return False
+    return not (
+        accepted_assessor_count(project) >= len(PRIMARY_ASSESSOR_SLOTS)
+        and all_assessor_acceptance_packs_complete(project)
+    )
+
+
 def assessor_hdc_decline_requires_replacement(project, slot):
     if project.project_status != ProjectStatus.HDC_DECLINED.value:
         return False
@@ -502,12 +515,13 @@ def hdc_resolved_declined_assessor_slots(project):
     ]
 
 
-def reset_assessor_invitation_tracking(project, slots=None):
+def reset_assessor_invitation_tracking(project, slots=None, clear_hdc_decisions=True):
     for slot in (slots or ASSESSOR_SLOTS):
         setattr(project, f"{slot}_invitation_status", None)
         setattr(project, f"{slot}_invited_at", None)
         setattr(project, f"{slot}_reminder_sent_at", None)
-    reset_assessor_hdc_decisions(project, slots)
+    if clear_hdc_decisions:
+        reset_assessor_hdc_decisions(project, slots)
 
 
 def _allowed_upload(filename):

@@ -596,10 +596,7 @@ def admin_project_action(project_id):
         for slot in PRIMARY_ASSESSOR_SLOTS
     }
     previous_hdc_declined_assessor_slots = hdc_declined_assessor_slots(project)
-    hdc_rejection_without_slot_decisions = (
-        project.project_status == ProjectStatus.HDC_DECLINED.value
-        and not any(assessor_hdc_decision(project, slot) for slot in PRIMARY_ASSESSOR_SLOTS)
-    )
+    hdc_rejection_without_slot_decisions = hdc_rejection_without_slot_decisions_requires_replacement(project)
 
     def _projects_redirect():
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
@@ -617,7 +614,7 @@ def admin_project_action(project_id):
         return (
             previous_assessor_assignments.get(f"{slot}_id")
             and getattr(project, f"{slot}_invitation_status") in {INVITATION_PENDING, INVITATION_ACCEPTED}
-            and assessor_hdc_decision(project, slot) != HDC_ASSESSOR_DECLINED
+            and not assessor_hdc_decline_requires_replacement(project, slot)
             and not hdc_rejection_without_slot_decisions
         )
 
@@ -648,9 +645,11 @@ def admin_project_action(project_id):
         for slot, assessor_id in selected_pairs:
             current_id = previous_assessor_assignments.get(f"{slot}_id")
             current_status = getattr(project, f"{slot}_invitation_status")
-            current_hdc_decision = assessor_hdc_decision(project, slot)
             unchanged = current_id == assessor_id
-            slot_rejected_by_hdc = current_hdc_decision == HDC_ASSESSOR_DECLINED or hdc_rejection_without_slot_decisions
+            slot_rejected_by_hdc = (
+                assessor_hdc_decline_requires_replacement(project, slot)
+                or hdc_rejection_without_slot_decisions
+            )
 
             if (
                 current_status in {INVITATION_PENDING, INVITATION_ACCEPTED}
@@ -691,7 +690,18 @@ def admin_project_action(project_id):
             if previous_assessor_assignments.get(f"{slot}_id") != dict(selected_pairs)[slot]
         ]
         if changed_slots:
-            reset_assessor_invitation_tracking(project, changed_slots)
+            if hdc_rejection_without_slot_decisions:
+                for slot in changed_slots:
+                    if previous_assessor_assignments.get(f"{slot}_id"):
+                        set_assessor_hdc_decision(project, slot, HDC_ASSESSOR_DECLINED)
+            reset_assessor_invitation_tracking(
+                project,
+                changed_slots,
+                clear_hdc_decisions=not (
+                    previous_hdc_declined_assessor_slots
+                    or hdc_rejection_without_slot_decisions
+                ),
+            )
             clear_additional_assessment(project)
             if previous_hdc_declined_assessor_slots or hdc_rejection_without_slot_decisions:
                 project.project_status = ProjectStatus.HDC_DECLINED.value
