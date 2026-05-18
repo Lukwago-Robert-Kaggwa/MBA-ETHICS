@@ -424,18 +424,22 @@ def hdc_jbs10_signature_complete(project):
     return bool(payload.get("jbs_hdc_signature") and payload.get("jbs_hdc_signature_date"))
 
 
-def sync_hdc_assessor_nomination_status(project):
+def sync_hdc_assessor_nomination_status(project, finalize_declined=False):
     decisions = hdc_assessor_nomination_decisions(project)
-    if any(decision == HDC_ASSESSOR_DECLINED for decision in decisions.values()):
-        project.project_status = ProjectStatus.HDC_DECLINED.value
-        project.nomination_form_approved = False
-        return "declined"
-
     if not hdc_assessor_nomination_review_complete(project):
         project.nomination_form_approved = False
         if project.project_status == ProjectStatus.HDC_DECLINED.value:
             project.project_status = ProjectStatus.ADMIN_APPROVED.value
         return "pending"
+
+    has_declined = any(decision == HDC_ASSESSOR_DECLINED for decision in decisions.values())
+    if has_declined:
+        project.nomination_form_approved = False
+        if finalize_declined or hdc_jbs10_signature_complete(project):
+            project.project_status = ProjectStatus.HDC_DECLINED.value
+            return "declined"
+        project.project_status = ProjectStatus.ADMIN_APPROVED.value
+        return "signature_pending_declined"
 
     if all(decision == HDC_ASSESSOR_APPROVED for decision in decisions.values()):
         if hdc_jbs10_signature_complete(project):
@@ -456,6 +460,8 @@ def hdc_declined_assessor_nomination(project):
 
 
 def assessor_hdc_decline_requires_replacement(project, slot):
+    if project.project_status != ProjectStatus.HDC_DECLINED.value:
+        return False
     if assessor_hdc_decision(project, slot) != HDC_ASSESSOR_DECLINED:
         return False
 
@@ -3227,6 +3233,15 @@ def hdc_assessor_nomination_admin_email_messages(project, decided_by_email=None)
     elif project.project_status == ProjectStatus.HDC_DECLINED.value:
         outcome = "rejected"
         action_text = "One or more assessor nominations were rejected. Please replace the rejected assessor before forwarding nominations to HDC again."
+    elif (
+        hdc_assessor_nomination_review_complete(project)
+        and any(
+            decision == HDC_ASSESSOR_DECLINED
+            for decision in hdc_assessor_nomination_decisions(project).values()
+        )
+    ):
+        outcome = "updated"
+        action_text = "One or more assessor nominations were rejected by HDC, but JBS10 still needs the HDC signature before MBA Admin can replace rejected assessor(s)."
     elif hdc_assessor_nomination_review_complete(project) and not hdc_jbs10_signature_complete(project):
         outcome = "updated"
         action_text = "Both assessor nominations have been approved by HDC, but JBS10 still needs the HDC signature before the nomination approval is complete."

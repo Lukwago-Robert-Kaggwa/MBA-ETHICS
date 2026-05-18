@@ -230,7 +230,7 @@
               <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs10') }}" class="primary-button small-button">Open JBS10 for HDC Signature</a>
             </div>
             <p class="muted" style="margin:0.5rem 0 0;">
-              Use the assessor buttons for individual nomination decisions. Final approval or return of the nomination set must be completed on the opened JBS10 form because it contains a JBS HDC signature section.
+              Use the assessor buttons for individual nomination decisions. You may approve one assessor and reject the other, or reject both. Finish the review on JBS10 because it contains the JBS HDC signature section.
             </p>
           </form>
         {% elif project.project_status == 'hdc_declined' %}

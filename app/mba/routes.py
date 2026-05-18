@@ -1322,8 +1322,13 @@ def hdc_project_action(project_id):
             message = "Both assessor nominations approved by HDC."
         elif review_status == "signature_pending":
             message = "Both assessor nominations approved. Open JBS10 and complete the HDC signature section to finish approval."
+        elif review_status == "signature_pending_declined":
+            message = (
+                f"{assessor_label} nomination {decision_label} by HDC. "
+                "Both assessor nominations have been reviewed. Open JBS10 and complete the HDC signature section."
+            )
         elif review_status == "declined":
-            message = f"{assessor_label} nomination {decision_label} by HDC. The nomination set has been returned to MBA Admin."
+            message = f"{assessor_label} nomination {decision_label} by HDC. Rejected assessor nomination(s) have been returned to MBA Admin."
         else:
             message = f"{assessor_label} nomination {decision_label} by HDC. Review the remaining assessor nomination."
     elif action == "approve_results":
@@ -1402,9 +1407,3 @@ def hdc_project_action(project_id):
     db.session.commit()
     flash(message, "success")
     return redirect(url_for("mba.hdc_dashboard"))
-
-
-@mba_bp.route("/projects/<int:project_id>/scholar-comment", methods=["POST"])
-@login_required
-def scholar_project_comment(project_id):
-    return project_comment(project_id)

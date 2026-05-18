@@ -234,9 +234,9 @@
       {% set hdc_rejection_without_slot_decisions = nominations_rejected_by_hdc and not assessor_1_hdc_decision and
       not assessor_2_hdc_decision %}
       {% set assessor_1_replacement_open = hdc_rejection_without_slot_decisions or assessor_1_invite == 'declined' or
-      assessor_1_hdc_decision == 'declined' %}
+      (nominations_rejected_by_hdc and assessor_1_hdc_decision == 'declined') %}
       {% set assessor_2_replacement_open = hdc_rejection_without_slot_decisions or assessor_2_invite == 'declined' or
-      assessor_2_hdc_decision == 'declined' %}
+      (nominations_rejected_by_hdc and assessor_2_hdc_decision == 'declined') %}
       {% set active_assessor_invite_count = (1 if project.assessor_1_id and assessor_1_invite in ['pending',
       'accepted'] and not assessor_1_replacement_open else 0) + (1 if project.assessor_2_id and assessor_2_invite in
       ['pending', 'accepted'] and not assessor_2_replacement_open else 0) %}
@@ -855,7 +855,7 @@
                         {% set current_assessor_status = project.assessor_1_invitation_status if index == 1 else
                         project.assessor_2_invitation_status %}
                         {% set current_hdc_decision = assessor_1_hdc_decision if index == 1 else assessor_2_hdc_decision %}
-                        {% set assessor_slot_replacement_open = hdc_rejection_without_slot_decisions or current_assessor_status == 'declined' or current_hdc_decision == 'declined' %}
+                        {% set assessor_slot_replacement_open = hdc_rejection_without_slot_decisions or current_assessor_status == 'declined' or (nominations_rejected_by_hdc and current_hdc_decision == 'declined') %}
                         {% set assessor_slot_locked = current_assessor_id and current_assessor_status in ['pending', 'accepted'] and not assessor_slot_replacement_open %}
                         {% set selected_id = current_assessor_id or suggested_assessor_id %}
                         {% if assessor_slot_replacement_open %}

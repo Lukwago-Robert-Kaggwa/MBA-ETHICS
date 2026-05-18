@@ -206,18 +206,18 @@
           <div class="mba-doc-muted-box" style="border:1.5px solid #92400e;background:#fffbeb;margin-top:1rem;">
             <p class="mba-doc-note" style="font-weight:700;color:#78350f;margin-bottom:8px;">HDC review</p>
             <p class="mba-doc-note" style="color:#78350f;">
-              Review the opened JBS10 form and the assessor nomination pack. If approved, complete the JBS HDC signature and date in the signature section before submitting the approval.
+              Review the opened JBS10 form and the assessor nomination pack. Complete the JBS HDC signature and date to finalize the recorded assessor decisions.
             </p>
           </div>
           <label>HDC feedback
-            <textarea class="mba-doc-textarea" name="comment" rows="3" placeholder="Required when returning nominations; optional when approving"></textarea>
+            <textarea class="mba-doc-textarea" name="comment" rows="3" placeholder="Required when returning without signature; optional when signing"></textarea>
           </label>
         {% endif %}
 
         <div class="mba-doc-actions">
           {% if hdc_signature_mode %}
-            <button class="primary-button" type="submit" name="decision" value="approve">Sign and Approve Nominations</button>
-            <button class="secondary-button" type="submit" name="decision" value="decline" formnovalidate>Return Nominations</button>
+            <button class="primary-button" type="submit" name="decision" value="approve">Sign JBS10 and Finish Review</button>
+            <button class="secondary-button" type="submit" name="decision" value="decline" formnovalidate>Return Pending Nominations</button>
           {% else %}
             <button class="primary-button" type="submit">Submit JBS 10</button>
           {% endif %}

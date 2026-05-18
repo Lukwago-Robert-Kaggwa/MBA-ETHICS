@@ -41,6 +41,7 @@ from .route_support import (
     apply_assessor_suggestions_if_ready,
     assessment_doc_type,
     assessment_result_pack_complete,
+    assessor_hdc_decision,
     assessor_can_view_student_dissertation,
     assessor_cv_doc_type,
     assessor_highest_qualification_doc_type,
@@ -74,6 +75,7 @@ from .route_support import (
     role_landing_url,
     set_assessor_hdc_decision,
     sign_student_jbs5_as_supervisor,
+    sync_hdc_assessor_nomination_status,
     supervisor_approved_corrections,
     submit_project_to_admin_from_jbs5,
     uploaded_doc_for,
@@ -961,23 +963,30 @@ def hdc_sign_project_form(project_id, form_type):
                     raise ValueError("HDC must approve JBS5 before JBS10 nominations can be reviewed.")
                 decision_value = HDC_ASSESSOR_APPROVED if decision == "approve" else HDC_ASSESSOR_DECLINED
                 for slot in PRIMARY_ASSESSOR_SLOTS:
-                    set_assessor_hdc_decision(project, slot, decision_value)
-                if decision == "approve":
-                    project.project_status = ProjectStatus.HDC_VERIFIED.value
-                    project.nomination_form_approved = True
+                    if getattr(project, f"{slot}_id", None) and not assessor_hdc_decision(project, slot):
+                        set_assessor_hdc_decision(project, slot, decision_value)
+                review_status = sync_hdc_assessor_nomination_status(project, finalize_declined=(decision == "decline"))
+                if review_status == "approved":
                     project.comments = append_comment(
                         project.comments,
                         f"{current_user.email}: signed JBS10 and approved assessor nominations.",
                     )
                     message = "JBS10 signed and assessor nominations approved by HDC."
-                else:
-                    project.project_status = ProjectStatus.HDC_DECLINED.value
-                    project.nomination_form_approved = False
+                elif review_status == "declined":
                     project.comments = append_comment(
                         project.comments,
-                        f"{current_user.email}: returned JBS10 assessor nominations from HDC review.",
+                        f"{current_user.email}: completed JBS10 review with rejected assessor nomination(s).",
                     )
-                    message = "JBS10 nominations returned with HDC feedback."
+                    if decision == "approve":
+                        message = "JBS10 signed. Rejected assessor nomination(s) have been returned to MBA Admin."
+                    else:
+                        message = "JBS10 nominations returned with HDC feedback."
+                elif review_status == "signature_pending":
+                    raise ValueError("Complete the JBS10 HDC signature before approving assessor nominations.")
+                elif review_status == "signature_pending_declined":
+                    raise ValueError("Complete the JBS10 HDC signature before returning rejected assessor nomination(s).")
+                else:
+                    raise ValueError("Record an HDC decision for both assessor nominations before completing JBS10 review.")
                 if comment:
                     project.hdc_comments = append_comment(project.hdc_comments, f"{current_user.email}: {comment}")
                 decision_summary = hdc_assessor_nomination_decision_summary(project)
