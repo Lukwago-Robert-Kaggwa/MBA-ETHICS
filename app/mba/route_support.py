@@ -3357,11 +3357,18 @@ def corrections_requested_email_messages(project, correction_request):
 def supervisor_can_manage_corrections(project, user):
     if not project or not user or user.role != MbaRole.SCHOLAR.value:
         return False
-    return (
-        project.primary_supervisor_id == user.id
-        and effective_supervisor_invitation_status(project) == INVITATION_ACCEPTED
-        and project.supervisor_accepted_at is not None
+    accepted_invitation = any(
+        invitation.supervisor_id == user.id and invitation.status == INVITATION_ACCEPTED
+        for invitation in getattr(project, "supervisor_invitations", []) or []
     )
+    primary_supervisor_accepted = (
+        project.primary_supervisor_id == user.id
+        and (
+            effective_supervisor_invitation_status(project) == INVITATION_ACCEPTED
+            or project.supervisor_accepted_at is not None
+        )
+    )
+    return primary_supervisor_accepted or accepted_invitation
 
 
 def assessor_slots_for_user(project, user_id):

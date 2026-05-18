@@ -541,7 +541,8 @@ def _load_project_document_for_current_user(project_id, doc_id):
     is_admin = current_user.role in {MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}
     is_owner = current_user.id == project.student_id
     is_hdc = current_user.role == MbaRole.HDC.value
-    is_supervisor = current_user.id == project.primary_supervisor_id
+    can_manage_corrections_for_project = supervisor_can_manage_corrections(project, current_user)
+    is_supervisor = current_user.id == project.primary_supervisor_id or can_manage_corrections_for_project
     is_pending_invited_supervisor = any(
         inv.supervisor_id == current_user.id and inv.status == INVITATION_PENDING
         for inv in project.supervisor_invitations
@@ -559,7 +560,7 @@ def _load_project_document_for_current_user(project_id, doc_id):
         if getattr(project, f"{slot}_invitation_status") == INVITATION_ACCEPTED
     ]
     is_assessor = bool(assessor_slots)
-    is_project_staff = current_user.id in {
+    is_project_staff = can_manage_corrections_for_project or current_user.id in {
         project.primary_supervisor_id,
         project.assessor_1_id,
         project.assessor_2_id,

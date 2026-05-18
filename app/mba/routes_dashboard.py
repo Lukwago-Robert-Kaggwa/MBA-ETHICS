@@ -500,12 +500,25 @@ def scholar_corrections():
     if correction_status not in allowed_statuses:
         correction_status = "all"
     student_number = (request.args.get("student_number") or "").strip()
+    accepted_invitation_project_ids = [
+        invitation.project_id
+        for invitation in MbaProjectSupervisorInvitation.query.filter_by(
+            supervisor_id=current_user.id,
+            status=INVITATION_ACCEPTED,
+        ).all()
+    ]
     projects = (
         MbaProject.query.options(
             joinedload(MbaProject.student).joinedload(MbaUser.student_profile),
             joinedload(MbaProject.primary_supervisor),
+            joinedload(MbaProject.supervisor_invitations),
         )
-        .filter(MbaProject.primary_supervisor_id == current_user.id)
+        .filter(
+            or_(
+                MbaProject.primary_supervisor_id == current_user.id,
+                MbaProject.id.in_(accepted_invitation_project_ids),
+            )
+        )
         .order_by(MbaProject.updated_at.desc())
         .all()
     )
