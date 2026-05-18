@@ -6,10 +6,7 @@ __pycache__/
 
 # Virtual environments
 .venv/
-<<<<<<< HEAD
-=======
 .test-venv/
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
 venv/
 env/
 ENV/
@@ -45,10 +42,7 @@ uploads/
 Thumbs.db
 
 # Test/cache/build artifacts
-<<<<<<< HEAD
-=======
 .playwright/
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

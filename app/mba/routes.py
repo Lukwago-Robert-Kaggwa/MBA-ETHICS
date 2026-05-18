@@ -798,9 +798,6 @@ def admin_project_action(project_id):
         supervisors = supervisors_query().all()
         supervisor_ids = suggested_supervisor_ids[:SUPERVISOR_SUGGESTION_LIMIT]
         if len(supervisor_ids) < SUPERVISOR_SUGGESTION_LIMIT:
-<<<<<<< HEAD
-            recommendations = match_recommendations(project, supervisors, examiners_query().all())
-=======
             recommendations = match_recommendations(
                 project,
                 supervisors,
@@ -808,7 +805,6 @@ def admin_project_action(project_id):
                 supervisor_workload_by_user_id=supervisor_workload_counts(exclude_project_id=project.id),
                 assessor_workload_by_user_id=assessor_workload_counts(exclude_project_id=project.id),
             )
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
             supervisor_ids = [
                 item["user"].id
                 for item in recommendations["ranked_supervisors"][:SUPERVISOR_SUGGESTION_LIMIT]
@@ -896,9 +892,6 @@ def admin_project_action(project_id):
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         suggested_assessor_ids = [assessor_id for assessor_id in assessor_suggested_ids if assessor_id]
         if len(suggested_assessor_ids) < len(PRIMARY_ASSESSOR_SLOTS):
-<<<<<<< HEAD
-            recommendations = match_recommendations(project, supervisors_query().all(), examiners)
-=======
             recommendations = match_recommendations(
                 project,
                 supervisors_query().all(),
@@ -906,7 +899,6 @@ def admin_project_action(project_id):
                 supervisor_workload_by_user_id=supervisor_workload_counts(exclude_project_id=project.id),
                 assessor_workload_by_user_id=assessor_workload_counts(exclude_project_id=project.id),
             )
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
             suggested_assessor_ids = [
                 assessor.id
                 for assessor in recommendations["assessors"][: len(PRIMARY_ASSESSOR_SLOTS)]

@@ -245,8 +245,6 @@ HDC_ASSESSOR_APPROVED = "approved"
 HDC_ASSESSOR_DECLINED = "declined"
 HDC_ASSESSOR_DECISIONS = {HDC_ASSESSOR_APPROVED, HDC_ASSESSOR_DECLINED}
 
-<<<<<<< HEAD
-=======
 ACTIVE_WORKLOAD_PROJECT_STATUSES = {
     ProjectStatus.ADMIN_SUBMITTED.value,
     ProjectStatus.JBS5_SUBMITTED_TO_HDC.value,
@@ -315,7 +313,6 @@ def assessor_workload_counts(exclude_project_id=None):
                 _add_student_workload(workloads, assessor_id, project.student_id)
     return {user_id: len(student_ids) for user_id, student_ids in workloads.items()}
 
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
 INVITATION_SLOTS = {
     "primary_supervisor": {
         "id_field": "primary_supervisor_id",
@@ -3027,10 +3024,7 @@ def suggested_additional_assessor(project, examiners=None):
         examiners or examiners_query().all(),
         excluded_user_ids=excluded_ids,
         limit=1,
-<<<<<<< HEAD
-=======
         workload_by_user_id=assessor_workload_counts(exclude_project_id=getattr(project, "id", None)),
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
     )
     return ranked[0]["user"] if ranked else None
 
@@ -3164,10 +3158,7 @@ def apply_assessor_suggestions_if_ready(project):
         examiners_query().all(),
         excluded_user_ids=excluded_user_ids,
         limit=len(ASSESSOR_SLOTS),
-<<<<<<< HEAD
-=======
         workload_by_user_id=assessor_workload_counts(exclude_project_id=getattr(project, "id", None)),
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
     )
     suggested_assessors = [item["user"] for item in ranked_assessors]
     if not suggested_assessors:
@@ -3751,9 +3742,6 @@ def project_available_for_supervisor_pool(project):
 
 
 def apply_auto_assignments(project, supervisors, examiners):
-<<<<<<< HEAD
-    recommendations = match_recommendations(project, supervisors, examiners)
-=======
     recommendations = match_recommendations(
         project,
         supervisors,
@@ -3761,7 +3749,6 @@ def apply_auto_assignments(project, supervisors, examiners):
         supervisor_workload_by_user_id=supervisor_workload_counts(exclude_project_id=getattr(project, "id", None)),
         assessor_workload_by_user_id=assessor_workload_counts(exclude_project_id=getattr(project, "id", None)),
     )
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
     invited_supervisors = [item["user"] for item in recommendations["ranked_supervisors"][:SUPERVISOR_SUGGESTION_LIMIT]]
     project.supervisor_invitations.clear()
     for sup in invited_supervisors:

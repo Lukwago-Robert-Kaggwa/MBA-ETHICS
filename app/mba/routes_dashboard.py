@@ -54,8 +54,6 @@ def _staff_profile_missing_fields(profile):
     )
 
 
-<<<<<<< HEAD
-=======
 def _change_current_user_password():
     current_password = request.form.get("current_password") or ""
     new_password = request.form.get("new_password") or ""
@@ -83,19 +81,15 @@ def _change_current_user_password():
     return True
 
 
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
 @mba_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     if not require_mba_user():
         return redirect(url_for("auth.login"))
     is_student = current_user.role == MbaRole.STUDENT.value
-<<<<<<< HEAD
-=======
     if request.method == "POST" and request.form.get("action") == "change_password":
         _change_current_user_password()
         return redirect(url_for("mba.profile"))
->>>>>>> b7f3a1a (added password update and recommendation engine updates)
     if is_student:
         profile = current_user.student_profile
         if not profile:
