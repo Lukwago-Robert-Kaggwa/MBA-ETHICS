@@ -448,7 +448,6 @@ def scholar_dashboard():
         base_args=available_pagination_args,
         anchor="available-supervisor-projects",
     )
-
     return render_template(
         "mba/scholar_dashboard.html",
         supervised_projects=supervised_projects,

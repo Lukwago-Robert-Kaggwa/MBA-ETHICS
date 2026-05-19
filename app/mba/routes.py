@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 from ..extensions import db
 from ..mail import send_bulk_emails
 from ..models import MbaForm, MbaProject, MbaProjectComment, MbaProjectSupervisorInvitation, MbaRole, MbaUser, ProjectStatus, normalize_email
+from .grading import project_grade_summary
 from .route_support import *  # noqa: F403
 
 # Register modularized route groups
@@ -187,10 +188,30 @@ def module_completion_not_passed_email_messages(project):
     ]
 
 
+def _project_grade_summary(project):
+    grade_form_types = [assessment_doc_type(slot) for slot in ALL_ASSESSOR_SLOTS]
+    forms = MbaForm.query.filter(
+        MbaForm.project_id == project.id,
+        MbaForm.form_type.in_(grade_form_types),
+    ).all()
+    forms_by_project = {project.id: {form.form_type: form for form in forms}}
+    return project_grade_summary(project.id, forms_by_project)
+
+
+def _approved_mark_line(project):
+    mark = getattr(project, "results_hdc_approved_mark", None)
+    if mark is None:
+        return ""
+    classification = getattr(project, "results_hdc_approved_classification", None)
+    classification_text = f" ({classification})" if classification else ""
+    return f"\nFinal mark: {mark:.1f}%{classification_text}"
+
+
 def hdc_results_release_supervisor_email_messages(project):
     recipients = project_supervisor_notification_emails(project)
     if not recipients:
         return []
+    mark_line = _approved_mark_line(project)
     dashboard_url = url_for("mba.scholar_dashboard", _external=True)
     reviewed_line = (
         f"\nHDC reviewed at: {project.results_hdc_reviewed_at.strftime('%d %b %Y %H:%M')}"
@@ -201,7 +222,7 @@ def hdc_results_release_supervisor_email_messages(project):
     body = (
         f"MBA Admin has released the HDC-approved assessment results for '{project.project_title}' to you.\n\n"
         f"Student: {project.student.email if project.student else 'Unknown'}\n"
-        f"Discipline: {project.discipline_name}{reviewed_line}{comments_line}\n\n"
+        f"Discipline: {project.discipline_name}{mark_line}{reviewed_line}{comments_line}\n\n"
         "Please sign in to the MBA system to view the approved results. "
         "Do not release the HDC-approved results to the student from the supervisor workspace.\n\n"
         f"Supervisor dashboard: {dashboard_url}"
@@ -1240,6 +1261,8 @@ def admin_project_action(project_id):
         project.results_submitted_to_hdc_at = datetime.utcnow()
         project.results_hdc_decision = "pending"
         project.results_hdc_reviewed_at = None
+        project.results_hdc_approved_mark = None
+        project.results_hdc_approved_classification = None
         project.results_released_to_supervisor_at = None
         project.comments = append_comment(
             project.comments,
@@ -1356,6 +1379,9 @@ def hdc_project_action(project_id):
         project.project_status = ProjectStatus.RESULTS_APPROVED.value
         project.results_hdc_decision = "approved"
         project.results_hdc_reviewed_at = datetime.utcnow()
+        grade_summary = _project_grade_summary(project)
+        project.results_hdc_approved_mark = grade_summary.get("final")
+        project.results_hdc_approved_classification = grade_summary.get("classification") or None
         project.results_released_to_supervisor_at = None
         notify_admin_results_decision = True
         message = "Assessment results approved by HDC."
@@ -1366,6 +1392,8 @@ def hdc_project_action(project_id):
         project.project_status = ProjectStatus.RESULTS_DECLINED.value
         project.results_hdc_decision = "declined"
         project.results_hdc_reviewed_at = datetime.utcnow()
+        project.results_hdc_approved_mark = None
+        project.results_hdc_approved_classification = None
         project.results_released_to_supervisor_at = None
         notify_admin_results_decision = True
         message = "Assessment results declined by HDC."

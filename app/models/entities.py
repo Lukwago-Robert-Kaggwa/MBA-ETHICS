@@ -249,6 +249,8 @@ class MbaProject(db.Model):
     results_hdc_decision = db.Column(db.String(20), nullable=True)
     results_hdc_reviewed_at = db.Column(db.DateTime, nullable=True)
     results_hdc_comments = db.Column(db.Text)
+    results_hdc_approved_mark = db.Column(db.Float, nullable=True)
+    results_hdc_approved_classification = db.Column(db.String(40), nullable=True)
     results_released_to_supervisor_at = db.Column(db.DateTime, nullable=True)
     supervisor_title_change_requested_at = db.Column(db.DateTime, nullable=True)
     supervisor_title_change_request = db.Column(db.Text, nullable=True)

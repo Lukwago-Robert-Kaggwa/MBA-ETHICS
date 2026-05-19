@@ -227,6 +227,18 @@
                 <p class="muted" style="margin:0.5rem 0 0.75rem;">
                   MBA Admin released the HDC-approved assessment results to you{% if project.results_released_to_supervisor_at %} on {{ project.results_released_to_supervisor_at.strftime('%d %b %Y %H:%M') }}{% endif %}.
                 </p>
+                {% if project.results_hdc_approved_mark is not none %}
+                  <div class="hdc-results-mark-card">
+                    <div class="hdc-results-mark-card__main">
+                      <strong>Final Mark</strong>
+                      <span>{{ "%.1f"|format(project.results_hdc_approved_mark) }}%</span>
+                      {% if project.results_hdc_approved_classification %}
+                        <em>{{ project.results_hdc_approved_classification }}</em>
+                      {% endif %}
+                    </div>
+                    <small>HDC-approved result mark</small>
+                  </div>
+                {% endif %}
                 {% if project.results_hdc_comments %}
                   <details class="response-section" style="margin-top:0.75rem;">
                     <summary>HDC Results Comments</summary>

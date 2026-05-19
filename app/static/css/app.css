@@ -3911,6 +3911,41 @@ input[type="file"] {
   border-top: 1px solid var(--border);
 }
 
+.hdc-results-mark-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 8px;
+  background: var(--surface-alt);
+}
+
+.hdc-results-mark-card__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hdc-results-mark-card__main span {
+  color: var(--primary);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.hdc-results-mark-card__main em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.hdc-results-mark-card small {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .dashboard-pagination {
   border: 1px solid var(--border);
   border-radius: 12px;
