@@ -3886,6 +3886,31 @@ input[type="file"] {
   gap: 8px;
 }
 
+.invite-row--document.scholar-assessment-doc-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px;
+}
+
+.scholar-assessment-doc-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scholar-assessment-doc-copy small {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.scholar-assessment-doc-actions {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .dashboard-pagination {
   border: 1px solid var(--border);
   border-radius: 12px;

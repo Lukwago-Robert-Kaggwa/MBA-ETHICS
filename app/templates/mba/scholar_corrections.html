@@ -91,12 +91,12 @@
             <summary>Assessment Documents</summary>
             <div class="invite-list invite-list--documents" style="margin-top:0.5rem;">
               {% for doc in project.documents if doc.doc_type.startswith('assessment_result_') or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_narrative_') %}
-                <div class="invite-row invite-row--document">
-                  <div>
+                <div class="invite-row invite-row--document scholar-assessment-doc-row">
+                  <div class="scholar-assessment-doc-copy">
                     <strong>{{ document_label(doc.doc_type) }}</strong>
                     <small>{{ doc.original_name }}</small>
                   </div>
-                  <div class="inline-action" style="gap:0.5rem;">
+                  <div class="inline-action scholar-assessment-doc-actions">
                     <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">View</a>
                     <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">Download</a>
                   </div>
