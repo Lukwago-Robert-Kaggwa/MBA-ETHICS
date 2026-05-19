@@ -512,6 +512,7 @@ def scholar_corrections():
             joinedload(MbaProject.student).joinedload(MbaUser.student_profile),
             joinedload(MbaProject.primary_supervisor),
             joinedload(MbaProject.supervisor_invitations),
+            joinedload(MbaProject.documents),
         )
         .filter(
             or_(

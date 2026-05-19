@@ -591,13 +591,23 @@ def _load_project_document_for_current_user(project_id, doc_id):
     if is_owner and not (is_admin or is_hdc) and restricted_assessor_doc:
         abort(403)
     is_hdc_results_document = doc.doc_type.startswith(HDC_ASSESSOR_RESULTS_DOCUMENT_PREFIXES)
+    supervisor_can_view_forwarded_assessment_docs = (
+        is_hdc_results_document
+        and can_manage_corrections_for_project
+        and assessment_results_forwarded_to_supervisor(project)
+    )
     supervisor_can_view_hdc_results = (
         is_hdc_results_document
-        and supervisor_can_manage_corrections(project, current_user)
+        and can_manage_corrections_for_project
         and hdc_results_approved(project)
         and results_released_to_supervisor(project)
     )
-    if is_supervisor and not (is_admin or is_hdc) and is_hdc_results_document and not supervisor_can_view_hdc_results:
+    if (
+        is_supervisor
+        and not (is_admin or is_hdc)
+        and is_hdc_results_document
+        and not (supervisor_can_view_forwarded_assessment_docs or supervisor_can_view_hdc_results)
+    ):
         abort(403)
     if is_hdc:
         if not hdc_can_access_document(project, doc.doc_type):
