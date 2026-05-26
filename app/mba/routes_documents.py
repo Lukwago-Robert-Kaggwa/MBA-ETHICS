@@ -11,15 +11,85 @@ from ..models import MbaForm, MbaProject, MbaProjectDocument, MbaRole, ProjectSt
 from .route_support import *  # noqa: F403
 from .route_support import (
     _project_has_document,
+    _render_html_to_pdf_bytes,
     _store_project_document,
     _uploads_dir,
     _validate_uploaded_pdf,
 )
 
 
+def _looks_like_html_document(doc):
+    mime_type = str(getattr(doc, "mime_type", "") or "").split(";", 1)[0].strip().lower()
+    names = [
+        str(getattr(doc, "original_name", "") or "").lower(),
+        str(getattr(doc, "stored_name", "") or "").lower(),
+    ]
+    return mime_type == "text/html" or any(name.endswith((".html", ".htm")) for name in names)
+
+
+def _pdf_download_name(doc):
+    filename = str(getattr(doc, "original_name", "") or getattr(doc, "stored_name", "") or "").strip()
+    if not filename:
+        filename = f"{getattr(doc, 'doc_type', 'document')}_form.pdf"
+    stem, ext = os.path.splitext(filename)
+    if ext:
+        return f"{stem}.pdf"
+    return f"{filename}.pdf"
+
+
+def _pdf_bytes_response(pdf_bytes, *, download_name, as_attachment=True):
+    if not pdf_bytes or not pdf_bytes.startswith(b"%PDF-"):
+        return None
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=as_attachment,
+        download_name=download_name,
+    )
+
+
+def _html_bytes_pdf_response(html_bytes, doc, *, as_attachment=True):
+    if not html_bytes:
+        return None
+    try:
+        html = html_bytes.decode("utf-8", errors="replace")
+        pdf_bytes = _render_html_to_pdf_bytes(html)
+    except Exception:
+        current_app.logger.exception("Unable to convert stored HTML document %s to PDF", getattr(doc, "id", None))
+        return None
+    return _pdf_bytes_response(pdf_bytes, download_name=_pdf_download_name(doc), as_attachment=as_attachment)
+
+
+def _html_file_pdf_response(path, doc, *, as_attachment=True):
+    try:
+        with open(path, "rb") as fh:
+            return _html_bytes_pdf_response(fh.read(), doc, as_attachment=as_attachment)
+    except OSError:
+        return None
+
+
 def _project_document_db_response(doc, *, as_attachment):
     if not getattr(doc, "file_data", None):
         return None
+    if doc.file_data.startswith(b"%PDF-"):
+        download_name = doc.original_name
+        if as_attachment and not str(doc.original_name or "").lower().endswith(".pdf"):
+            download_name = _pdf_download_name(doc)
+        return send_file(
+            BytesIO(doc.file_data),
+            mimetype="application/pdf",
+            as_attachment=as_attachment,
+            download_name=download_name,
+        )
+    if as_attachment and _looks_like_html_document(doc):
+        pdf_response = _html_bytes_pdf_response(doc.file_data, doc, as_attachment=True)
+        if pdf_response:
+            return pdf_response
+        return current_app.response_class(
+            "Unable to convert the stored HTML document to PDF right now.",
+            status=503,
+            mimetype="text/plain",
+        )
     return send_file(
         BytesIO(doc.file_data),
         mimetype=doc.mime_type or document_mime_type(doc.original_name, "application/pdf"),
@@ -65,26 +135,21 @@ def _live_form_pdf_response(project, doc):
     if not form or not isinstance(form.payload, dict):
         return None
     try:
-        pdf_bytes = generate_exact_html_pdf_bytes(
+        pdf_bytes = generate_form_submission_document_bytes(
             project,
             doc.doc_type,
             _payload_for_live_form_render(project, doc, form),
         )
     except Exception:
-        current_app.logger.exception("Unable to generate exact PDF for document %s", doc.id)
+        current_app.logger.exception("Unable to generate PDF for document %s", doc.id)
         pdf_bytes = None
-    if not pdf_bytes:
+    if not pdf_bytes or not pdf_bytes.startswith(b"%PDF-"):
         return current_app.response_class(
             "Unable to generate a PDF from the submitted form HTML right now.",
             status=503,
             mimetype="text/plain",
         )
-    return send_file(
-        BytesIO(pdf_bytes),
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=f"{doc.doc_type}_form.pdf",
-    )
+    return _pdf_bytes_response(pdf_bytes, download_name=f"{doc.doc_type}_form.pdf", as_attachment=True)
 
 MBA_FORM_TEMPLATES = {
     "supervisor_agreement": {"label": document_label("supervisor_agreement")},
@@ -674,18 +739,8 @@ def download_project_document(project_id, doc_id):
 
     if supports_exact_form_render(doc.doc_type):
         live_form_response = _live_form_pdf_response(project, doc)
-        if live_form_response and getattr(live_form_response, "status_code", 200) < 400:
+        if live_form_response:
             return live_form_response
-
-        live_html_response = _live_form_html_response(project, doc, as_attachment=True)
-        if live_html_response:
-            return live_html_response
-
-        return current_app.response_class(
-            "Unable to generate a download from the submitted form HTML right now.",
-            status=503,
-            mimetype="text/plain",
-        )
 
     project_dir = os.path.join(_uploads_dir(), str(project_id))
     _regenerate_generated_document_if_needed(project, doc, project_dir)
@@ -693,6 +748,17 @@ def download_project_document(project_id, doc_id):
     if db_response:
         db.session.commit()
         return db_response
+
+    stored_path = os.path.join(project_dir, doc.stored_name or "")
+    if _looks_like_html_document(doc):
+        file_pdf_response = _html_file_pdf_response(stored_path, doc, as_attachment=True)
+        if file_pdf_response:
+            return file_pdf_response
+        return current_app.response_class(
+            "Unable to convert the stored HTML document to PDF right now.",
+            status=503,
+            mimetype="text/plain",
+        )
 
     return send_from_directory(project_dir, doc.stored_name, as_attachment=True, download_name=doc.original_name)
 

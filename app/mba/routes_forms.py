@@ -57,7 +57,6 @@ from .route_support import (
     corrections_requested_email_messages,
     all_assessment_results_received,
     document_label,
-    build_form_display_html,
     format_project_title,
     generate_form_submission_document_bytes,
     hdc_assessor_nomination_admin_email_messages,
@@ -131,20 +130,11 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
     # Write PDF to disk
     project_dir = os.path.join(_uploads_dir(), str(project.id))
     os.makedirs(project_dir, exist_ok=True)
-    html_snapshot = str(doc_type or "").startswith("assessor_profile_")
-    file_extension = "html" if html_snapshot else "pdf"
-    original_name = f"{doc_type}_form.{file_extension}"
-    unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.{file_extension}"
+    original_name = f"{doc_type}_form.pdf"
+    unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.pdf"
     dest_path = os.path.join(project_dir, unique_name)
-    if html_snapshot:
-        rendered_html = build_form_display_html(project, form_type, payload)
-        if not rendered_html:
-            raise RuntimeError(f"Unable to render HTML snapshot for {form_type}")
-        pdf_bytes = rendered_html.encode("utf-8")
-        mime_type = "text/html; charset=utf-8"
-    else:
-        pdf_bytes = generate_form_submission_document_bytes(project, form_type, payload)
-        mime_type = "application/pdf"
+    pdf_bytes = generate_form_submission_document_bytes(project, form_type, payload)
+    mime_type = "application/pdf"
     with open(dest_path, "wb") as fh:
         fh.write(pdf_bytes)
 
