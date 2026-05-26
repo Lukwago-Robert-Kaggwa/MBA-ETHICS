@@ -343,6 +343,97 @@ class MbaForm(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
+class MbaBookingSettings(db.Model):
+    __tablename__ = "mba_booking_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    is_released = db.Column(db.Boolean, nullable=False, default=False)
+    released_at = db.Column(db.DateTime, nullable=True)
+    released_by_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=True)
+    released_by = db.relationship("MbaUser", foreign_keys=[released_by_id])
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MbaBookingDay(db.Model):
+    __tablename__ = "mba_booking_days"
+    __table_args__ = (UniqueConstraint("date", name="uq_mba_booking_day_date"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=True)
+    created_by = db.relationship("MbaUser", foreign_keys=[created_by_id])
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MbaBookingPanel(db.Model):
+    __tablename__ = "mba_booking_panels"
+    __table_args__ = (UniqueConstraint("day_id", "name", name="uq_mba_booking_panel_day_name"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    day_id = db.Column(db.Integer, db.ForeignKey("mba_booking_days.id"), nullable=False, index=True)
+    day = db.relationship(
+        "MbaBookingDay",
+        backref=db.backref("panels", cascade="all, delete-orphan", order_by="MbaBookingPanel.name"),
+    )
+    name = db.Column(db.String(100), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MbaBookingSlot(db.Model):
+    __tablename__ = "mba_booking_slots"
+    __table_args__ = (
+        UniqueConstraint("day_id", "role", "label", name="uq_mba_booking_slot_day_role_label"),
+        CheckConstraint("role in ('student','supervisor')", name="mba_booking_slot_role_check"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    day_id = db.Column(db.Integer, db.ForeignKey("mba_booking_days.id"), nullable=False, index=True)
+    day = db.relationship(
+        "MbaBookingDay",
+        backref=db.backref("slots", cascade="all, delete-orphan", order_by="MbaBookingSlot.sort_order"),
+    )
+    role = db.Column(db.String(20), nullable=False)
+    label = db.Column(db.String(100), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MbaPanelBooking(db.Model):
+    __tablename__ = "mba_panel_bookings"
+    __table_args__ = (
+        CheckConstraint("role in ('student','supervisor')", name="mba_panel_booking_role_check"),
+        CheckConstraint("status in ('active','cancelled')", name="mba_panel_booking_status_check"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=False, index=True)
+    user = db.relationship("MbaUser", foreign_keys=[user_id])
+    first_name = db.Column(db.String(150), nullable=False)
+    surname = db.Column(db.String(150), nullable=False)
+    email = db.Column(db.String(255), nullable=False, index=True)
+    role = db.Column(db.String(20), nullable=False)
+    supervisor_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=True)
+    supervisor = db.relationship("MbaUser", foreign_keys=[supervisor_id])
+    co_supervisor_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=True)
+    co_supervisor = db.relationship("MbaUser", foreign_keys=[co_supervisor_id])
+    co_supervisor_name = db.Column(db.String(255), nullable=True)
+    day_id = db.Column(db.Integer, db.ForeignKey("mba_booking_days.id"), nullable=False, index=True)
+    day = db.relationship("MbaBookingDay")
+    panel_id = db.Column(db.Integer, db.ForeignKey("mba_booking_panels.id"), nullable=False, index=True)
+    panel = db.relationship("MbaBookingPanel")
+    slot_id = db.Column(db.Integer, db.ForeignKey("mba_booking_slots.id"), nullable=False, index=True)
+    slot = db.relationship("MbaBookingSlot")
+    status = db.Column(db.String(20), nullable=False, default="active", index=True)
+    cancellation_reason = db.Column(db.Text, nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    booked_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.surname}".strip()
+
+
 class EthicsApplication(db.Model):
     __tablename__ = "ethcis_applications"
 

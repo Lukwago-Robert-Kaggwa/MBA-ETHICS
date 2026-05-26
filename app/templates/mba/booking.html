@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}MBA Panel Bookings{% endblock %}
+{% block page_heading %}Panel Bookings{% endblock %}
+{% block page_subheading %}Book MBA presentation panels and monitor schedule capacity.{% endblock %}
+
+{% block body %}
+<style>
+  .booking-shell { display:grid; grid-template-columns:minmax(280px, 360px) 1fr; gap:1rem; align-items:start; }
+  .booking-panel { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:1rem; box-shadow:0 8px 20px rgba(15,23,42,.05); }
+  .booking-panel h2, .booking-panel h3 { margin:0 0 .75rem; font-size:1.05rem; }
+  .booking-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:.75rem; }
+  .booking-field { display:flex; flex-direction:column; gap:.3rem; margin-bottom:.7rem; }
+  .booking-field label { font-size:.76rem; font-weight:800; color:#4b5563; text-transform:uppercase; }
+  .booking-field input, .booking-field select, .booking-field textarea { width:100%; border:1px solid #d1d5db; border-radius:6px; padding:.65rem .7rem; background:#fff; }
+  .booking-field input[readonly] { background:#f9fafb; color:#4b5563; }
+  .booking-actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+  .booking-button { display:inline-flex; align-items:center; justify-content:center; min-height:2.45rem; padding:.55rem .85rem; border:0; border-radius:6px; background:#f58220; color:#fff; font-weight:800; text-decoration:none; cursor:pointer; }
+  .booking-button.secondary { background:#111827; }
+  .booking-button.danger { background:#b42318; }
+  .booking-button.subtle { background:#eef2f7; color:#111827; }
+  .booking-button:disabled { opacity:.55; cursor:not-allowed; }
+  .booking-kpis { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.5rem; margin-bottom:.85rem; }
+  .booking-kpi { background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:.7rem; font-weight:800; color:#9a3412; text-align:center; }
+  .booking-message { display:none; margin-top:.75rem; padding:.7rem; border-radius:6px; font-weight:700; }
+  .booking-message.success { display:block; background:#dcfce7; color:#166534; }
+  .booking-message.error { display:block; background:#fee2e2; color:#991b1b; }
+  .booking-message.info { display:block; background:#e0f2fe; color:#075985; }
+  .booking-admin { margin-bottom:1rem; }
+  .booking-admin__forms { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  .booking-summary { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.75rem; margin-bottom:1rem; }
+  .booking-summary div { border-radius:8px; padding:1rem; background:#111827; color:#fff; }
+  .booking-summary div:nth-child(2) { background:#f58220; }
+  .booking-summary strong { display:block; font-size:1.8rem; line-height:1; }
+  .day-section { margin-bottom:1rem; }
+  .day-title { display:flex; justify-content:space-between; gap:.75rem; margin-bottom:.65rem; padding:.75rem .85rem; border-left:5px solid #f58220; border-radius:8px; background:#fff; font-weight:900; }
+  .panel-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:.75rem; }
+  .panel-card { border:1px solid #e5e7eb; border-radius:8px; padding:.85rem; background:#fff; }
+  .panel-card.full { background:#fff1f2; border-color:#fecdd3; }
+  .panel-card.conflict { background:#fffbeb; border-color:#fcd34d; }
+  .panel-top, .counts { display:flex; justify-content:space-between; gap:.5rem; align-items:center; }
+  .badge { border-radius:999px; padding:.2rem .5rem; font-size:.68rem; font-weight:900; text-transform:uppercase; }
+  .open-badge { background:#dcfce7; color:#166534; }
+  .full-badge { background:#fee2e2; color:#991b1b; }
+  .conflict-badge { background:#fef3c7; color:#92400e; }
+  .count-box { flex:1; background:#f9fafb; border:1px solid #f3f4f6; border-radius:6px; padding:.45rem; text-align:center; font-size:.74rem; color:#6b7280; }
+  .count-box strong { display:block; color:#111827; font-size:1rem; }
+  .list { margin-top:.65rem; padding:.65rem; border-radius:6px; background:#fafafa; font-size:.82rem; }
+  .list-title { margin-top:.45rem; color:#c2410c; font-weight:900; font-size:.74rem; }
+  .slot-row { padding:.35rem 0; border-bottom:1px dashed #e5e7eb; }
+  .empty { color:#9ca3af; }
+  .booking-locked { border-left:5px solid #b42318; }
+  @media (max-width: 980px) {
+    .booking-shell, .booking-admin__forms { grid-template-columns:1fr; }
+  }
+</style>
+
+{% if current_user.role in ['admin', 'main_admin'] %}
+<section class="booking-panel booking-admin">
+  <div class="booking-admin__forms">
+    <form action="{{ url_for('mba.booking_admin_schedule') }}" method="post">
+      <h2>Create Booking Date</h2>
+      <div class="booking-grid">
+        <div class="booking-field">
+          <label for="adminDate">Date</label>
+          <input id="adminDate" name="date" type="date" required>
+        </div>
+        <div class="booking-field">
+          <label for="adminPanels">Panels</label>
+          <input id="adminPanels" name="panels" placeholder="Panel 1, Panel 2" required>
+        </div>
+      </div>
+      <div class="booking-field">
+        <label for="adminStudentSlots">Student Slots</label>
+        <textarea id="adminStudentSlots" name="student_slots" rows="2" placeholder="09:00, 09:30, 10:00" required></textarea>
+      </div>
+      <div class="booking-field">
+        <label for="adminSupervisorSlots">Supervisor Slots</label>
+        <textarea id="adminSupervisorSlots" name="supervisor_slots" rows="2" placeholder="Slot 1, Slot 2, Slot 3" required></textarea>
+      </div>
+      <button class="booking-button" type="submit">Save Date</button>
+    </form>
+
+    <div>
+      <h2>Operations</h2>
+      <p id="releaseState" class="booking-message info">Loading release state...</p>
+      <form action="{{ url_for('mba.booking_admin_release') }}" method="post" class="booking-actions">
+        <button class="booking-button" type="submit" name="is_released" value="1">Release Page</button>
+        <button class="booking-button subtle" type="submit" name="is_released" value="0">Lock Page</button>
+        <a class="booking-button secondary" href="{{ url_for('mba.booking_export') }}">Download CSV</a>
+      </form>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="booking-shell">
+  <aside class="booking-panel {% if current_user.role not in ['admin', 'main_admin'] %}booking-locked{% endif %}">
+    <h2>Book Panel</h2>
+    <div class="booking-kpis">
+      <div class="booking-kpi"><span id="systemStudents">0</span> Students</div>
+      <div class="booking-kpi"><span id="systemSupervisors">0</span> Supervisors</div>
+    </div>
+
+    <div class="booking-grid">
+      <div class="booking-field">
+        <label for="firstName">Name</label>
+        <input id="firstName" readonly>
+      </div>
+      <div class="booking-field">
+        <label for="surname">Surname</label>
+        <input id="surname" readonly>
+      </div>
+    </div>
+    <div class="booking-field">
+      <label for="email">Email</label>
+      <input id="email" type="email" readonly>
+    </div>
+    <div class="booking-field">
+      <label for="role">Type</label>
+      <select id="role" disabled>
+        <option value="student">Student</option>
+        <option value="supervisor">Supervisor</option>
+      </select>
+    </div>
+    <div id="supervisorFieldContainer" class="booking-field">
+      <label for="supervisorName">Supervisor</label>
+      <input id="supervisorName" readonly>
+      <input id="supervisorId" type="hidden">
+    </div>
+    <div id="coSupervisorFieldContainer" class="booking-field">
+      <label for="coSupervisorSearch">Co-Supervisor</label>
+      <input id="coSupervisorSearch" placeholder="Optional co-supervisor" autocomplete="off">
+      <input id="coSupervisorId" type="hidden">
+      <div id="supervisorDropdown"></div>
+    </div>
+    <div class="booking-field">
+      <label for="date">Date</label>
+      <select id="date"></select>
+    </div>
+    <div class="booking-field">
+      <label for="panel">Panel</label>
+      <select id="panel"></select>
+    </div>
+    <div class="booking-field">
+      <label for="slot" id="slotLabel">Slot</label>
+      <select id="slot"></select>
+    </div>
+    <button id="bookButton" class="booking-button" type="button">Confirm Booking</button>
+    <div id="message" class="booking-message"></div>
+  </aside>
+
+  <div class="booking-panel">
+    <h2>Live Schedule</h2>
+    <div class="booking-summary">
+      <div><strong id="totalStudents">0/0</strong>Students</div>
+      <div><strong id="totalSupervisors">0/0</strong>Supervisors</div>
+    </div>
+    <div id="schedule"></div>
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/bookingpage.js', v=asset_version('js/bookingpage.js')) }}"></script>
+{% endblock %}

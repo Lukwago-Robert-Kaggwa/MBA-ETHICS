@@ -281,6 +281,69 @@ def register_cli(app):
             "alter table mba_scholar_profiles add column if not exists publication_count integer not null default 0",
             "alter table mba_scholar_profiles add column if not exists selected_publications text",
             "alter table mba_scholar_profiles add column if not exists scholarly_profile_links text",
+            """
+            create table if not exists mba_booking_settings (
+                id integer primary key,
+                is_released boolean not null default false,
+                released_at timestamp without time zone,
+                released_by_id integer references mba_users(id),
+                updated_at timestamp without time zone not null default now()
+            )
+            """,
+            """
+            create table if not exists mba_booking_days (
+                id serial primary key,
+                date date not null unique,
+                created_by_id integer references mba_users(id),
+                created_at timestamp without time zone not null default now()
+            )
+            """,
+            """
+            create table if not exists mba_booking_panels (
+                id serial primary key,
+                day_id integer not null references mba_booking_days(id),
+                name varchar(100) not null,
+                sort_order integer not null default 0,
+                created_at timestamp without time zone not null default now(),
+                constraint uq_mba_booking_panel_day_name unique (day_id, name)
+            )
+            """,
+            """
+            create table if not exists mba_booking_slots (
+                id serial primary key,
+                day_id integer not null references mba_booking_days(id),
+                role varchar(20) not null,
+                label varchar(100) not null,
+                sort_order integer not null default 0,
+                created_at timestamp without time zone not null default now(),
+                constraint mba_booking_slot_role_check check (role in ('student','supervisor')),
+                constraint uq_mba_booking_slot_day_role_label unique (day_id, role, label)
+            )
+            """,
+            """
+            create table if not exists mba_panel_bookings (
+                id serial primary key,
+                user_id integer not null references mba_users(id),
+                first_name varchar(150) not null,
+                surname varchar(150) not null,
+                email varchar(255) not null,
+                role varchar(20) not null,
+                supervisor_id integer references mba_users(id),
+                co_supervisor_id integer references mba_users(id),
+                co_supervisor_name varchar(255),
+                day_id integer not null references mba_booking_days(id),
+                panel_id integer not null references mba_booking_panels(id),
+                slot_id integer not null references mba_booking_slots(id),
+                status varchar(20) not null default 'active',
+                cancellation_reason text,
+                cancelled_at timestamp without time zone,
+                booked_at timestamp without time zone not null default now(),
+                constraint mba_panel_booking_role_check check (role in ('student','supervisor')),
+                constraint mba_panel_booking_status_check check (status in ('active','cancelled'))
+            )
+            """,
+            "create index if not exists ix_mba_panel_bookings_status on mba_panel_bookings (status)",
+            "create index if not exists ix_mba_panel_bookings_slot_lookup on mba_panel_bookings (day_id, panel_id, role, slot_id, status)",
         ]
         for statement in statements:
             db.session.execute(text(statement))

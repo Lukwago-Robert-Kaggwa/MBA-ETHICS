@@ -13,6 +13,7 @@ from .route_support import *  # noqa: F403
 
 # Register modularized route groups
 from . import routes_admin as _routes_admin  # noqa: F401
+from . import routes_booking as _routes_booking  # noqa: F401
 from . import routes_dashboard as _routes_dashboard  # noqa: F401
 from . import routes_documents as _routes_documents  # noqa: F401
 from . import routes_forms as _routes_forms  # noqa: F401

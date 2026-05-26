@@ -40,6 +40,9 @@
               <a href="{{ url_for('mba.student_dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.student_dashboard' %}is-active{% endif %}">
                 <span class="nav-icon">S</span><span>Student Dashboard</span>
               </a>
+              <a href="{{ url_for('mba.booking_page') }}" class="ethics-sidebar__item {% if request.endpoint and request.endpoint.startswith('mba.booking') %}is-active{% endif %}">
+                <span class="nav-icon">B</span><span>Panel Bookings</span>
+              </a>
               {% if corrections_nav.visible and corrections_nav.url %}
                 <a href="{{ corrections_nav.url }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.student_corrections' %}is-active{% endif %} {% if corrections_nav.has_alert %}has-alert{% endif %}">
                   <span class="nav-icon">C</span><span class="ethics-sidebar__label">Corrections</span>
@@ -54,6 +57,11 @@
               <a href="{{ url_for('mba.scholar_dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.scholar_dashboard' %}is-active{% endif %}">
                 <span class="nav-icon">P</span><span>Scholar Dashboard</span>
               </a>
+              {% if current_user.is_supervisor_role() %}
+                <a href="{{ url_for('mba.booking_page') }}" class="ethics-sidebar__item {% if request.endpoint and request.endpoint.startswith('mba.booking') %}is-active{% endif %}">
+                  <span class="nav-icon">B</span><span>Panel Bookings</span>
+                </a>
+              {% endif %}
               {% if corrections_nav.visible and corrections_nav.url %}
                 <a href="{{ corrections_nav.url }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.scholar_corrections' %}is-active{% endif %}">
                   <span class="nav-icon">C</span><span>Corrections{% if corrections_nav.count %} ({{ corrections_nav.count }}){% endif %}</span>
@@ -98,6 +106,9 @@
               </a>
               <a href="{{ url_for('mba.admin_dashboard', panel='students', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'students' %}is-active{% endif %}">
                 <span class="nav-icon">S</span><span>Students</span>
+              </a>
+              <a href="{{ url_for('mba.booking_page') }}" class="ethics-sidebar__item {% if request.endpoint and request.endpoint.startswith('mba.booking') %}is-active{% endif %}">
+                <span class="nav-icon">B</span><span>Panel Bookings</span>
               </a>
               {% if reminders_nav.visible and reminders_nav.url %}
                 <a href="{{ reminders_nav.url }}" class="ethics-sidebar__item {% if reminders_nav.active %}is-active{% endif %}">
