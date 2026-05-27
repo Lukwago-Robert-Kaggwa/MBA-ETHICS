@@ -13,6 +13,7 @@ import tempfile
 import textwrap
 import uuid
 from xml.sax.saxutils import escape as xml_escape
+import xml.etree.ElementTree as ET
 import zipfile
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
@@ -647,6 +648,19 @@ HTML_PDF_RENDERER_UNAVAILABLE_MESSAGE = (
 )
 FORM_WORD_EXTENSION = "docx"
 FORM_WORD_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+JBS5_WORD_TEMPLATE = Path("mba") / "docx_templates" / "jbs5_registration_template.docx"
+_DOCX_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_DOCX_NS = {
+    "w": _DOCX_W_NS,
+    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+    "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+    "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
+    "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
+    "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006",
+}
+for _docx_prefix, _docx_uri in _DOCX_NS.items():
+    ET.register_namespace(_docx_prefix, _docx_uri)
 
 
 def _browser_pdf_executables():
@@ -805,9 +819,13 @@ def _replace_form_logo(fragment, logo_mode="web"):
     if logo_mode == "web":
         return fragment
 
-    for filename in ("img/uj_logo.png", "img/uj_orange_square.png"):
-        logo_url = url_for("static", filename=filename)
-        logo_path = Path(current_app.root_path) / "static" / filename
+    export_logos = {
+        "img/uj_logo.png": "img/uj_orange_square.png",
+        "img/uj_orange_square.png": "img/uj_orange_square.png",
+    }
+    for source_filename, export_filename in export_logos.items():
+        logo_url = url_for("static", filename=source_filename)
+        logo_path = Path(current_app.root_path) / "static" / export_filename
         if not logo_path.exists():
             continue
         if logo_mode == "file":
@@ -925,6 +943,25 @@ def _replace_print_form_controls(fragment):
         flags=re.IGNORECASE | re.DOTALL,
     )
     fragment = re.sub(r"<input\b([^>]*)>", replace_input, fragment, flags=re.IGNORECASE)
+    return fragment
+
+
+def _strip_print_web_controls(fragment):
+    fragment = re.sub(
+        r"<div\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\bmba-doc-actions\b[^\"]*\"|'[^']*\bmba-doc-actions\b[^']*'))[^>]*>.*?</div>",
+        "",
+        fragment,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    fragment = re.sub(r"<button\b[^>]*>.*?</button>", "", fragment, flags=re.IGNORECASE | re.DOTALL)
+    fragment = re.sub(
+        r"<a\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\b(?:primary-button|secondary-button)\b[^\"]*\"|'[^']*\b(?:primary-button|secondary-button)\b[^']*'))[^>]*>.*?</a>",
+        "",
+        fragment,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    fragment = re.sub(r"<form\b([^>]*)>", r"<div\1>", fragment, flags=re.IGNORECASE)
+    fragment = re.sub(r"</form>", "</div>", fragment, flags=re.IGNORECASE)
     return fragment
 
 
@@ -1070,6 +1107,7 @@ def _build_html_form_fragment(project, form_type, payload, logo_mode="web"):
     fragment = _replace_form_logo(fragment, logo_mode=logo_mode)
     fragment = re.sub(r"<script\b[^>]*>.*?</script>", "", fragment, flags=re.DOTALL)
     if logo_mode != "web":
+        fragment = _strip_print_web_controls(fragment)
         fragment = _replace_print_form_controls(fragment)
     return fragment
 
@@ -1665,7 +1703,235 @@ def html_to_word_document_bytes(html, title=None):
         return _html_to_basic_word_document_bytes(html, title=title)
 
 
+def _jbs5_word_template_path():
+    return Path(current_app.root_path) / JBS5_WORD_TEMPLATE
+
+
+def _docx_tag(name):
+    return f"{{{_DOCX_W_NS}}}{name}"
+
+
+def _docx_xml_space_attr():
+    return "{http://www.w3.org/XML/1998/namespace}space"
+
+
+def _docx_truthy(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "checked"}
+
+
+def _docx_first_value(payload, *keys, default=""):
+    for key in keys:
+        value = (payload or {}).get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return default
+
+
+def _jbs5_payload(project, payload):
+    payload = dict(payload or {})
+    student = getattr(project, "student", None)
+    student_profile = getattr(student, "student_profile", None) if student else None
+    if student_profile:
+        payload.setdefault("surname", getattr(student_profile, "surname", "") or "")
+        payload.setdefault("student_title", getattr(student_profile, "title", "") or "")
+        payload.setdefault("student_number", getattr(student_profile, "student_number", "") or "")
+        payload.setdefault("qualification", getattr(student_profile, "degree", "") or "")
+        initials = "".join(
+            part[0].upper()
+            for part in str(getattr(student_profile, "name", "") or "").replace(".", " ").split()
+            if part
+        )
+        if initials:
+            payload.setdefault("student_initials", initials)
+    payload.setdefault("qualification", getattr(project, "qualification", "") or "MBA")
+    payload.setdefault("research_title", getattr(project, "project_title", "") or "")
+    supervisor = getattr(project, "primary_supervisor", None)
+    supervisor_profile = getattr(supervisor, "scholar_profile", None) if supervisor else None
+    if supervisor_profile:
+        supervisor_name = " ".join(
+            part
+            for part in [
+                getattr(supervisor_profile, "title", None),
+                getattr(supervisor_profile, "name", None),
+                getattr(supervisor_profile, "surname", None),
+            ]
+            if part
+        ).strip()
+        payload.setdefault("proposed_supervisor", supervisor_name)
+    return payload
+
+
+def _docx_format_date(value, *, month_year=False):
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = datetime.strptime(value[:10], "%Y-%m-%d")
+    except ValueError:
+        return value
+    if month_year:
+        return parsed.strftime("%b %Y")
+    return parsed.strftime("%d %b %Y")
+
+
+def _docx_cell(root, table_index, row_index, cell_index):
+    tables = root.findall(".//w:tbl", _DOCX_NS)
+    if table_index >= len(tables):
+        return None
+    rows = tables[table_index].findall("w:tr", _DOCX_NS)
+    if row_index >= len(rows):
+        return None
+    cells = rows[row_index].findall("w:tc", _DOCX_NS)
+    if cell_index >= len(cells):
+        return None
+    return cells[cell_index]
+
+
+def _docx_text_run(text, *, size="16", bold=False):
+    run = ET.Element(_docx_tag("r"))
+    run_props = ET.SubElement(run, _docx_tag("rPr"))
+    if bold:
+        ET.SubElement(run_props, _docx_tag("b"))
+    size_node = ET.SubElement(run_props, _docx_tag("sz"))
+    size_node.set(_docx_tag("val"), str(size))
+    size_cs_node = ET.SubElement(run_props, _docx_tag("szCs"))
+    size_cs_node.set(_docx_tag("val"), str(size))
+    lang_node = ET.SubElement(run_props, _docx_tag("lang"))
+    lang_node.set(_docx_tag("val"), "en-GB")
+    text_node = ET.SubElement(run, _docx_tag("t"))
+    if str(text).strip() != str(text):
+        text_node.set(_docx_xml_space_attr(), "preserve")
+    text_node.text = str(text)
+    return run
+
+
+def _docx_set_cell_text(root, table_index, row_index, cell_index, value, *, size="16", bold=False):
+    value = str(value or "").strip()
+    if not value:
+        return
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return
+    paragraphs = cell.findall("w:p", _DOCX_NS)
+    if paragraphs:
+        paragraph = paragraphs[0]
+    else:
+        paragraph = ET.SubElement(cell, _docx_tag("p"))
+    for child in list(paragraph):
+        if child.tag != _docx_tag("pPr"):
+            paragraph.remove(child)
+    lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    for index, line in enumerate(lines):
+        if index:
+            break_run = ET.SubElement(paragraph, _docx_tag("r"))
+            ET.SubElement(break_run, _docx_tag("br"))
+        if line:
+            paragraph.append(_docx_text_run(line, size=size, bold=bold))
+
+
+def _docx_set_checkbox(root, field_name, checked):
+    for ff_data in root.findall(".//w:ffData", _DOCX_NS):
+        name = ff_data.find("w:name", _DOCX_NS)
+        if name is None or name.get(_docx_tag("val")) != field_name:
+            continue
+        checkbox = ff_data.find("w:checkBox", _DOCX_NS)
+        if checkbox is None:
+            continue
+        value = "1" if checked else "0"
+        for node_name in ("default", "checked"):
+            node = checkbox.find(f"w:{node_name}", _DOCX_NS)
+            if node is None:
+                node = ET.SubElement(checkbox, _docx_tag(node_name))
+            node.set(_docx_tag("val"), value)
+
+
+def _jbs5_study_type_checks(payload):
+    study_type = str(payload.get("study_type") or "Capstone Project").strip().lower()
+    return {
+        "Check4": study_type in {"capstone project", "capstone consultancy project", "capstone"},
+        "Check5": study_type in {"research essay", "research article"},
+        "Check6": study_type == "minor dissertation",
+        "Check7": study_type == "dissertation",
+        "Check8": study_type == "thesis",
+    }
+
+
+def _generate_jbs5_template_word_bytes(project, payload):
+    template_path = _jbs5_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    register_title = _docx_truthy(payload.get("register_title_supervisors")) or not (
+        _docx_truthy(payload.get("amend_title")) or _docx_truthy(payload.get("amend_supervisors"))
+    )
+    amend_title = _docx_truthy(payload.get("amend_title"))
+    amend_supervisors = _docx_truthy(payload.get("amend_supervisors"))
+
+    with zipfile.ZipFile(template_path, "r") as template:
+        entries = template.infolist()
+        contents = {entry.filename: template.read(entry.filename) for entry in entries}
+
+    root = ET.fromstring(contents["word/document.xml"])
+    checkbox_values = {
+        "Check1": register_title,
+        "Check2": amend_title,
+        "Check3": amend_supervisors,
+        "Check10": register_title,
+        "Check11": amend_title,
+        **_jbs5_study_type_checks(payload),
+    }
+    for field_name, checked in checkbox_values.items():
+        _docx_set_checkbox(root, field_name, checked)
+
+    field_map = [
+        (1, 1, 1, _docx_first_value(payload, "surname")),
+        (1, 1, 3, _docx_first_value(payload, "student_title")),
+        (1, 2, 1, _docx_first_value(payload, "student_initials")),
+        (1, 2, 3, _docx_format_date(_docx_first_value(payload, "date_of_first_registration"), month_year=True)),
+        (1, 3, 1, _docx_first_value(payload, "student_number")),
+        (1, 3, 3, _docx_first_value(payload, "qualification", default="MBA")),
+        (1, 4, 1, _docx_first_value(payload, "discipline")),
+        (1, 6, 1, _docx_first_value(payload, "sdg_focus")),
+        (2, 1, 1, _docx_first_value(payload, "research_title")),
+        (2, 2, 1, _docx_first_value(payload, "proposed_supervisor", "supervisor_name")),
+        (2, 3, 1, _docx_first_value(payload, "proposed_co_supervisors")),
+        (3, 1, 1, _docx_first_value(payload, "previous_title")),
+        (3, 2, 1, _docx_first_value(payload, "amended_title")),
+        (4, 1, 1, _docx_first_value(payload, "previous_supervisor")),
+        (4, 2, 1, _docx_first_value(payload, "previous_co_supervisors")),
+        (4, 3, 1, _docx_first_value(payload, "amended_supervisor")),
+        (4, 4, 1, _docx_first_value(payload, "amended_co_supervisors")),
+        (5, 1, 1, _docx_first_value(payload, "discipline_specific", default="YES")),
+        (5, 2, 1, _docx_first_value(payload, "has_secondary_focus", default="No").upper()),
+        (5, 3, 1, _docx_first_value(payload, "secondary_focus")),
+        (6, 0, 1, _docx_first_value(payload, "supervisor_signature", "proposed_supervisor", "supervisor_name")),
+        (6, 0, 3, _docx_format_date(_docx_first_value(payload, "supervisor_signature_date"))),
+        (6, 2, 1, _docx_first_value(payload, "head_of_department_signature")),
+        (6, 2, 3, _docx_format_date(_docx_first_value(payload, "head_of_department_signature_date"))),
+        (6, 4, 1, _docx_first_value(payload, "jbs_hdc_signature")),
+        (6, 4, 3, _docx_format_date(_docx_first_value(payload, "jbs_hdc_signature_date"))),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
+
+    is_4ir = str(payload.get("is_4ir_research") or "No").strip().lower()
+    _docx_set_cell_text(root, 1, 7, 3, "X" if is_4ir == "yes" else "")
+    _docx_set_cell_text(root, 1, 7, 5, "X" if is_4ir != "yes" else "")
+
+    contents["word/document.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as generated:
+        for entry in entries:
+            generated.writestr(entry, contents[entry.filename])
+    return buffer.getvalue()
+
+
 def generate_form_submission_word_bytes(project, form_type, payload):
+    if str(form_type or "") == "jbs5":
+        template_bytes = _generate_jbs5_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
     html = build_form_display_html(project, form_type, payload)
     if not html:
         raise RuntimeError(f"Unable to render Word document HTML for {form_type}.")
@@ -3122,6 +3388,8 @@ def generate_form_submission_document_bytes(project, form_type, payload, *, allo
 
 
 def generate_form_submission_download_bytes(project, form_type, payload):
+    if str(form_type or "") == "jbs5" and _jbs5_word_template_path().exists():
+        return generate_form_submission_word_bytes(project, form_type, payload), FORM_WORD_EXTENSION, FORM_WORD_MIME_TYPE
     try:
         return (
             generate_form_submission_document_bytes(project, form_type, payload, allow_plain_fallback=False),

@@ -188,40 +188,21 @@ def _live_form_download_response(project, doc):
         return None
     payload = _payload_for_live_form_render(project, doc, form)
     try:
-        pdf_bytes = generate_form_submission_document_bytes(
-            project,
-            doc.doc_type,
-            payload,
-            allow_plain_fallback=False,
-        )
-    except RuntimeError as exc:
-        current_app.logger.warning(
-            "Unable to generate exact PDF for document %s; serving DOCX fallback instead: %s",
-            doc.id,
-            exc,
-        )
-        pdf_bytes = None
+        file_bytes, file_extension, mime_type = generate_form_submission_download_bytes(project, doc.doc_type, payload)
     except Exception:
-        current_app.logger.exception(
-            "Unable to generate PDF for document %s; serving DOCX fallback instead",
-            doc.id,
-        )
-        pdf_bytes = None
-    if pdf_bytes and pdf_bytes.startswith(b"%PDF-"):
-        return _pdf_bytes_response(pdf_bytes, download_name=f"{doc.doc_type}_form.pdf", as_attachment=True)
-    try:
-        word_bytes = generate_form_submission_word_bytes(project, doc.doc_type, payload)
-    except Exception:
-        current_app.logger.exception("Unable to generate Word-compatible document %s", doc.id)
+        current_app.logger.exception("Unable to generate downloadable form document %s", doc.id)
         return current_app.response_class(
             "Unable to generate a downloadable document from the submitted form HTML right now.",
             status=503,
             mimetype="text/plain",
         )
-    return _word_bytes_response(
-        word_bytes,
-        download_name=f"{doc.doc_type}_form.{FORM_WORD_EXTENSION}",
+    if file_extension == "pdf":
+        return _pdf_bytes_response(file_bytes, download_name=f"{doc.doc_type}_form.pdf", as_attachment=True)
+    return send_file(
+        BytesIO(file_bytes),
+        mimetype=mime_type,
         as_attachment=True,
+        download_name=f"{doc.doc_type}_form.{file_extension}",
     )
 
 MBA_FORM_TEMPLATES = {
