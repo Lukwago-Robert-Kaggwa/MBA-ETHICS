@@ -68,7 +68,7 @@ Install dependencies from `requirements.txt`, then start the production server w
 gunicorn run:app
 ```
 
-Generated web-form downloads are rendered to PDF with headless Chrome/Chromium when available, so the PDF matches the submitted HTML form. Install Chrome or Chromium on the server for PDF downloads. If the browser is not on the PATH, set `MBA_PDF_BROWSER_PATH` to the executable path, for example `/usr/bin/chromium`. When no browser renderer is available, generated HTML forms fall back to Word-compatible `.doc` downloads.
+Generated web-form downloads are rendered to PDF with headless Chrome/Chromium when available, so the PDF matches the submitted HTML form. Install Chrome or Chromium on the server for PDF downloads. If the browser is not on the PATH, set `MBA_PDF_BROWSER_PATH` to the executable path, for example `/usr/bin/chromium`. When no browser renderer is available, generated HTML forms fall back to Word `.docx` downloads.
 
 ## Environment Variables
 

@@ -24,7 +24,29 @@ def _looks_like_html_document(doc):
         str(getattr(doc, "original_name", "") or "").lower(),
         str(getattr(doc, "stored_name", "") or "").lower(),
     ]
-    return mime_type == "text/html" or any(name.endswith((".html", ".htm")) for name in names)
+    return (
+        mime_type == "text/html"
+        or any(name.endswith((".html", ".htm")) for name in names)
+        or _bytes_look_like_html(getattr(doc, "file_data", None))
+    )
+
+
+def _bytes_look_like_html(data):
+    if not data:
+        return False
+    if isinstance(data, str):
+        head = data[:512].lstrip().lower()
+        return head.startswith(("<!doctype html", "<html", "<body", "<div"))
+    head = bytes(data[:512]).lstrip().lower()
+    return head.startswith((b"<!doctype html", b"<html", b"<body", b"<div"))
+
+
+def _file_looks_like_html(path):
+    try:
+        with open(path, "rb") as fh:
+            return _bytes_look_like_html(fh.read(512))
+    except OSError:
+        return False
 
 
 def _download_name_with_extension(doc, extension):
@@ -42,7 +64,7 @@ def _pdf_download_name(doc):
 
 
 def _word_download_name(doc):
-    return _download_name_with_extension(doc, "doc")
+    return _download_name_with_extension(doc, FORM_WORD_EXTENSION)
 
 
 def _pdf_bytes_response(pdf_bytes, *, download_name, as_attachment=True):
@@ -90,7 +112,15 @@ def _html_file_pdf_response(path, doc, *, as_attachment=True):
 
 
 def _html_bytes_word_response(html_bytes, doc, *, as_attachment=True):
-    return _word_bytes_response(html_bytes, download_name=_word_download_name(doc), as_attachment=as_attachment)
+    if not html_bytes:
+        return None
+    try:
+        html = html_bytes.decode("utf-8", errors="replace") if isinstance(html_bytes, bytes) else str(html_bytes)
+        word_bytes = html_to_word_document_bytes(html, title=document_label(doc.doc_type))
+    except Exception:
+        current_app.logger.exception("Unable to convert stored HTML document %s to Word", getattr(doc, "id", None))
+        return None
+    return _word_bytes_response(word_bytes, download_name=_word_download_name(doc), as_attachment=as_attachment)
 
 
 def _html_file_word_response(path, doc, *, as_attachment=True):
@@ -166,14 +196,14 @@ def _live_form_download_response(project, doc):
         )
     except RuntimeError as exc:
         current_app.logger.warning(
-            "Unable to generate exact PDF for document %s; serving Word-compatible HTML instead: %s",
+            "Unable to generate exact PDF for document %s; serving DOCX fallback instead: %s",
             doc.id,
             exc,
         )
         pdf_bytes = None
     except Exception:
         current_app.logger.exception(
-            "Unable to generate PDF for document %s; serving Word-compatible HTML instead",
+            "Unable to generate PDF for document %s; serving DOCX fallback instead",
             doc.id,
         )
         pdf_bytes = None
@@ -188,7 +218,11 @@ def _live_form_download_response(project, doc):
             status=503,
             mimetype="text/plain",
         )
-    return _word_bytes_response(word_bytes, download_name=f"{doc.doc_type}_form.doc", as_attachment=True)
+    return _word_bytes_response(
+        word_bytes,
+        download_name=f"{doc.doc_type}_form.{FORM_WORD_EXTENSION}",
+        as_attachment=True,
+    )
 
 MBA_FORM_TEMPLATES = {
     "supervisor_agreement": {"label": document_label("supervisor_agreement")},
@@ -798,7 +832,7 @@ def download_project_document(project_id, doc_id):
         return db_response
 
     stored_path = os.path.join(project_dir, doc.stored_name or "")
-    if _looks_like_html_document(doc):
+    if _looks_like_html_document(doc) or _file_looks_like_html(stored_path):
         file_pdf_response = _html_file_pdf_response(stored_path, doc, as_attachment=True)
         if file_pdf_response:
             return file_pdf_response

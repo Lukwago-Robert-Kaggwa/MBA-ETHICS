@@ -1,5 +1,7 @@
 from datetime import datetime
 import base64
+from html.parser import HTMLParser
+from io import BytesIO
 import mimetypes
 from pathlib import Path
 import os
@@ -9,6 +11,8 @@ import subprocess
 import tempfile
 import textwrap
 import uuid
+from xml.sax.saxutils import escape as xml_escape
+import zipfile
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -640,7 +644,8 @@ HTML_PDF_RENDERER_UNAVAILABLE_MESSAGE = (
     "The exact HTML-to-PDF renderer is unavailable. Install Chromium/Chrome on the server "
     "or set MBA_PDF_BROWSER_PATH to the browser executable."
 )
-FORM_WORD_MIME_TYPE = "application/msword"
+FORM_WORD_EXTENSION = "docx"
+FORM_WORD_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _browser_pdf_executables():
@@ -1083,11 +1088,327 @@ def build_form_display_html(project, form_type, payload):
     )
 
 
+class _DocxHtmlNode:
+    __slots__ = ("tag", "attrs", "children", "text")
+
+    def __init__(self, tag=None, attrs=None, text=None):
+        self.tag = tag
+        self.attrs = dict(attrs or [])
+        self.children = []
+        self.text = text
+
+
+class _DocxHtmlParser(HTMLParser):
+    _SKIP_TAGS = {"style", "script", "noscript", "svg"}
+    _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = _DocxHtmlNode("root")
+        self.stack = [self.root]
+        self.skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        tag = (tag or "").lower()
+        if self.skip_depth:
+            self.skip_depth += 1
+            return
+        if tag in self._SKIP_TAGS:
+            self.skip_depth = 1
+            return
+        if tag == "br":
+            self.stack[-1].children.append(_DocxHtmlNode("br"))
+            return
+        if tag in self._VOID_TAGS:
+            return
+        node = _DocxHtmlNode(tag, attrs)
+        self.stack[-1].children.append(node)
+        self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        tag = (tag or "").lower()
+        if self.skip_depth:
+            self.skip_depth -= 1
+            return
+        for index in range(len(self.stack) - 1, 0, -1):
+            if self.stack[index].tag == tag:
+                del self.stack[index:]
+                return
+
+    def handle_data(self, data):
+        if self.skip_depth or not data:
+            return
+        self.stack[-1].children.append(_DocxHtmlNode(text=data))
+
+
+_DOCX_BLOCK_TAGS = {
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "body",
+    "dd",
+    "div",
+    "dl",
+    "dt",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "li",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "ul",
+}
+
+
+def _docx_clean_text(text):
+    return re.sub(r"\s+", " ", str(text or "").replace("\xa0", " ")).strip()
+
+
+def _docx_find_first(node, tag_name):
+    if node.tag == tag_name:
+        return node
+    for child in node.children:
+        found = _docx_find_first(child, tag_name)
+        if found:
+            return found
+    return None
+
+
+def _docx_inline_runs(node, *, bold=False, italic=False):
+    if node.text is not None:
+        text = _docx_clean_text(node.text)
+        return [(text, bold, italic)] if text else []
+    if node.tag == "br":
+        return [("\n", bold, italic)]
+
+    tag = node.tag or ""
+    child_bold = bold or tag in {"b", "strong", "th"}
+    child_italic = italic or tag in {"em", "i"}
+    runs = []
+    for child in node.children:
+        runs.extend(_docx_inline_runs(child, bold=child_bold, italic=child_italic))
+    return runs
+
+
+def _docx_direct_inline_runs(node):
+    runs = []
+    for child in node.children:
+        if child.text is not None or child.tag == "br" or child.tag not in _DOCX_BLOCK_TAGS:
+            runs.extend(_docx_inline_runs(child))
+    return runs
+
+
+def _docx_run_xml(text, *, bold=False, italic=False, size=None):
+    if text == "\n":
+        return "<w:r><w:br/></w:r>"
+    run_props = []
+    if bold:
+        run_props.append("<w:b/>")
+    if italic:
+        run_props.append("<w:i/>")
+    if size:
+        run_props.append(f'<w:sz w:val="{size}"/>')
+    rpr = f"<w:rPr>{''.join(run_props)}</w:rPr>" if run_props else ""
+    return f'<w:r>{rpr}<w:t xml:space="preserve">{xml_escape(text)}</w:t></w:r>'
+
+
+def _docx_paragraph_xml(runs, *, heading_level=None, prefix=None):
+    clean_runs = [(text, bold, italic) for text, bold, italic in runs if text == "\n" or _docx_clean_text(text)]
+    if prefix:
+        clean_runs.insert(0, (prefix, False, False))
+    if not any(text != "\n" and _docx_clean_text(text) for text, _bold, _italic in clean_runs):
+        return ""
+
+    paragraph_props = ""
+    default_size = None
+    force_bold = False
+    if heading_level:
+        size_by_level = {1: "32", 2: "28", 3: "24", 4: "22", 5: "20", 6: "20"}
+        default_size = size_by_level.get(heading_level, "22")
+        force_bold = True
+        paragraph_props = '<w:pPr><w:spacing w:before="180" w:after="80"/></w:pPr>'
+
+    runs_xml = "".join(
+        _docx_run_xml(text, bold=bold or force_bold, italic=italic, size=default_size)
+        for text, bold, italic in clean_runs
+    )
+    return f"<w:p>{paragraph_props}{runs_xml}</w:p>"
+
+
+def _docx_cell_text_runs(cell):
+    runs = _docx_inline_runs(cell)
+    text = " ".join(text for text, _bold, _italic in runs if text != "\n")
+    return [(text, cell.tag == "th", False)] if _docx_clean_text(text) else []
+
+
+def _docx_table_xml(table):
+    rows = [child for child in table.children if child.tag == "tr"]
+    if not rows:
+        rows = [
+            row
+            for section in table.children
+            if section.tag in {"thead", "tbody", "tfoot"}
+            for row in section.children
+            if row.tag == "tr"
+        ]
+    row_xml = []
+    max_cols = 1
+    parsed_rows = []
+    for row in rows:
+        cells = [child for child in row.children if child.tag in {"td", "th"}]
+        if not cells:
+            continue
+        max_cols = max(max_cols, len(cells))
+        parsed_rows.append(cells)
+
+    for cells in parsed_rows:
+        cell_width = max(1200, int(9000 / max(max_cols, 1)))
+        cells_xml = []
+        for cell in cells:
+            paragraph = _docx_paragraph_xml(_docx_cell_text_runs(cell)) or "<w:p/>"
+            cells_xml.append(
+                f'<w:tc><w:tcPr><w:tcW w:w="{cell_width}" w:type="dxa"/></w:tcPr>{paragraph}</w:tc>'
+            )
+        row_xml.append(f"<w:tr>{''.join(cells_xml)}</w:tr>")
+
+    if not row_xml:
+        return ""
+    borders = (
+        '<w:tblBorders>'
+        '<w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>'
+        '<w:left w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>'
+        '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>'
+        '<w:right w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>'
+        '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>'
+        '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>'
+        '</w:tblBorders>'
+    )
+    tbl_pr = f'<w:tblPr><w:tblW w:w="0" w:type="auto"/>{borders}</w:tblPr>'
+    return f"<w:tbl>{tbl_pr}{''.join(row_xml)}</w:tbl>"
+
+
+def _docx_render_blocks(node):
+    if node.text is not None or node.tag in {"head", "meta", "link", "title"}:
+        return []
+    if node.tag == "table":
+        table_xml = _docx_table_xml(node)
+        return [table_xml] if table_xml else []
+
+    tag = node.tag or ""
+    if tag in _DOCX_BLOCK_TAGS:
+        blocks = []
+        direct_runs = _docx_direct_inline_runs(node)
+        if direct_runs:
+            heading_level = int(tag[1]) if tag in {"h1", "h2", "h3", "h4", "h5", "h6"} else None
+            prefix = "- " if tag == "li" else None
+            paragraph = _docx_paragraph_xml(direct_runs, heading_level=heading_level, prefix=prefix)
+            if paragraph:
+                blocks.append(paragraph)
+        for child in node.children:
+            if child.tag in _DOCX_BLOCK_TAGS:
+                blocks.extend(_docx_render_blocks(child))
+        return blocks
+
+    blocks = []
+    for child in node.children:
+        blocks.extend(_docx_render_blocks(child))
+    return blocks
+
+
+def html_to_word_document_bytes(html, title=None):
+    parser = _DocxHtmlParser()
+    parser.feed(str(html or ""))
+    body = _docx_find_first(parser.root, "body") or parser.root
+    blocks = _docx_render_blocks(body)
+    if not blocks:
+        plain_text = _docx_clean_text(re.sub(r"<[^>]+>", " ", str(html or "")))
+        blocks = [_docx_paragraph_xml([(plain_text or "Document", False, False)])]
+
+    core_title = _docx_clean_text(title) or "Document"
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        f"<w:body>{''.join(blocks)}"
+        '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" '
+        'w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>'
+        "</w:body></w:document>"
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+        '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
+        '</Types>'
+    )
+    package_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
+        '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
+        '</Relationships>'
+    )
+    document_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>'
+    )
+    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    core_props = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+        'xmlns:dc="http://purl.org/dc/elements/1.1/" '
+        'xmlns:dcterms="http://purl.org/dc/terms/" '
+        'xmlns:dcmitype="http://purl.org/dc/dcmitype/" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+        f"<dc:title>{xml_escape(core_title)}</dc:title>"
+        "<dc:creator>MBA Ethics System</dc:creator>"
+        f'<dcterms:created xsi:type="dcterms:W3CDTF">{now}</dcterms:created>'
+        f'<dcterms:modified xsi:type="dcterms:W3CDTF">{now}</dcterms:modified>'
+        "</cp:coreProperties>"
+    )
+    app_props = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" '
+        'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
+        "<Application>MBA Ethics System</Application>"
+        "</Properties>"
+    )
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as docx:
+        docx.writestr("[Content_Types].xml", content_types)
+        docx.writestr("_rels/.rels", package_rels)
+        docx.writestr("word/document.xml", document_xml)
+        docx.writestr("word/_rels/document.xml.rels", document_rels)
+        docx.writestr("docProps/core.xml", core_props)
+        docx.writestr("docProps/app.xml", app_props)
+    return buffer.getvalue()
+
+
 def generate_form_submission_word_bytes(project, form_type, payload):
     html = build_form_display_html(project, form_type, payload)
     if not html:
         raise RuntimeError(f"Unable to render Word document HTML for {form_type}.")
-    return html.encode("utf-8")
+    return html_to_word_document_bytes(html, title=document_label(form_type))
 
 
 def _render_html_to_pdf_bytes(html):
@@ -2548,11 +2869,11 @@ def generate_form_submission_download_bytes(project, form_type, payload):
         )
     except RuntimeError as exc:
         current_app.logger.warning(
-            "Unable to generate exact PDF for %s; using Word-compatible HTML instead: %s",
+            "Unable to generate exact PDF for %s; using DOCX fallback instead: %s",
             form_type,
             exc,
         )
-        return generate_form_submission_word_bytes(project, form_type, payload), "doc", FORM_WORD_MIME_TYPE
+        return generate_form_submission_word_bytes(project, form_type, payload), FORM_WORD_EXTENSION, FORM_WORD_MIME_TYPE
 
 
 _ACTIVITY_START_RE = re.compile(r"(?m)(?=^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}: )")
