@@ -840,12 +840,34 @@ def _html_has_attr(attrs, attr_name):
     )
 
 
+_PRINT_VALUE_STYLE = (
+    "box-sizing:border-box;display:block;width:100%;min-width:0;min-height:1.9em;"
+    "padding:4px 2px;border:0;border-bottom:1px solid #111827;color:#111827;"
+    "background:transparent;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;"
+    "word-break:normal;font-family:Arial,Helvetica,sans-serif;"
+)
+_PRINT_TEXTAREA_STYLE = (
+    "box-sizing:border-box;display:block;width:100%;min-width:0;min-height:3.6em;"
+    "padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;color:#111827;"
+    "background:transparent;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;"
+    "word-break:normal;font-family:Arial,Helvetica,sans-serif;"
+)
+_PRINT_CHECK_STYLE = (
+    "display:inline-block;width:14px;min-width:14px;height:14px;margin:0 6px 0 0;"
+    "color:#111827;font-size:12px;line-height:14px;text-align:center;vertical-align:-2px;"
+    "font-family:'Arial Unicode MS','Segoe UI Symbol',Arial,sans-serif;"
+)
+
+
 def _print_value_html(value_html, modifier=""):
     value_html = value_html if str(value_html or "").strip() else "&nbsp;"
     class_name = "mba-print-value"
+    style = _PRINT_VALUE_STYLE
     if modifier:
         class_name = f"{class_name} {class_name}--{modifier}"
-    return f'<div class="{class_name}">{value_html}</div>'
+        if modifier == "textarea":
+            style = _PRINT_TEXTAREA_STYLE
+    return f'<div class="{class_name}" style="{style}">{value_html}</div>'
 
 
 def _replace_print_form_controls(fragment):
@@ -883,8 +905,11 @@ def _replace_print_form_controls(fragment):
             class_name = f"mba-print-check mba-print-check--{input_type}"
             if is_checked:
                 class_name = f"{class_name} is-checked"
-            mark = "&#10003;" if input_type == "checkbox" and is_checked else ("&#9679;" if is_checked else "")
-            return f'<span class="{class_name}" aria-hidden="true">{mark}</span>'
+            if input_type == "checkbox":
+                mark = "&#9745;" if is_checked else "&#9744;"
+            else:
+                mark = "&#9679;" if is_checked else "&#9711;"
+            return f'<span class="{class_name}" style="{_PRINT_CHECK_STYLE}" aria-hidden="true">{mark}</span>'
         return _print_value_html(_html_attr_value(attrs, "value"))
 
     fragment = re.sub(
@@ -1377,17 +1402,6 @@ def _normalize_word_html_document(html, title=None):
     return _apply_word_image_dimensions(html)
 
 
-def _html_tag_attr_value(attrs, attr_name):
-    match = re.search(
-        rf'\b{re.escape(attr_name)}\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))',
-        attrs or "",
-        flags=re.IGNORECASE,
-    )
-    if not match:
-        return ""
-    return next((value for value in match.groups() if value is not None), "")
-
-
 def _set_html_tag_attr(attrs, attr_name, value):
     replacement = f'{attr_name}="{value}"'
     if re.search(rf'\b{re.escape(attr_name)}\s*=', attrs or "", flags=re.IGNORECASE):
@@ -1412,7 +1426,7 @@ def _remove_html_tag_attr(attrs, attr_name):
 
 
 def _append_html_style(attrs, style):
-    existing = _html_tag_attr_value(attrs, "style")
+    existing = _html_attr_value(attrs, "style")
     separator = "" if not existing or existing.rstrip().endswith(";") else ";"
     merged = f"{existing}{separator}{style}" if existing else style
     return _set_html_tag_attr(attrs, "style", merged)
@@ -1421,7 +1435,7 @@ def _append_html_style(attrs, style):
 def _apply_word_image_dimensions(html):
     def replace_img(match):
         attrs = match.group(1)
-        class_value = _html_tag_attr_value(attrs, "class")
+        class_value = _html_attr_value(attrs, "class")
         class_names = set(re.split(r"\s+", class_value.strip()))
         width = None
         if "mba-doc-logo" in class_names:
