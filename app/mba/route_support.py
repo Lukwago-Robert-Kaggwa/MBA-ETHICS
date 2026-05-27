@@ -1330,7 +1330,132 @@ def _docx_render_blocks(node):
     return blocks
 
 
-def html_to_word_document_bytes(html, title=None):
+def _normalize_word_html_document(html, title=None):
+    html = str(html or "")
+    title_text = _docx_clean_text(title) or "Document"
+    if not re.search(r"<html\b", html, flags=re.IGNORECASE):
+        html = (
+            "<!doctype html><html><head>"
+            f"<title>{xml_escape(title_text)}</title></head><body>{html}</body></html>"
+        )
+    office_head = (
+        "<meta charset=\"utf-8\">"
+        "<!--[if gte mso 9]><xml>"
+        "<w:WordDocument>"
+        "<w:View>Print</w:View>"
+        "<w:Zoom>100</w:Zoom>"
+        "<w:DoNotOptimizeForBrowser/>"
+        "</w:WordDocument>"
+        "</xml><![endif]-->"
+        "<style>"
+        "@page WordSection1 { size: 595.3pt 841.9pt; margin: 28.35pt 28.35pt 28.35pt 28.35pt; }"
+        "body { font-family: Arial, Helvetica, sans-serif; }"
+        "</style>"
+    )
+    if re.search(r"<head\b", html, flags=re.IGNORECASE):
+        injection = office_head
+        if re.search(r"<meta[^>]+charset=", html, flags=re.IGNORECASE):
+            injection = injection.replace("<meta charset=\"utf-8\">", "", 1)
+        html = re.sub(
+            r"(<head\b[^>]*>)",
+            lambda match: f"{match.group(1)}{injection}",
+            html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    else:
+        html = re.sub(
+            r"(<html\b[^>]*>)",
+            lambda match: f"{match.group(1)}<head>{office_head}<title>{xml_escape(title_text)}</title></head>",
+            html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return html
+
+
+def _docx_package_relationships_xml():
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
+        '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
+        '</Relationships>'
+    )
+
+
+def _docx_core_properties_xml(title=None):
+    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    core_title = _docx_clean_text(title) or "Document"
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+        'xmlns:dc="http://purl.org/dc/elements/1.1/" '
+        'xmlns:dcterms="http://purl.org/dc/terms/" '
+        'xmlns:dcmitype="http://purl.org/dc/dcmitype/" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+        f"<dc:title>{xml_escape(core_title)}</dc:title>"
+        "<dc:creator>MBA Ethics System</dc:creator>"
+        f'<dcterms:created xsi:type="dcterms:W3CDTF">{now}</dcterms:created>'
+        f'<dcterms:modified xsi:type="dcterms:W3CDTF">{now}</dcterms:modified>'
+        "</cp:coreProperties>"
+    )
+
+
+def _docx_app_properties_xml():
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" '
+        'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
+        "<Application>MBA Ethics System</Application>"
+        "</Properties>"
+    )
+
+
+def _html_to_formatted_word_document_bytes(html, title=None):
+    html = _normalize_word_html_document(html, title=title)
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<w:body>'
+        '<w:altChunk r:id="rIdHtml"/>'
+        '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="567" w:right="567" '
+        'w:bottom="567" w:left="567" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr>'
+        '</w:body></w:document>'
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Default Extension="html" ContentType="text/html"/>'
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+        '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
+        '</Types>'
+    )
+    document_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rIdHtml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="afchunk.html"/>'
+        '</Relationships>'
+    )
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as docx:
+        docx.writestr("[Content_Types].xml", content_types)
+        docx.writestr("_rels/.rels", _docx_package_relationships_xml())
+        docx.writestr("word/document.xml", document_xml)
+        docx.writestr("word/_rels/document.xml.rels", document_rels)
+        docx.writestr("word/afchunk.html", html.encode("utf-8"))
+        docx.writestr("docProps/core.xml", _docx_core_properties_xml(title))
+        docx.writestr("docProps/app.xml", _docx_app_properties_xml())
+    return buffer.getvalue()
+
+
+def _html_to_basic_word_document_bytes(html, title=None):
     parser = _DocxHtmlParser()
     parser.feed(str(html or ""))
     body = _docx_find_first(parser.root, "body") or parser.root
@@ -1359,49 +1484,28 @@ def html_to_word_document_bytes(html, title=None):
         '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
         '</Types>'
     )
-    package_rels = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
-        '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
-        '</Relationships>'
-    )
     document_rels = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>'
-    )
-    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-    core_props = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
-        'xmlns:dc="http://purl.org/dc/elements/1.1/" '
-        'xmlns:dcterms="http://purl.org/dc/terms/" '
-        'xmlns:dcmitype="http://purl.org/dc/dcmitype/" '
-        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-        f"<dc:title>{xml_escape(core_title)}</dc:title>"
-        "<dc:creator>MBA Ethics System</dc:creator>"
-        f'<dcterms:created xsi:type="dcterms:W3CDTF">{now}</dcterms:created>'
-        f'<dcterms:modified xsi:type="dcterms:W3CDTF">{now}</dcterms:modified>'
-        "</cp:coreProperties>"
-    )
-    app_props = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" '
-        'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
-        "<Application>MBA Ethics System</Application>"
-        "</Properties>"
     )
 
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as docx:
         docx.writestr("[Content_Types].xml", content_types)
-        docx.writestr("_rels/.rels", package_rels)
+        docx.writestr("_rels/.rels", _docx_package_relationships_xml())
         docx.writestr("word/document.xml", document_xml)
         docx.writestr("word/_rels/document.xml.rels", document_rels)
-        docx.writestr("docProps/core.xml", core_props)
-        docx.writestr("docProps/app.xml", app_props)
+        docx.writestr("docProps/core.xml", _docx_core_properties_xml(title))
+        docx.writestr("docProps/app.xml", _docx_app_properties_xml())
     return buffer.getvalue()
+
+
+def html_to_word_document_bytes(html, title=None):
+    try:
+        return _html_to_formatted_word_document_bytes(html, title=title)
+    except Exception:
+        current_app.logger.exception("Formatted HTML DOCX generation failed; using basic DOCX fallback")
+        return _html_to_basic_word_document_bytes(html, title=title)
 
 
 def generate_form_submission_word_bytes(project, form_type, payload):
