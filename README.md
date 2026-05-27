@@ -68,6 +68,8 @@ Install dependencies from `requirements.txt`, then start the production server w
 gunicorn run:app
 ```
 
+Generated web-form downloads are rendered to PDF with headless Chrome/Chromium so the PDF matches the submitted HTML form. Install Chrome or Chromium on the server. If the browser is not on the PATH, set `MBA_PDF_BROWSER_PATH` to the executable path, for example `/usr/bin/chromium`.
+
 ## Environment Variables
 
 Required for production:
@@ -76,6 +78,12 @@ Required for production:
 SECRET_KEY=
 DATABASE_URL=
 PUBLIC_BASE_URL=
+```
+
+Optional PDF rendering:
+
+```text
+MBA_PDF_BROWSER_PATH=
 ```
 
 Optional Microsoft login:

@@ -133,7 +133,7 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
     original_name = f"{doc_type}_form.pdf"
     unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.pdf"
     dest_path = os.path.join(project_dir, unique_name)
-    pdf_bytes = generate_form_submission_document_bytes(project, form_type, payload)
+    pdf_bytes = generate_form_submission_document_bytes(project, form_type, payload, allow_plain_fallback=False)
     mime_type = "application/pdf"
     with open(dest_path, "wb") as fh:
         fh.write(pdf_bytes)

@@ -23,6 +23,10 @@
   {% set doc_subtitle = '(By capstone and coursework)' %}
   {% set doc_note = 'Examiners should consider the following in assessing and reporting on the research report, bearing in mind with respect to all criteria that the report constitutes 26% of the MBA assessment.' %}
 {% endif %}
+{% set show_outcome_summary = doc_variant in ['assessment_submission', 'assessment_result', 'assessor_report'] %}
+{% set show_grading = doc_variant in ['assessment_submission', 'assessment_result', 'assessor_report'] %}
+{% set show_report_guidance = doc_variant in ['assessment_submission', 'assessor_report'] %}
+{% set show_written_assessment = doc_variant in ['assessment_submission', 'assessor_report', 'assessor_narrative'] %}
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel">
@@ -82,6 +86,7 @@
           </tr>
         </table>
 
+        {% if show_outcome_summary %}
         <table class="mba-doc-table">
           <colgroup>
             <col style="width:8%;">
@@ -118,7 +123,13 @@
             </td>
           </tr>
         </table>
+        {% elif doc_variant == 'assessor_narrative' %}
+        <p class="mba-doc-paragraph">
+          The examination outcome, final mark, and recommendation are recorded in the companion result summary. This document carries the assessor's narrative report.
+        </p>
+        {% endif %}
 
+        {% if show_grading %}
         <table class="mba-doc-table mba-doc-table--tight">
           <tr>
             <th colspan="3">GRADING</th>
@@ -156,7 +167,15 @@
             <td><input class="mba-doc-input" name="grade" type="number" min="0" max="100" step="1" value="{{ prefill.get('grade','') }}" required></td>
           </tr>
         </table>
+        {% endif %}
 
+        {% if doc_variant == 'assessment_result' %}
+        <p class="mba-doc-paragraph">
+          The full assessor narrative is filed separately in the accompanying assessor report forms.
+        </p>
+        {% endif %}
+
+        {% if show_report_guidance %}
         <div class="mba-doc-form" style="gap:10px;">
           <p class="mba-doc-paragraph">Please provide a detailed report which gives attention to the issues outlined below and any other points you would like to highlight:</p>
           <ul class="mba-doc-bullets">
@@ -173,11 +192,14 @@
             <li>Does the literary style conform to correct English usage and academic writing?</li>
           </ul>
         </div>
+        {% endif %}
 
+        {% if show_written_assessment %}
         <div>
-          <div class="mba-doc-label" style="margin-bottom:6px;">Examiner's Detailed Report</div>
+          <div class="mba-doc-label" style="margin-bottom:6px;">{{ "Assessor's Narrative Report" if doc_variant == 'assessor_narrative' else "Examiner's Detailed Report" }}</div>
           <textarea class="mba-doc-textarea" name="written_assessment" rows="16" required>{{ prefill.get('written_assessment','') }}</textarea>
         </div>
+        {% endif %}
 
         <label class="mba-doc-checkline">
           <span>I confirm that this assessment represents my independent and impartial evaluation of the submitted capstone research report, and that I have no undisclosed conflict of interest. <span style="color:red;">*</span></span>

@@ -105,7 +105,7 @@ def _payload_for_live_form_render(project, doc, form):
     return payload
 
 
-def _live_form_html_response(project, doc, as_attachment=False):
+def _live_form_html_response(project, doc):
     if not supports_exact_form_render(doc.doc_type):
         return None
     form = MbaForm.query.filter_by(project_id=project.id, form_type=doc.doc_type).first()
@@ -118,13 +118,6 @@ def _live_form_html_response(project, doc, as_attachment=False):
     )
     if not html:
         return None
-    if as_attachment:
-        return send_file(
-            BytesIO(html.encode("utf-8")),
-            mimetype="text/html; charset=utf-8",
-            as_attachment=True,
-            download_name=f"{doc.doc_type}_form.html",
-        )
     return current_app.response_class(html, mimetype="text/html")
 
 
@@ -139,7 +132,11 @@ def _live_form_pdf_response(project, doc):
             project,
             doc.doc_type,
             _payload_for_live_form_render(project, doc, form),
+            allow_plain_fallback=False,
         )
+    except RuntimeError as exc:
+        current_app.logger.warning("Unable to generate exact PDF for document %s: %s", doc.id, exc)
+        return current_app.response_class(str(exc), status=503, mimetype="text/plain")
     except Exception:
         current_app.logger.exception("Unable to generate PDF for document %s", doc.id)
         pdf_bytes = None
@@ -378,7 +375,12 @@ def _regenerate_generated_document_if_needed(project, doc, project_dir):
         payload["_student_acceptance"] = "1"
 
     with open(stored_path, "wb") as fh:
-        file_bytes = generate_form_submission_document_bytes(project, form.form_type, payload)
+        file_bytes = generate_form_submission_document_bytes(
+            project,
+            form.form_type,
+            payload,
+            allow_plain_fallback=False,
+        )
         fh.write(file_bytes)
     doc.file_data = file_bytes
     doc.mime_type = "application/pdf"
@@ -772,7 +774,7 @@ def view_project_document(project_id, doc_id):
         return redirect_response
 
     if supports_exact_form_render(doc.doc_type):
-        live_form_response = _live_form_html_response(project, doc, as_attachment=False)
+        live_form_response = _live_form_html_response(project, doc)
         if live_form_response:
             return live_form_response
         db_response = _project_document_db_response(doc, as_attachment=False)

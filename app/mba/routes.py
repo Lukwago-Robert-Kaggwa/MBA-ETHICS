@@ -1175,6 +1175,14 @@ def admin_project_action(project_id):
             project.comments,
             f"{current_user.email}: forwarded the assessment summary to the supervisor.",
         )
+        has_active_corrections = project_has_active_corrections(project)
+        summary_body_note = (
+            "Assessors requested corrections or raised comments. Only the supervisor may release "
+            "those comments to the student."
+            if has_active_corrections
+            else "No assessor-requested corrections are active for this result. Please review the "
+            "forwarded assessment summary for your records."
+        )
         messages = []
         for supervisor_email in project_supervisor_notification_emails(project):
             messages.append(
@@ -1184,8 +1192,7 @@ def admin_project_action(project_id):
                     "body": (
                         f"MBA Admin has forwarded the assessment summary for the Capstone Project "
                         f"'{project.project_title}'.\n\n"
-                        "If assessors requested corrections or raised comments, only the supervisor may release "
-                        "those comments to the student."
+                        f"{summary_body_note}"
                     ),
                 }
             )
@@ -1281,7 +1288,7 @@ def admin_project_action(project_id):
         project.comments = append_comment(project.comments, f"{current_user.email}: {comment}")
     db.session.commit()
     flash(message, "success")
-    return redirect(url_for("mba.admin_dashboard"))
+    return redirect(url_for("mba.admin_dashboard", panel="projects", _anchor=f"project-{project.id}"))
 
 
 @mba_bp.route("/projects/<int:project_id>/hdc-action", methods=["POST"])

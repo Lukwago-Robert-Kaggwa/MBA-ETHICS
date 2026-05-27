@@ -92,10 +92,10 @@
                 <span class="nav-icon">A</span><span>Admin Dashboard</span>
               </a>
               <p class="ethics-sidebar__section-label">Admin Menu</p>
-              <a href="{{ url_for('mba.admin_dashboard', panel='disciplines', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel', 'disciplines') == 'disciplines' %}is-active{% endif %}">
+              <a href="{{ url_for('mba.admin_dashboard', panel='disciplines', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'disciplines' %}is-active{% endif %}">
                 <span class="nav-icon">D</span><span>Disciplines</span>
               </a>
-              <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'projects' %}is-active{% endif %}">
+              <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel', 'projects') == 'projects' %}is-active{% endif %}">
                 <span class="nav-icon">P</span><span>Capstone Projects</span>
               </a>
               <a href="{{ url_for('mba.admin_dashboard', panel='assessors', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'assessors' %}is-active{% endif %}">

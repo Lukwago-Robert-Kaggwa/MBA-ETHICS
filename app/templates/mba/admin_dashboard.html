@@ -12,9 +12,9 @@
   {% set sv = selected_view|default('all', true) %}
   {% set isp = invitation_state_by_project|default({}, true) %}
   {% set dbp = documents_by_project|default({}, true) %}
-  {% set active_panel = request.args.get('panel', 'disciplines') %}
+  {% set active_panel = request.args.get('panel', 'projects') %}
   {% if active_panel not in ['disciplines', 'projects', 'assessors', 'supervisors', 'students'] %}
-  {% set active_panel = 'disciplines' %}
+  {% set active_panel = 'projects' %}
   {% endif %}
   {% set admin_reminders_nav = mba_reminders_nav() %}
   <nav class="portal-tabs" aria-label="Admin workspace sections">
@@ -309,8 +309,6 @@
       project.student.student_profile else 'Not captured' %}
       {% set corrections_active = project_has_active_corrections(project) if project_has_active_corrections is defined
       else false %}
-      {% set corrections_state = project_corrections_status(project) if project_corrections_status is defined else
-      'none' %}
       {% set additional_assessment_active = additional_assessment_required(project) if additional_assessment_required is
       defined else false %}
       {% set additional_assessment_state = additional_assessment_stage(project) if additional_assessment_stage is

@@ -1351,16 +1351,16 @@ def admin_discipline_action():
         name = " ".join((request.form.get("name") or "").strip().split())
         if not name:
             flash("Discipline name is required.", "error")
-            return redirect(url_for("mba.admin_dashboard"))
+            return redirect(url_for("mba.admin_dashboard", panel="disciplines"))
         existing = MbaDiscipline.query.filter(db.func.lower(MbaDiscipline.name) == name.lower()).first()
         if existing:
             flash("That discipline already exists.", "error")
-            return redirect(url_for("mba.admin_dashboard"))
+            return redirect(url_for("mba.admin_dashboard", panel="disciplines"))
         max_sort_order = db.session.query(db.func.max(MbaDiscipline.sort_order)).scalar()
         db.session.add(MbaDiscipline(name=name, sort_order=(max_sort_order or 0) + 1))
         db.session.commit()
         flash("Discipline added.", "success")
-        return redirect(url_for("mba.admin_dashboard"))
+        return redirect(url_for("mba.admin_dashboard", panel="disciplines"))
     if action == "toggle":
         discipline_id = request.form.get("discipline_id", type=int)
         discipline = db.session.get(MbaDiscipline, discipline_id)
@@ -1369,9 +1369,9 @@ def admin_discipline_action():
         discipline.is_active = not discipline.is_active
         db.session.commit()
         flash(f"Discipline {'activated' if discipline.is_active else 'hidden'}.", "success")
-        return redirect(url_for("mba.admin_dashboard"))
+        return redirect(url_for("mba.admin_dashboard", panel="disciplines"))
     flash("Unknown discipline action.", "error")
-    return redirect(url_for("mba.admin_dashboard"))
+    return redirect(url_for("mba.admin_dashboard", panel="disciplines"))
 
 
 @mba_bp.route("/admin/assessors/import", methods=["POST"])

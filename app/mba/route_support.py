@@ -636,12 +636,41 @@ def _stamp_generated_pdf_bytes(pdf_bytes, marker):
     return pdf_bytes[: header_end + 1] + marker_line + pdf_bytes[header_end + 1 :]
 
 
+HTML_PDF_RENDERER_UNAVAILABLE_MESSAGE = (
+    "The exact HTML-to-PDF renderer is unavailable. Install Chromium/Chrome on the server "
+    "or set MBA_PDF_BROWSER_PATH to the browser executable."
+)
+
+
 def _browser_pdf_executables():
+    env_candidates = [
+        os.getenv(name)
+        for name in (
+            "MBA_PDF_BROWSER_PATH",
+            "CHROME_BIN",
+            "CHROMIUM_BIN",
+            "GOOGLE_CHROME_BIN",
+        )
+    ]
     candidates = (
+        *env_candidates,
         shutil.which("chrome.exe"),
         shutil.which("chrome"),
+        shutil.which("chromium"),
+        shutil.which("chromium-browser"),
+        shutil.which("google-chrome"),
+        shutil.which("google-chrome-stable"),
         shutil.which("msedge.exe"),
         shutil.which("msedge"),
+        shutil.which("microsoft-edge"),
+        shutil.which("microsoft-edge-stable"),
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/opt/google/chrome/chrome",
+        "/usr/bin/microsoft-edge",
+        "/usr/bin/microsoft-edge-stable",
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -1171,10 +1200,6 @@ def _render_html_form_pdf_bytes(project, form_type, payload):
     return _stamp_generated_pdf_bytes(pdf_bytes, _generated_form_pdf_marker(form_type))
 
 
-def generate_exact_html_pdf_bytes(project, form_type, payload):
-    return _render_html_form_pdf_bytes(project, form_type, payload)
-
-
 def _build_pdf_from_page_streams(page_streams, marker=None):
     page_count = len(page_streams)
     font_object_id = 3 + (page_count * 2)
@@ -1619,7 +1644,7 @@ FORM_PDF_DEFINITIONS = {
 ASSESSOR_FORM_DEFINITION = {
     "title": "Capstone Assessment Result Summary",
     "action": "Assessor Action",
-    "intro": "Record the capstone examination outcome, final mark, and declaration below. These details are also used to generate the capstone assessor report forms.",
+    "intro": "Record the capstone examination outcome, final mark, and declaration below. The full assessor narrative is filed separately in the assessor report forms.",
     "sections": [
         {
             "title": "Assessor Details",
@@ -1649,7 +1674,6 @@ ASSESSOR_FORM_DEFINITION = {
         {
             "title": "Declaration",
             "fields": [
-                ("written_assessment", "Examiner's Detailed Report", "textarea"),
                 ("assessor_signature_name", "External Assessor Signature / Full Name", "text"),
                 ("certification_date", "Date", "date"),
             ],
@@ -1719,9 +1743,37 @@ ASSESSOR_REPORT_FORM_DEFINITION = {
 ASSESSOR_NARRATIVE_FORM_DEFINITION = {
     "title": "Capstone Assessors Report Form 2",
     "action": "Assessor Action",
-    "intro": "Complete the second capstone examiner's report copy. The same submitted assessment details are used to generate this companion report form.",
+    "intro": "Companion narrative report for the capstone examination. The final mark and recommendation are recorded in the result summary.",
     "sections": [
-        *ASSESSOR_REPORT_FORM_DEFINITION["sections"],
+        {
+            "title": "Candidate and Assessor Details",
+            "fields": [
+                ("student_name", "Name of Candidate", "text"),
+                ("student_number", "Student No.", "text"),
+                ("research_title", "Title of Research", "textarea"),
+                ("assessor_name", "Name of External Assessor (in full)", "text"),
+                ("affiliation", "Institutional Affiliation", "text"),
+                ("assessor_email", "Email Address", "text"),
+                ("assessor_contact", "Contact Number(s)", "text"),
+            ],
+        },
+        {
+            "title": "Assessor's Narrative Report",
+            "paragraph": "Narrative report copy. The companion result summary records the examination outcome, final mark, and recommendation.",
+            "fields": [
+                ("written_assessment", "Narrative Report", "textarea"),
+            ],
+        },
+        {
+            "title": "Declaration",
+            "fields": [
+                ("assessor_signature_name", "External Assessor Signature / Full Name", "text"),
+                ("certification_date", "Date", "date"),
+            ],
+            "paragraph": "I confirm that this narrative report represents my independent and impartial evaluation of the submitted capstone research report.",
+            "checkbox_position": "right",
+            "checkboxes": [("declaration", "I confirm this capstone narrative report.")],
+        },
     ],
 }
 
@@ -2197,7 +2249,6 @@ class _FormPdfRenderer:
                 "recommendation",
                 "consent_name_disclosure",
                 "grade",
-                "written_assessment",
                 "assessor_signature_name",
                 "certification_date",
                 "declaration",
@@ -2228,9 +2279,6 @@ class _FormPdfRenderer:
                 "affiliation",
                 "assessor_email",
                 "assessor_contact",
-                "recommendation",
-                "grade",
-                "consent_name_disclosure",
                 "written_assessment",
                 "assessor_signature_name",
                 "certification_date",
@@ -2471,13 +2519,15 @@ def generate_form_submission_pdf_bytes(form_type, payload):
     return renderer.render()
 
 
-def generate_form_submission_document_bytes(project, form_type, payload):
+def generate_form_submission_document_bytes(project, form_type, payload, *, allow_plain_fallback=True):
     try:
         html_pdf_bytes = _render_html_form_pdf_bytes(project, form_type, payload)
         if html_pdf_bytes:
             return html_pdf_bytes
     except Exception:
         current_app.logger.exception("HTML form PDF render failed for %s", form_type)
+    if not allow_plain_fallback:
+        raise RuntimeError(HTML_PDF_RENDERER_UNAVAILABLE_MESSAGE)
     return generate_form_submission_pdf_bytes(form_type, payload)
 
 
@@ -3420,7 +3470,7 @@ def role_landing_url():
     if current_user.role == MbaRole.HDC.value:
         return url_for("mba.hdc_dashboard")
     if current_user.role in {MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}:
-        return url_for("mba.admin_dashboard")
+        return url_for("mba.admin_dashboard", panel="projects")
     return url_for("mba.dashboard")
 
 
@@ -3819,7 +3869,7 @@ def _refresh_existing_form_document(project, doc_type, form_type, payload, uploa
     original_name = f"{doc_type}_form.pdf"
     unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.pdf"
     dest_path = os.path.join(project_dir, unique_name)
-    file_bytes = generate_form_submission_document_bytes(project, form_type, payload)
+    file_bytes = generate_form_submission_document_bytes(project, form_type, payload, allow_plain_fallback=False)
     with open(dest_path, "wb") as fh:
         fh.write(file_bytes)
 

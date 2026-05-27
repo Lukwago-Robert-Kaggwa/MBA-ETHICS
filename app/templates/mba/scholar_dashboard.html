@@ -210,14 +210,39 @@
               </form>
             {% endif %}
           </details>
-          {% if project_has_active_corrections is defined and project_has_active_corrections(project) and assessment_results_forwarded_to_supervisor(project) %}
-            {% set corrections_state = project_corrections_status(project) %}
+          {% set forwarded_assessment_summary = assessment_results_forwarded_to_supervisor(project) if assessment_results_forwarded_to_supervisor is defined else false %}
+          {% set active_result_corrections = project_has_active_corrections(project) if project_has_active_corrections is defined else false %}
+          {% set hdc_results_released = results_released_to_supervisor(project) if results_released_to_supervisor is defined else false %}
+          {% if active_result_corrections and forwarded_assessment_summary %}
             <section class="response-section">
               <strong>Response Workflow</strong>
               <p class="muted" style="margin:0.5rem 0 0.75rem;">
                 This Capstone Project is under response review. Please review and release comments to student.
               </p>
               <a href="{{ url_for('mba.scholar_corrections') }}" class="secondary-button small-button">Open Response Review</a>
+            </section>
+          {% elif forwarded_assessment_summary and not (project.project_status == 'results_approved' and hdc_results_released) %}
+            <section class="response-section">
+              <strong>Assessment Summary</strong>
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                MBA Admin forwarded the assessment summary to you{% if project.assessment_results_forwarded_to_supervisor_at %} on {{ project.assessment_results_forwarded_to_supervisor_at.strftime('%d %b %Y %H:%M') }}{% endif %}. No assessor-requested corrections are active for this result.
+              </p>
+              <div class="invite-list invite-list--documents">
+                {% for doc in project.documents if doc.doc_type.startswith('assessment_result_') or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_narrative_') %}
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>{{ document_label(doc.doc_type) }}</strong>
+                      <small>{{ doc.original_name }}</small>
+                    </div>
+                    <div class="document-action-row">
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">Download</a>
+                    </div>
+                  </div>
+                {% else %}
+                  <p class="muted">No assessor result documents are available for this project.</p>
+                {% endfor %}
+              </div>
             </section>
           {% endif %}
           {% if project.project_status == 'results_approved' %}
