@@ -1351,6 +1351,8 @@ def _normalize_word_html_document(html, title=None):
         "<style>"
         "@page WordSection1 { size: 595.3pt 841.9pt; margin: 28.35pt 28.35pt 28.35pt 28.35pt; }"
         "body { font-family: Arial, Helvetica, sans-serif; }"
+        ".mba-doc-logo { width: 92px !important; max-width: 92px !important; height: auto !important; }"
+        ".corrections-source-logo { width: 118px !important; max-width: 118px !important; height: auto !important; }"
         "</style>"
     )
     if re.search(r"<head\b", html, flags=re.IGNORECASE):
@@ -1372,7 +1374,71 @@ def _normalize_word_html_document(html, title=None):
             count=1,
             flags=re.IGNORECASE,
         )
-    return html
+    return _apply_word_image_dimensions(html)
+
+
+def _html_tag_attr_value(attrs, attr_name):
+    match = re.search(
+        rf'\b{re.escape(attr_name)}\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))',
+        attrs or "",
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    return next((value for value in match.groups() if value is not None), "")
+
+
+def _set_html_tag_attr(attrs, attr_name, value):
+    replacement = f'{attr_name}="{value}"'
+    if re.search(rf'\b{re.escape(attr_name)}\s*=', attrs or "", flags=re.IGNORECASE):
+        return re.sub(
+            rf'\b{re.escape(attr_name)}\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)',
+            replacement,
+            attrs,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return f"{attrs.rstrip()} {replacement}"
+
+
+def _remove_html_tag_attr(attrs, attr_name):
+    return re.sub(
+        rf'\s+\b{re.escape(attr_name)}\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)',
+        "",
+        attrs or "",
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+
+def _append_html_style(attrs, style):
+    existing = _html_tag_attr_value(attrs, "style")
+    separator = "" if not existing or existing.rstrip().endswith(";") else ";"
+    merged = f"{existing}{separator}{style}" if existing else style
+    return _set_html_tag_attr(attrs, "style", merged)
+
+
+def _apply_word_image_dimensions(html):
+    def replace_img(match):
+        attrs = match.group(1)
+        class_value = _html_tag_attr_value(attrs, "class")
+        class_names = set(re.split(r"\s+", class_value.strip()))
+        width = None
+        if "mba-doc-logo" in class_names:
+            width = 92
+        elif "corrections-source-logo" in class_names:
+            width = 118
+        if not width:
+            return match.group(0)
+        attrs = _set_html_tag_attr(attrs, "width", str(width))
+        attrs = _remove_html_tag_attr(attrs, "height")
+        attrs = _append_html_style(
+            attrs,
+            f"width:{width}px;max-width:{width}px;height:auto;mso-width-alt:{width * 15};",
+        )
+        return f"<img{attrs}>"
+
+    return re.sub(r"<img\b([^>]*)>", replace_img, html, flags=re.IGNORECASE)
 
 
 def _docx_package_relationships_xml():
