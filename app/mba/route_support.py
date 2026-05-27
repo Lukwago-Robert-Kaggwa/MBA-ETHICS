@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 import base64
 from html.parser import HTMLParser
@@ -649,6 +650,13 @@ HTML_PDF_RENDERER_UNAVAILABLE_MESSAGE = (
 FORM_WORD_EXTENSION = "docx"
 FORM_WORD_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 JBS5_WORD_TEMPLATE = Path("mba") / "docx_templates" / "jbs5_registration_template.docx"
+JBS10_WORD_TEMPLATE = Path("mba") / "docx_templates" / "jbs10_external_examiner_nomination_template.docx"
+CORRECTIONS_RESPONSE_WORD_TEMPLATE = Path("mba") / "docx_templates" / "corrections_response_template.docx"
+JBS1_WORD_TEMPLATE = Path("mba") / "docx_templates" / "jbs1_declaration_template.docx"
+AFFIDAVIT_WORD_TEMPLATE = Path("mba") / "docx_templates" / "affidavit_template.docx"
+CAPSTONE_EVALUATION_WORD_TEMPLATE = Path("mba") / "docx_templates" / "capstone_final_submission_evaluation_template.docx"
+PLAGIARISM_WORD_TEMPLATE = Path("mba") / "docx_templates" / "plagiarism_declaration_template.docx"
+TII_AI_WORD_TEMPLATE = Path("mba") / "docx_templates" / "tii_ai_declaration_template.docx"
 _DOCX_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _DOCX_NS = {
     "w": _DOCX_W_NS,
@@ -1707,6 +1715,53 @@ def _jbs5_word_template_path():
     return Path(current_app.root_path) / JBS5_WORD_TEMPLATE
 
 
+def _jbs10_word_template_path():
+    return Path(current_app.root_path) / JBS10_WORD_TEMPLATE
+
+
+def _corrections_response_word_template_path():
+    return Path(current_app.root_path) / CORRECTIONS_RESPONSE_WORD_TEMPLATE
+
+
+def _jbs1_word_template_path():
+    return Path(current_app.root_path) / JBS1_WORD_TEMPLATE
+
+
+def _affidavit_word_template_path():
+    return Path(current_app.root_path) / AFFIDAVIT_WORD_TEMPLATE
+
+
+def _capstone_evaluation_word_template_path():
+    return Path(current_app.root_path) / CAPSTONE_EVALUATION_WORD_TEMPLATE
+
+
+def _plagiarism_word_template_path():
+    return Path(current_app.root_path) / PLAGIARISM_WORD_TEMPLATE
+
+
+def _tii_ai_word_template_path():
+    return Path(current_app.root_path) / TII_AI_WORD_TEMPLATE
+
+
+def _native_word_template_path_for_form(form_type):
+    form_type = str(form_type or "")
+    exact_templates = {
+        "jbs5": _jbs5_word_template_path,
+        "jbs10": _jbs10_word_template_path,
+        "corrections_response": _corrections_response_word_template_path,
+        "jbs1_declaration": _jbs1_word_template_path,
+        "affidavit": _affidavit_word_template_path,
+        "plagiarism_declaration": _plagiarism_word_template_path,
+        "ai_declaration_form": _tii_ai_word_template_path,
+    }
+    template_path_factory = exact_templates.get(form_type)
+    if template_path_factory:
+        return template_path_factory()
+    if form_type.startswith("assessment_result_"):
+        return _capstone_evaluation_word_template_path()
+    return None
+
+
 def _docx_tag(name):
     return f"{{{_DOCX_W_NS}}}{name}"
 
@@ -1805,11 +1860,37 @@ def _docx_text_run(text, *, size="16", bold=False):
     return run
 
 
-def _docx_set_cell_text(root, table_index, row_index, cell_index, value, *, size="16", bold=False):
-    value = str(value or "").strip()
-    if not value:
+def _docx_set_paragraph_text(paragraph, value, *, size="16", bold=False):
+    if paragraph is None:
         return
-    cell = _docx_cell(root, table_index, row_index, cell_index)
+    for child in list(paragraph):
+        if child.tag != _docx_tag("pPr"):
+            paragraph.remove(child)
+    lines = str(value or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    for index, line in enumerate(lines):
+        if index:
+            break_run = ET.SubElement(paragraph, _docx_tag("r"))
+            ET.SubElement(break_run, _docx_tag("br"))
+        paragraph.append(_docx_text_run(line, size=size, bold=bold))
+
+
+def _docx_paragraph_text(paragraph):
+    parts = []
+    for node in paragraph.iter():
+        if node.tag == _docx_tag("t"):
+            parts.append(node.text or "")
+        elif node.tag == _docx_tag("tab"):
+            parts.append("\t")
+    return re.sub(r"\s+", " ", "".join(parts)).strip()
+
+
+def _docx_set_indexed_paragraph_text(root, paragraph_index, value, *, size="16", bold=False):
+    paragraphs = root.findall(".//w:p", _DOCX_NS)
+    if 0 <= paragraph_index < len(paragraphs):
+        _docx_set_paragraph_text(paragraphs[paragraph_index], value, size=size, bold=bold)
+
+
+def _docx_set_cell_element_text(cell, value, *, size="16", bold=False):
     if cell is None:
         return
     paragraphs = cell.findall("w:p", _DOCX_NS)
@@ -1817,16 +1898,15 @@ def _docx_set_cell_text(root, table_index, row_index, cell_index, value, *, size
         paragraph = paragraphs[0]
     else:
         paragraph = ET.SubElement(cell, _docx_tag("p"))
-    for child in list(paragraph):
-        if child.tag != _docx_tag("pPr"):
-            paragraph.remove(child)
-    lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    for index, line in enumerate(lines):
-        if index:
-            break_run = ET.SubElement(paragraph, _docx_tag("r"))
-            ET.SubElement(break_run, _docx_tag("br"))
-        if line:
-            paragraph.append(_docx_text_run(line, size=size, bold=bold))
+    _docx_set_paragraph_text(paragraph, value, size=size, bold=bold)
+
+
+def _docx_set_cell_text(root, table_index, row_index, cell_index, value, *, size="16", bold=False):
+    value = str(value or "").strip()
+    if not value:
+        return
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    _docx_set_cell_element_text(cell, value, size=size, bold=bold)
 
 
 def _docx_set_checkbox(root, field_name, checked):
@@ -1843,6 +1923,23 @@ def _docx_set_checkbox(root, field_name, checked):
             if node is None:
                 node = ET.SubElement(checkbox, _docx_tag(node_name))
             node.set(_docx_tag("val"), value)
+
+
+def _docx_read_template(template_path):
+    with zipfile.ZipFile(template_path, "r") as template:
+        entries = template.infolist()
+        contents = {entry.filename: template.read(entry.filename) for entry in entries}
+    root = ET.fromstring(contents["word/document.xml"])
+    return entries, contents, root
+
+
+def _docx_write_template(entries, contents, root):
+    contents["word/document.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as generated:
+        for entry in entries:
+            generated.writestr(entry, contents[entry.filename])
+    return buffer.getvalue()
 
 
 def _jbs5_study_type_checks(payload):
@@ -1927,9 +2024,457 @@ def _generate_jbs5_template_word_bytes(project, payload):
     return buffer.getvalue()
 
 
+def _docx_user_name(user):
+    profile = getattr(user, "scholar_profile", None) if user else None
+    if profile:
+        return " ".join(
+            part for part in [getattr(profile, "title", None), getattr(profile, "name", None), getattr(profile, "surname", None)] if part
+        ).strip()
+    if user:
+        return " ".join(part for part in [getattr(user, "first_name", None), getattr(user, "last_name", None)] if part).strip() or getattr(user, "email", "")
+    return ""
+
+
+def _docx_student_initials_surname(project, payload):
+    value = _docx_first_value(payload, "student_initials_surname")
+    if value:
+        return value
+    initials = _docx_first_value(payload, "student_initials")
+    surname = _docx_first_value(payload, "surname")
+    if initials or surname:
+        return " ".join(part for part in [initials, surname] if part).strip()
+    student = getattr(project, "student", None)
+    profile = getattr(student, "student_profile", None) if student else None
+    if profile:
+        initials = "".join(
+            part[0].upper()
+            for part in str(getattr(profile, "name", "") or "").replace(".", " ").split()
+            if part
+        )
+        return " ".join(part for part in [initials, getattr(profile, "surname", "")] if part).strip()
+    return getattr(student, "email", "") if student else ""
+
+
+def _docx_student_full_name(project, payload):
+    value = _docx_first_value(payload, "full_name", "student_name", "signature_name")
+    if value:
+        return value
+    title = _docx_first_value(payload, "student_title")
+    initials = _docx_first_value(payload, "student_initials")
+    surname = _docx_first_value(payload, "surname")
+    if initials or surname:
+        return " ".join(part for part in [title, initials, surname] if part).strip()
+    student = getattr(project, "student", None)
+    profile = getattr(student, "student_profile", None) if student else None
+    if profile:
+        return " ".join(
+            part for part in [getattr(profile, "title", ""), getattr(profile, "name", ""), getattr(profile, "surname", "")] if part
+        ).strip()
+    return getattr(student, "email", "") if student else ""
+
+
+def _docx_degree_registered(qualification):
+    qualification = str(qualification or "").strip() or "MBA"
+    if qualification.upper() == "MBA":
+        return "MBA Master of Business Administration"
+    return qualification
+
+
+def _docx_yes_no(value):
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    if value.lower() in {"1", "true", "yes", "on", "checked"}:
+        return "Yes"
+    if value.lower() in {"0", "false", "no", "off", "unchecked"}:
+        return "No"
+    return value
+
+
+def _docx_supervisor_payload(project, payload):
+    supervisor = getattr(project, "primary_supervisor", None)
+    profile = getattr(supervisor, "scholar_profile", None) if supervisor else None
+    name = _docx_first_value(payload, "supervisor_name", "proposed_supervisor") or _docx_user_name(supervisor)
+    return {
+        "name": name,
+        "department": _docx_first_value(payload, "supervisor_department") or (getattr(profile, "department", "") if profile else "") or "Johannesburg Business School",
+        "phone": _docx_first_value(payload, "supervisor_phone", "supervisor_contact") or (getattr(profile, "contact", "") if profile else ""),
+        "email": _docx_first_value(payload, "supervisor_email") or (getattr(supervisor, "email", "") if supervisor else ""),
+    }
+
+
+def _docx_assessor_payload(project, payload, slot):
+    user = getattr(project, slot, None)
+    profile = getattr(user, "scholar_profile", None) if user else None
+    prefix = f"{slot}_"
+    contact = _docx_first_value(payload, f"{prefix}telephone", f"{prefix}cell", f"{prefix}contact") or (
+        getattr(profile, "contact", "") if profile else ""
+    )
+    international = _docx_first_value(payload, f"{prefix}international_assessor")
+    if not international and profile and getattr(profile, "international_assessor", None) is not None:
+        international = getattr(profile, "international_assessor")
+    return {
+        "name": _docx_first_value(payload, f"{prefix}name") or _docx_user_name(user),
+        "qualification": _docx_first_value(payload, f"{prefix}qualification", f"{prefix}highest_qualification")
+        or (getattr(profile, "qualification", "") if profile else ""),
+        "affiliation": _docx_first_value(payload, f"{prefix}affiliation")
+        or (getattr(profile, "affiliation", "") if profile else "")
+        or (getattr(profile, "department", "") if profile else ""),
+        "address": _docx_first_value(payload, f"{prefix}address") or (getattr(profile, "address", "") if profile else ""),
+        "telephone": contact,
+        "cell": contact,
+        "email": _docx_first_value(payload, f"{prefix}email") or (getattr(user, "email", "") if user else ""),
+        "students_supervised": _docx_first_value(payload, f"{prefix}students_supervised_total")
+        or (str(getattr(profile, "students_supervised_total", "")) if profile and getattr(profile, "students_supervised_total", None) is not None else ""),
+        "current_affiliation": _docx_first_value(payload, f"{prefix}current_affiliation")
+        or (getattr(profile, "affiliation", "") if profile else ""),
+        "publications": _docx_first_value(payload, f"{prefix}publication_count")
+        or (str(getattr(profile, "publication_count", "")) if profile and getattr(profile, "publication_count", None) is not None else ""),
+        "international": _docx_yes_no(international),
+    }
+
+
+def _generate_jbs10_template_word_bytes(project, payload):
+    template_path = _jbs10_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    supervisor = _docx_supervisor_payload(project, payload)
+    co_supervisor = {
+        "name": _docx_first_value(payload, "co_supervisor_1", "proposed_co_supervisors"),
+        "department": _docx_first_value(payload, "co_supervisor_1_department"),
+        "phone": _docx_first_value(payload, "co_supervisor_1_phone", "co_supervisor_1_contact"),
+        "email": _docx_first_value(payload, "co_supervisor_1_email"),
+    }
+    qualification = _docx_first_value(payload, "qualification", default=getattr(project, "qualification", "") or "MBA")
+    study_type = _docx_first_value(payload, "study_type", default="Capstone Project")
+    updates = {
+        10: f"INITIALS AND SURNAME: {_docx_student_initials_surname(project, payload)}    STUDENT NUMBER: {_docx_first_value(payload, 'student_number')}",
+        12: f"CURRENT DEGREE REGISTERED FOR: {_docx_degree_registered(qualification)}",
+        13: "QUALIFICATION:",
+        15: study_type,
+        16: f"FINAL TITLE ON SUBMISSION: {_docx_first_value(payload, 'research_title')}",
+        17: f"SUPERVISOR: {supervisor['name']}    DEPARTMENT: {supervisor['department']}",
+        18: f"PHONE/CELL PHONE: {supervisor['phone']}    EMAIL ADDRESS: {supervisor['email']}",
+        20: f"CO-SUPERVISOR: {co_supervisor['name']}    DEPARTMENT: {co_supervisor['department']}",
+        21: f"PHONE/CELL PHONE: {co_supervisor['phone']}    EMAIL ADDRESS: {co_supervisor['email']}",
+        64: f"SUPERVISOR: {_docx_first_value(payload, 'supervisor_signature') or supervisor['name']}    DATE: {_docx_format_date(_docx_first_value(payload, 'supervisor_signature_date'))}",
+        67: f"HEAD OF DEPARTMENT: {_docx_first_value(payload, 'head_of_department_signature')}    DATE: {_docx_format_date(_docx_first_value(payload, 'head_of_department_signature_date'))}",
+        70: f"EXECUTIVE DEAN: {_docx_first_value(payload, 'jbs_hdc_signature')}    DATE: {_docx_format_date(_docx_first_value(payload, 'jbs_hdc_signature_date'))}",
+    }
+    for paragraph_index, value in updates.items():
+        _docx_set_indexed_paragraph_text(root, paragraph_index, value)
+
+    assessor_paragraphs = {
+        "assessor_1": (25, [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11]),
+        "assessor_2": (38, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        "assessor_3": (52, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    }
+    for slot, (start_index, paragraph_offsets) in assessor_paragraphs.items():
+        assessor = _docx_assessor_payload(project, payload, slot)
+        slot_updates = [
+            f"Full name: {assessor['name']}",
+            f"Qualification: {assessor['qualification']}",
+            f"Affiliation: {assessor['affiliation']}",
+            f"Street Address: {assessor['address']}",
+            f"Telephone number: {assessor['telephone']}",
+            f"Cell number: {assessor['cell']}",
+            f"Email address: {assessor['email']}",
+            "Indicate the approximate number of postgraduate students, MSc & PhD, supervised to completion: "
+            f"{assessor['students_supervised']}",
+            "Current affiliation with a university, (if not a motivation needs to be submitted): "
+            f"{assessor['current_affiliation']}",
+            f"Approximate number of publications: {assessor['publications']}",
+            f"International assessor: {assessor['international']}",
+        ]
+        for offset, value in zip(paragraph_offsets, slot_updates):
+            _docx_set_indexed_paragraph_text(root, start_index + offset, value)
+
+    return _docx_write_template(entries, contents, root)
+
+
+def _corrections_response_rows(payload):
+    rows = []
+    for slot, limit, label in (
+        ("assessor_1", 30, "ASSESSOR 1"),
+        ("assessor_2", 15, "ASSESSOR 2"),
+        ("assessor_3", 5, "ASSESSOR 3"),
+    ):
+        slot_rows = []
+        for row_index in range(1, limit + 1):
+            comment = _docx_first_value(payload, f"{slot}_comment_{row_index}")
+            response = _docx_first_value(payload, f"{slot}_response_{row_index}")
+            supervisor_comment = _docx_first_value(payload, f"{slot}_supervisor_comment_{row_index}")
+            if comment or response or supervisor_comment:
+                slot_rows.append((str(row_index), comment, response, supervisor_comment))
+        if slot_rows:
+            rows.append(("", label, "", ""))
+            rows.extend(slot_rows)
+    return rows
+
+
+def _generate_corrections_response_template_word_bytes(project, payload):
+    template_path = _corrections_response_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    student_label = _docx_student_initials_surname(project, payload) or "*Insert Student Name*"
+    student_number = _docx_first_value(payload, "student_number")
+    student_title = f"{student_label} ({student_number})" if student_number else student_label
+    research_title = _docx_first_value(payload, "research_title")
+    supervisor_name = _docx_first_value(payload, "supervisor_name") or _docx_supervisor_payload(project, payload)["name"]
+    _docx_set_indexed_paragraph_text(
+        root,
+        0,
+        f"Student's Response to Examiner's Report: {student_title}",
+        size="28",
+        bold=True,
+    )
+    if research_title:
+        _docx_set_indexed_paragraph_text(
+            root,
+            2,
+            f"Kindly consider my responses below to the assessors' feedback for: {research_title}",
+        )
+
+    table = root.find(".//w:tbl", _DOCX_NS)
+    if table is None:
+        return _docx_write_template(entries, contents, root)
+    existing_rows = table.findall("w:tr", _DOCX_NS)
+    if not existing_rows:
+        return _docx_write_template(entries, contents, root)
+    header = existing_rows[0]
+    header_cells = header.findall("w:tc", _DOCX_NS)
+    if len(header_cells) >= 4:
+        _docx_set_cell_element_text(header_cells[3], f"Supervisors' comments ({supervisor_name})", bold=True)
+
+    rows_to_write = _corrections_response_rows(payload)
+    minimum_body_rows = max(len(existing_rows) - 1, 1)
+    row_template = existing_rows[2] if len(existing_rows) > 2 else existing_rows[-1]
+    for row in existing_rows[1:]:
+        table.remove(row)
+
+    body_row_count = max(len(rows_to_write), minimum_body_rows)
+    for row_index in range(body_row_count):
+        row = deepcopy(row_template)
+        table.append(row)
+        cells = row.findall("w:tc", _DOCX_NS)
+        values = rows_to_write[row_index] if row_index < len(rows_to_write) else ("", "", "", "")
+        for cell, value in zip(cells[:4], values):
+            _docx_set_cell_element_text(cell, value)
+
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_jbs1_template_word_bytes(project, payload):
+    template_path = _jbs1_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    field_map = [
+        (1, 1, 1, _docx_first_value(payload, "surname")),
+        (1, 1, 3, _docx_first_value(payload, "student_title")),
+        (1, 2, 1, _docx_first_value(payload, "student_initials")),
+        (1, 2, 3, _docx_first_value(payload, "student_id_number")),
+        (1, 3, 1, _docx_first_value(payload, "student_number")),
+        (1, 3, 3, _docx_first_value(payload, "ethical_clearance_number")),
+        (1, 4, 1, _docx_first_value(payload, "qualification", default="MBA")),
+        (1, 5, 1, _docx_first_value(payload, "email")),
+        (1, 5, 3, _docx_first_value(payload, "contact")),
+        (2, 2, 0, _docx_first_value(payload, "research_title")),
+        (3, 0, 1, _docx_first_value(payload, "signature_name") or _docx_student_full_name(project, payload)),
+        (3, 0, 3, _docx_format_date(_docx_first_value(payload, "signature_date"))),
+        (4, 0, 1, _docx_first_value(payload, "supervisor_signature", "supervisor_name")),
+        (4, 0, 3, _docx_format_date(_docx_first_value(payload, "supervisor_signature_date"))),
+        (4, 1, 1, _docx_first_value(payload, "co_supervisor_signature", "co_supervisor_name")),
+        (4, 1, 3, _docx_format_date(_docx_first_value(payload, "co_supervisor_signature_date"))),
+        (5, 0, 0, _docx_first_value(payload, "office_registration")),
+        (5, 1, 0, _docx_first_value(payload, "office_approved_title")),
+        (5, 2, 0, _docx_first_value(payload, "office_affidavit")),
+        (5, 3, 0, _docx_first_value(payload, "office_language_edited")),
+        (5, 4, 0, _docx_first_value(payload, "office_turnitin_report")),
+        (6, 0, 1, _docx_first_value(payload, "office_program_manager")),
+        (6, 0, 3, _docx_format_date(_docx_first_value(payload, "office_program_manager_date"))),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_affidavit_template_word_bytes(project, payload):
+    template_path = _affidavit_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    full_name = _docx_student_full_name(project, payload)
+    work_type = _docx_first_value(payload, "work_type", default="Capstone Project")
+    research_title = _docx_first_value(payload, "research_title")
+    affidavit_date = _docx_format_date(_docx_first_value(payload, "affidavit_date"))
+    updates = {
+        12: f"This serves to confirm that I {full_name}",
+        15: f"ID Number {_docx_first_value(payload, 'student_id_number')}",
+        17: f"Student number {_docx_first_value(payload, 'student_number')} enrolled for the",
+        19: f"Qualification {_docx_first_value(payload, 'qualification', default='MBA')} in the",
+        25: (
+            f"I further declare that the work presented in the {work_type}"
+            + (f", titled {research_title}," if research_title else "")
+            + " is authentic and original unless clearly indicated otherwise and in such instances fully referenced."
+        ),
+        32: f"Signed at {_docx_first_value(payload, 'signing_location')} on this {affidavit_date}.",
+        34: f"Signature {_docx_first_value(payload, 'signature_name') or full_name}    Print name {full_name}",
+    }
+    for paragraph_index, value in updates.items():
+        _docx_set_indexed_paragraph_text(root, paragraph_index, value)
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_plagiarism_template_word_bytes(project, payload):
+    template_path = _plagiarism_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    field_map = [
+        (0, 0, 1, _docx_first_value(payload, "programme", "module_title", default="MBA")),
+        (0, 1, 1, _docx_first_value(payload, "assessment_title", "research_title")),
+        (0, 2, 1, _docx_first_value(payload, "module_lead", "lecturer_name", "supervisor_name")),
+        (0, 3, 1, _docx_format_date(_docx_first_value(payload, "submission_date", "due_date"))),
+        (1, 1, 0, _docx_student_initials_surname(project, payload) or _docx_student_full_name(project, payload)),
+        (1, 1, 1, _docx_first_value(payload, "student_number")),
+        (1, 1, 2, _docx_first_value(payload, "signature_name") or _docx_student_full_name(project, payload)),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_tii_ai_template_word_bytes(project, payload):
+    template_path = _tii_ai_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    person_name = _docx_student_initials_surname(project, payload) or _docx_student_full_name(project, payload)
+    signature_name = _docx_first_value(payload, "signature_name") or _docx_student_full_name(project, payload)
+    common_fields = [
+        (0, 0, 1, _docx_first_value(payload, "programme", "module_title", default="MBA")),
+        (0, 1, 1, _docx_first_value(payload, "assessment_title", "research_title")),
+        (0, 2, 1, _docx_first_value(payload, "module_lead", "lecturer_name", "supervisor_name")),
+        (0, 3, 1, _docx_format_date(_docx_first_value(payload, "submission_date", "due_date"))),
+        (1, 1, 0, person_name),
+        (1, 1, 1, _docx_first_value(payload, "student_number")),
+        (1, 1, 2, signature_name),
+        (2, 0, 1, _docx_first_value(payload, "course_name", "qualification", default="MBA")),
+        (2, 1, 1, _docx_first_value(payload, "module_title", "programme", default="MBA")),
+        (2, 2, 1, _docx_first_value(payload, "assessment_title", "research_title")),
+        (2, 3, 1, _docx_first_value(payload, "lecturer_name", "module_lead", "supervisor_name")),
+        (2, 4, 1, _docx_format_date(_docx_first_value(payload, "due_date", "submission_date"))),
+        (3, 1, 0, person_name),
+        (3, 1, 1, _docx_first_value(payload, "student_number")),
+        (3, 1, 2, signature_name),
+        (4, 1, 0, _docx_first_value(payload, "ai_tools_used")),
+        (4, 1, 1, _docx_first_value(payload, "ai_use_purpose")),
+        (4, 1, 2, _docx_first_value(payload, "ai_use_motivation")),
+    ]
+    for table_index, row_index, cell_index, value in common_fields:
+        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
+    signature_date = _docx_format_date(_docx_first_value(payload, "signature_date"))
+    if signature_date:
+        _docx_set_indexed_paragraph_text(root, 88, f"Date: {signature_date}")
+    return _docx_write_template(entries, contents, root)
+
+
+def _grade_bucket_row(grade):
+    try:
+        grade_value = int(str(grade or "").strip())
+    except (TypeError, ValueError):
+        return None
+    if grade_value >= 75:
+        return 1
+    if grade_value >= 70:
+        return 2
+    if grade_value >= 60:
+        return 3
+    if grade_value >= 50:
+        return 4
+    return 5
+
+
+def _generate_capstone_evaluation_template_word_bytes(project, payload):
+    template_path = _capstone_evaluation_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    grade = _docx_first_value(payload, "grade", "final_mark")
+    field_map = [
+        (0, 1, 1, f"Total: {grade}/100" if grade else ""),
+        (1, 1, 0, _docx_first_value(payload, "student_name") or _docx_student_full_name(project, payload)),
+        (1, 1, 1, _docx_first_value(payload, "student_number")),
+        (1, 1, 2, _docx_first_value(payload, "research_title")),
+        (2, 1, 0, _docx_first_value(payload, "assessor_name")),
+        (2, 1, 1, _docx_first_value(payload, "assessor_signature_name", "assessor_name")),
+        (2, 1, 2, _docx_format_date(_docx_first_value(payload, "certification_date"))),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
+
+    grade_row = _grade_bucket_row(grade)
+    if grade_row is not None:
+        _docx_set_cell_text(root, 3, grade_row, 2, grade)
+
+    written_assessment = _docx_first_value(payload, "written_assessment")
+    recommendation = _docx_first_value(payload, "recommendation")
+    feedback = "\n\n".join(part for part in [f"Recommendation: {recommendation}" if recommendation else "", written_assessment] if part)
+    if feedback:
+        _docx_set_cell_text(root, 5, 0, 0, feedback)
+    return _docx_write_template(entries, contents, root)
+
+
 def generate_form_submission_word_bytes(project, form_type, payload):
     if str(form_type or "") == "jbs5":
         template_bytes = _generate_jbs5_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == "jbs10":
+        template_bytes = _generate_jbs10_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == "corrections_response":
+        template_bytes = _generate_corrections_response_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == "jbs1_declaration":
+        template_bytes = _generate_jbs1_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == "affidavit":
+        template_bytes = _generate_affidavit_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == "plagiarism_declaration":
+        template_bytes = _generate_plagiarism_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == "ai_declaration_form":
+        template_bytes = _generate_tii_ai_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "").startswith("assessment_result_"):
+        template_bytes = _generate_capstone_evaluation_template_word_bytes(project, payload)
         if template_bytes:
             return template_bytes
     html = build_form_display_html(project, form_type, payload)
@@ -3388,7 +3933,8 @@ def generate_form_submission_document_bytes(project, form_type, payload, *, allo
 
 
 def generate_form_submission_download_bytes(project, form_type, payload):
-    if str(form_type or "") == "jbs5" and _jbs5_word_template_path().exists():
+    template_path = _native_word_template_path_for_form(form_type)
+    if template_path and template_path.exists():
         return generate_form_submission_word_bytes(project, form_type, payload), FORM_WORD_EXTENSION, FORM_WORD_MIME_TYPE
     try:
         return (
