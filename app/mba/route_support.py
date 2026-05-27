@@ -5,6 +5,7 @@ from io import BytesIO
 import mimetypes
 from pathlib import Path
 import os
+import quopri
 import re
 import shutil
 import subprocess
@@ -1413,8 +1414,84 @@ def _docx_app_properties_xml():
     )
 
 
+def _mhtml_data_uri_extension(content_type):
+    subtype = str(content_type or "").split("/", 1)[-1].lower()
+    return {
+        "jpeg": "jpg",
+        "pjpeg": "jpg",
+        "svg+xml": "svg",
+    }.get(subtype, subtype.split("+", 1)[0] or "bin")
+
+
+def _html_to_mhtml_bytes(html):
+    html = str(html or "")
+    boundary = f"----=_MBA_WORD_{uuid.uuid4().hex}"
+    data_uri_parts = {}
+    embedded_parts = []
+
+    def replace_data_uri(match):
+        data_uri = match.group(0)
+        if data_uri in data_uri_parts:
+            return data_uri_parts[data_uri]["location"]
+
+        content_type = f"image/{match.group('subtype').lower()}"
+        raw_base64 = re.sub(r"\s+", "", match.group("data"))
+        try:
+            image_bytes = base64.b64decode(raw_base64, validate=False)
+        except Exception:
+            return data_uri
+        if not image_bytes:
+            return data_uri
+
+        extension = _mhtml_data_uri_extension(content_type)
+        location = f"mba-word-image-{len(embedded_parts) + 1}.{extension}"
+        part = {
+            "location": location,
+            "content_type": content_type,
+            "bytes": image_bytes,
+        }
+        data_uri_parts[data_uri] = part
+        embedded_parts.append(part)
+        return location
+
+    html = re.sub(
+        r"data:image/(?P<subtype>[a-zA-Z0-9.+-]+);base64,(?P<data>[A-Za-z0-9+/=\s]+)",
+        replace_data_uri,
+        html,
+    )
+
+    quoted_html = quopri.encodestring(html.encode("utf-8"), quotetabs=True).decode("ascii")
+    chunks = [
+        "MIME-Version: 1.0",
+        f'Content-Type: multipart/related; boundary="{boundary}"; type="text/html"',
+        "",
+        f"--{boundary}",
+        'Content-Type: text/html; charset="utf-8"',
+        "Content-Transfer-Encoding: quoted-printable",
+        "Content-Location: file:///mba-form.html",
+        "",
+        quoted_html,
+    ]
+    for part in embedded_parts:
+        encoded = base64.encodebytes(part["bytes"]).decode("ascii").replace("\n", "\r\n").rstrip()
+        chunks.extend(
+            [
+                f"--{boundary}",
+                f"Content-Type: {part['content_type']}",
+                "Content-Transfer-Encoding: base64",
+                f"Content-Location: {part['location']}",
+                "",
+                encoded,
+            ]
+        )
+    chunks.append(f"--{boundary}--")
+    chunks.append("")
+    return "\r\n".join(chunks).encode("utf-8")
+
+
 def _html_to_formatted_word_document_bytes(html, title=None):
     html = _normalize_word_html_document(html, title=title)
+    mhtml_bytes = _html_to_mhtml_bytes(html)
     document_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
@@ -1430,7 +1507,7 @@ def _html_to_formatted_word_document_bytes(html, title=None):
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
         '<Default Extension="xml" ContentType="application/xml"/>'
-        '<Default Extension="html" ContentType="text/html"/>'
+        '<Default Extension="mht" ContentType="message/rfc822"/>'
         '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
         '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
         '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
@@ -1439,7 +1516,7 @@ def _html_to_formatted_word_document_bytes(html, title=None):
     document_rels = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rIdHtml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="afchunk.html"/>'
+        '<Relationship Id="rIdHtml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="afchunk.mht"/>'
         '</Relationships>'
     )
 
@@ -1449,7 +1526,7 @@ def _html_to_formatted_word_document_bytes(html, title=None):
         docx.writestr("_rels/.rels", _docx_package_relationships_xml())
         docx.writestr("word/document.xml", document_xml)
         docx.writestr("word/_rels/document.xml.rels", document_rels)
-        docx.writestr("word/afchunk.html", html.encode("utf-8"))
+        docx.writestr("word/afchunk.mht", mhtml_bytes)
         docx.writestr("docProps/core.xml", _docx_core_properties_xml(title))
         docx.writestr("docProps/app.xml", _docx_app_properties_xml())
     return buffer.getvalue()
