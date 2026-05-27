@@ -640,6 +640,7 @@ HTML_PDF_RENDERER_UNAVAILABLE_MESSAGE = (
     "The exact HTML-to-PDF renderer is unavailable. Install Chromium/Chrome on the server "
     "or set MBA_PDF_BROWSER_PATH to the browser executable."
 )
+FORM_WORD_MIME_TYPE = "application/msword"
 
 
 def _browser_pdf_executables():
@@ -1080,6 +1081,13 @@ def build_form_display_html(project, form_type, payload):
         f"<style>{_form_print_styles()}</style></head>"
         f"<body class=\"mba-print-body\">{fragment}</body></html>"
     )
+
+
+def generate_form_submission_word_bytes(project, form_type, payload):
+    html = build_form_display_html(project, form_type, payload)
+    if not html:
+        raise RuntimeError(f"Unable to render Word document HTML for {form_type}.")
+    return html.encode("utf-8")
 
 
 def _render_html_to_pdf_bytes(html):
@@ -2531,6 +2539,22 @@ def generate_form_submission_document_bytes(project, form_type, payload, *, allo
     return generate_form_submission_pdf_bytes(form_type, payload)
 
 
+def generate_form_submission_download_bytes(project, form_type, payload):
+    try:
+        return (
+            generate_form_submission_document_bytes(project, form_type, payload, allow_plain_fallback=False),
+            "pdf",
+            "application/pdf",
+        )
+    except RuntimeError as exc:
+        current_app.logger.warning(
+            "Unable to generate exact PDF for %s; using Word-compatible HTML instead: %s",
+            form_type,
+            exc,
+        )
+        return generate_form_submission_word_bytes(project, form_type, payload), "doc", FORM_WORD_MIME_TYPE
+
+
 _ACTIVITY_START_RE = re.compile(r"(?m)(?=^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}: )")
 _ACTIVITY_TIMESTAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}):\s*(.*)$", re.DOTALL)
 _ACTIVITY_EMAIL_PREFIX_RE = re.compile(r"^([^\s:@]+@[^\s:@]+)\s+(.*)$", re.DOTALL)
@@ -3866,10 +3890,10 @@ def _refresh_existing_form_document(project, doc_type, form_type, payload, uploa
 
     project_dir = os.path.join(_uploads_dir(), str(project.id))
     os.makedirs(project_dir, exist_ok=True)
-    original_name = f"{doc_type}_form.pdf"
-    unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.pdf"
+    file_bytes, file_extension, mime_type = generate_form_submission_download_bytes(project, form_type, payload)
+    original_name = f"{doc_type}_form.{file_extension}"
+    unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.{file_extension}"
     dest_path = os.path.join(project_dir, unique_name)
-    file_bytes = generate_form_submission_document_bytes(project, form_type, payload, allow_plain_fallback=False)
     with open(dest_path, "wb") as fh:
         fh.write(file_bytes)
 
@@ -3882,7 +3906,7 @@ def _refresh_existing_form_document(project, doc_type, form_type, payload, uploa
     existing_doc.original_name = original_name
     existing_doc.stored_name = unique_name
     existing_doc.file_data = file_bytes
-    existing_doc.mime_type = "application/pdf"
+    existing_doc.mime_type = mime_type
     existing_doc.file_size = len(file_bytes)
     existing_doc.uploaded_by_id = uploaded_by_id or existing_doc.uploaded_by_id or project.student_id
     existing_doc.uploaded_at = datetime.utcnow()

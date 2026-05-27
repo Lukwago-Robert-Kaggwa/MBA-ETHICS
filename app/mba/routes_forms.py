@@ -58,7 +58,7 @@ from .route_support import (
     all_assessment_results_received,
     document_label,
     format_project_title,
-    generate_form_submission_document_bytes,
+    generate_form_submission_download_bytes,
     hdc_assessor_nomination_admin_email_messages,
     hdc_assessor_nomination_decision_summary,
     mba_bp,
@@ -110,7 +110,7 @@ def _uploads_dir():
 
 def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id=None):
     """
-    Persist form data in MbaForm and generate a minimal PDF as MbaProjectDocument.
+    Persist form data in MbaForm and generate a downloadable document as MbaProjectDocument.
     Returns the MbaForm instance.
     """
     # Upsert MbaForm
@@ -127,16 +127,15 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
         )
         db.session.add(mba_form)
 
-    # Write PDF to disk
+    # Write the generated document to disk.
     project_dir = os.path.join(_uploads_dir(), str(project.id))
     os.makedirs(project_dir, exist_ok=True)
-    original_name = f"{doc_type}_form.pdf"
-    unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.pdf"
+    file_bytes, file_extension, mime_type = generate_form_submission_download_bytes(project, form_type, payload)
+    original_name = f"{doc_type}_form.{file_extension}"
+    unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.{file_extension}"
     dest_path = os.path.join(project_dir, unique_name)
-    pdf_bytes = generate_form_submission_document_bytes(project, form_type, payload, allow_plain_fallback=False)
-    mime_type = "application/pdf"
     with open(dest_path, "wb") as fh:
-        fh.write(pdf_bytes)
+        fh.write(file_bytes)
 
     document_uploaded_by_id = uploaded_by_id or current_user.id
     # Upsert MbaProjectDocument
@@ -150,9 +149,9 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
                 pass
         existing_doc.original_name = original_name
         existing_doc.stored_name = unique_name
-        existing_doc.file_data = pdf_bytes
+        existing_doc.file_data = file_bytes
         existing_doc.mime_type = mime_type
-        existing_doc.file_size = len(pdf_bytes)
+        existing_doc.file_size = len(file_bytes)
         existing_doc.uploaded_by_id = document_uploaded_by_id
         existing_doc.uploaded_at = datetime.utcnow()
     else:
@@ -161,9 +160,9 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
             doc_type=doc_type,
             original_name=original_name,
             stored_name=unique_name,
-            file_data=pdf_bytes,
+            file_data=file_bytes,
             mime_type=mime_type,
-            file_size=len(pdf_bytes),
+            file_size=len(file_bytes),
             uploaded_by_id=document_uploaded_by_id,
         )
         db.session.add(doc)

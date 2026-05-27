@@ -27,14 +27,22 @@ def _looks_like_html_document(doc):
     return mime_type == "text/html" or any(name.endswith((".html", ".htm")) for name in names)
 
 
-def _pdf_download_name(doc):
+def _download_name_with_extension(doc, extension):
+    extension = str(extension or "").lstrip(".") or "doc"
     filename = str(getattr(doc, "original_name", "") or getattr(doc, "stored_name", "") or "").strip()
     if not filename:
-        filename = f"{getattr(doc, 'doc_type', 'document')}_form.pdf"
+        filename = f"{getattr(doc, 'doc_type', 'document')}_form.{extension}"
     stem, ext = os.path.splitext(filename)
-    if ext:
-        return f"{stem}.pdf"
-    return f"{filename}.pdf"
+    base = stem if ext else filename
+    return f"{base or getattr(doc, 'doc_type', 'document')}.{extension}"
+
+
+def _pdf_download_name(doc):
+    return _download_name_with_extension(doc, "pdf")
+
+
+def _word_download_name(doc):
+    return _download_name_with_extension(doc, "doc")
 
 
 def _pdf_bytes_response(pdf_bytes, *, download_name, as_attachment=True):
@@ -43,6 +51,19 @@ def _pdf_bytes_response(pdf_bytes, *, download_name, as_attachment=True):
     return send_file(
         BytesIO(pdf_bytes),
         mimetype="application/pdf",
+        as_attachment=as_attachment,
+        download_name=download_name,
+    )
+
+
+def _word_bytes_response(word_bytes, *, download_name, as_attachment=True):
+    if not word_bytes:
+        return None
+    if isinstance(word_bytes, str):
+        word_bytes = word_bytes.encode("utf-8")
+    return send_file(
+        BytesIO(word_bytes),
+        mimetype=FORM_WORD_MIME_TYPE,
         as_attachment=as_attachment,
         download_name=download_name,
     )
@@ -68,6 +89,18 @@ def _html_file_pdf_response(path, doc, *, as_attachment=True):
         return None
 
 
+def _html_bytes_word_response(html_bytes, doc, *, as_attachment=True):
+    return _word_bytes_response(html_bytes, download_name=_word_download_name(doc), as_attachment=as_attachment)
+
+
+def _html_file_word_response(path, doc, *, as_attachment=True):
+    try:
+        with open(path, "rb") as fh:
+            return _html_bytes_word_response(fh.read(), doc, as_attachment=as_attachment)
+    except OSError:
+        return None
+
+
 def _project_document_db_response(doc, *, as_attachment):
     if not getattr(doc, "file_data", None):
         return None
@@ -85,11 +118,7 @@ def _project_document_db_response(doc, *, as_attachment):
         pdf_response = _html_bytes_pdf_response(doc.file_data, doc, as_attachment=True)
         if pdf_response:
             return pdf_response
-        return current_app.response_class(
-            "Unable to convert the stored HTML document to PDF right now.",
-            status=503,
-            mimetype="text/plain",
-        )
+        return _html_bytes_word_response(doc.file_data, doc, as_attachment=True)
     return send_file(
         BytesIO(doc.file_data),
         mimetype=doc.mime_type or document_mime_type(doc.original_name, "application/pdf"),
@@ -121,32 +150,45 @@ def _live_form_html_response(project, doc):
     return current_app.response_class(html, mimetype="text/html")
 
 
-def _live_form_pdf_response(project, doc):
+def _live_form_download_response(project, doc):
     if not supports_exact_form_render(doc.doc_type):
         return None
     form = MbaForm.query.filter_by(project_id=project.id, form_type=doc.doc_type).first()
     if not form or not isinstance(form.payload, dict):
         return None
+    payload = _payload_for_live_form_render(project, doc, form)
     try:
         pdf_bytes = generate_form_submission_document_bytes(
             project,
             doc.doc_type,
-            _payload_for_live_form_render(project, doc, form),
+            payload,
             allow_plain_fallback=False,
         )
     except RuntimeError as exc:
-        current_app.logger.warning("Unable to generate exact PDF for document %s: %s", doc.id, exc)
-        return current_app.response_class(str(exc), status=503, mimetype="text/plain")
-    except Exception:
-        current_app.logger.exception("Unable to generate PDF for document %s", doc.id)
+        current_app.logger.warning(
+            "Unable to generate exact PDF for document %s; serving Word-compatible HTML instead: %s",
+            doc.id,
+            exc,
+        )
         pdf_bytes = None
-    if not pdf_bytes or not pdf_bytes.startswith(b"%PDF-"):
+    except Exception:
+        current_app.logger.exception(
+            "Unable to generate PDF for document %s; serving Word-compatible HTML instead",
+            doc.id,
+        )
+        pdf_bytes = None
+    if pdf_bytes and pdf_bytes.startswith(b"%PDF-"):
+        return _pdf_bytes_response(pdf_bytes, download_name=f"{doc.doc_type}_form.pdf", as_attachment=True)
+    try:
+        word_bytes = generate_form_submission_word_bytes(project, doc.doc_type, payload)
+    except Exception:
+        current_app.logger.exception("Unable to generate Word-compatible document %s", doc.id)
         return current_app.response_class(
-            "Unable to generate a PDF from the submitted form HTML right now.",
+            "Unable to generate a downloadable document from the submitted form HTML right now.",
             status=503,
             mimetype="text/plain",
         )
-    return _pdf_bytes_response(pdf_bytes, download_name=f"{doc.doc_type}_form.pdf", as_attachment=True)
+    return _word_bytes_response(word_bytes, download_name=f"{doc.doc_type}_form.doc", as_attachment=True)
 
 MBA_FORM_TEMPLATES = {
     "supervisor_agreement": {"label": document_label("supervisor_agreement")},
@@ -374,16 +416,20 @@ def _regenerate_generated_document_if_needed(project, doc, project_dir):
     if doc.doc_type == "supervisor_agreement" and doc.uploaded_by_id == project.student_id:
         payload["_student_acceptance"] = "1"
 
-    with open(stored_path, "wb") as fh:
-        file_bytes = generate_form_submission_document_bytes(
-            project,
-            form.form_type,
-            payload,
-            allow_plain_fallback=False,
-        )
+    file_bytes, file_extension, mime_type = generate_form_submission_download_bytes(project, form.form_type, payload)
+    unique_name = f"{doc.doc_type}_{uuid.uuid4().hex[:8]}_form.{file_extension}"
+    dest_path = os.path.join(project_dir, unique_name)
+    with open(dest_path, "wb") as fh:
         fh.write(file_bytes)
+    if doc.stored_name and os.path.exists(stored_path):
+        try:
+            os.remove(stored_path)
+        except OSError:
+            pass
+    doc.original_name = f"{doc.doc_type}_form.{file_extension}"
+    doc.stored_name = unique_name
     doc.file_data = file_bytes
-    doc.mime_type = "application/pdf"
+    doc.mime_type = mime_type
     doc.file_size = len(file_bytes)
 
 
@@ -740,7 +786,7 @@ def download_project_document(project_id, doc_id):
         return redirect_response
 
     if supports_exact_form_render(doc.doc_type):
-        live_form_response = _live_form_pdf_response(project, doc)
+        live_form_response = _live_form_download_response(project, doc)
         if live_form_response:
             return live_form_response
 
@@ -756,11 +802,9 @@ def download_project_document(project_id, doc_id):
         file_pdf_response = _html_file_pdf_response(stored_path, doc, as_attachment=True)
         if file_pdf_response:
             return file_pdf_response
-        return current_app.response_class(
-            "Unable to convert the stored HTML document to PDF right now.",
-            status=503,
-            mimetype="text/plain",
-        )
+        file_word_response = _html_file_word_response(stored_path, doc, as_attachment=True)
+        if file_word_response:
+            return file_word_response
 
     return send_from_directory(project_dir, doc.stored_name, as_attachment=True, download_name=doc.original_name)
 
