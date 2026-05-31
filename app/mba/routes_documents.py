@@ -1,5 +1,6 @@
 import os
 import uuid
+from html import escape as html_escape
 from io import BytesIO
 
 from flask import abort, current_app, flash, redirect, request, send_file, send_from_directory, url_for
@@ -157,8 +158,58 @@ def _project_document_db_response(doc, *, as_attachment):
     )
 
 
+def _download_only_view_response(project, doc):
+    download_url = url_for("mba.download_project_document", project_id=project.id, doc_id=doc.id)
+    document_name = html_escape(str(doc.original_name or document_label(doc.doc_type)))
+    document_label_text = html_escape(document_label(doc.doc_type))
+    safe_download_url = html_escape(download_url, quote=True)
+    html = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{document_label_text}</title>
+  <style>
+    body {{ margin:0; font-family: Arial, sans-serif; background:#f8fafc; color:#111827; }}
+    main {{ max-width: 720px; margin: 56px auto; padding: 28px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(15,23,42,.08); }}
+    h1 {{ margin:0 0 8px; font-size:1.35rem; }}
+    p {{ margin:0 0 18px; color:#4b5563; line-height:1.5; }}
+    a {{ display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:0 16px; border-radius:8px; background:#ef820d; color:#fff; text-decoration:none; font-weight:700; }}
+    .filename {{ margin-top:10px; font-size:.9rem; color:#6b7280; word-break:break-word; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{document_label_text}</h1>
+    <p>This document is a native Word file so the exact template formatting is preserved in the downloaded document.</p>
+    <a href="{safe_download_url}">Download Word Document</a>
+    <div class="filename">{document_name}</div>
+  </main>
+</body>
+</html>"""
+    return current_app.response_class(html, mimetype="text/html")
+
+
 def _payload_for_live_form_render(project, doc, form):
     payload = dict(form.payload or {})
+    if doc.doc_type == external_examiner_nomination_doc_type():
+        refreshed = build_external_examiner_nomination_payload(project, payload)
+        for key, existing_value in payload.items():
+            if str(existing_value or "").strip() and not str(refreshed.get(key) or "").strip():
+                refreshed[key] = existing_value
+        payload = refreshed
+    elif doc.doc_type == additional_external_examiner_nomination_doc_type():
+        refreshed = build_additional_external_examiner_nomination_payload(project, payload)
+        for key, existing_value in payload.items():
+            if str(existing_value or "").strip() and not str(refreshed.get(key) or "").strip():
+                refreshed[key] = existing_value
+        payload = refreshed
+    elif doc.doc_type == assessment_summary_doc_type():
+        refreshed = build_assessment_summary_payload(project, payload)
+        for key, existing_value in payload.items():
+            if str(existing_value or "").strip() and not str(refreshed.get(key) or "").strip():
+                refreshed[key] = existing_value
+        payload = refreshed
     if doc.doc_type == "supervisor_agreement" and doc.uploaded_by_id == project.student_id:
         payload["_student_acceptance"] = "1"
     return payload
@@ -205,6 +256,50 @@ def _live_form_download_response(project, doc):
         download_name=f"{doc.doc_type}_form.{file_extension}",
     )
 
+
+@mba_bp.route("/projects/<int:project_id>/generated-form/<form_type>/download")
+@login_required
+def download_generated_project_form(project_id, form_type):
+    """Download a generated form that still needs an external wet signature/stamp."""
+    if form_type != "affidavit":
+        abort(404)
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    is_student_owner = current_user.role == MbaRole.STUDENT.value and project.student_id == current_user.id
+    is_admin = current_user.role in {MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}
+    if not (is_student_owner or is_admin):
+        abort(403)
+
+    form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
+    if not form or not isinstance(form.payload, dict):
+        flash("Complete the JBS 2 Affidavit form before downloading it for stamping.", "error")
+        return redirect(url_for("mba.student_dashboard"))
+
+    try:
+        file_bytes, file_extension, mime_type = generate_form_submission_download_bytes(
+            project,
+            form_type,
+            dict(form.payload or {}),
+        )
+    except Exception:
+        current_app.logger.exception("Unable to generate %s for project %s", form_type, project.id)
+        return current_app.response_class(
+            "Unable to generate the affidavit document right now.",
+            status=503,
+            mimetype="text/plain",
+        )
+
+    return send_file(
+        BytesIO(file_bytes),
+        mimetype=mime_type,
+        as_attachment=True,
+        download_name=f"{form_type}_for_commissioner.{file_extension}",
+    )
+
+
 MBA_FORM_TEMPLATES = {
     "supervisor_agreement": {"label": document_label("supervisor_agreement")},
     "jbs10": {"label": document_label("jbs10")},
@@ -214,6 +309,7 @@ MBA_FORM_TEMPLATES = {
     "dissertation": {"label": document_label("dissertation")},
     "global_document": {"label": document_label("global_document")},
     "combined_turnitin_ai_report": {"label": document_label("combined_turnitin_ai_report")},
+    "affidavit_stamped": {"label": document_label("affidavit_stamped")},
 }
 
 MOODLE_CAPSTONE_SUBMISSION_MESSAGE = (
@@ -252,7 +348,7 @@ def dissertation_assessor_email_messages(project, dissertation_doc, assessor_use
                     f"Discipline: {project.discipline_name}\n"
                     f"File: {dissertation_doc.original_name}\n\n"
                     "Please sign in to the MBA system to download the Capstone Manuscript. "
-                    "Assessor pack submission opens after HDC verifies the assessor nominations."
+                    "Assessor result submission opens after HDC verifies the assessor nominations."
                 ),
             }
         )
@@ -386,10 +482,10 @@ def _is_current_form_pdf(path):
 
 
 def _looks_like_generated_form_document(doc, stored_path):
-    expected_original = f"{doc.doc_type}_form.pdf"
+    expected_originals = {f"{doc.doc_type}_form.pdf", f"{doc.doc_type}_form.{FORM_WORD_EXTENSION}"}
     return (
-        doc.original_name == expected_original
-        or str(doc.stored_name or "").endswith("_form.pdf")
+        doc.original_name in expected_originals
+        or str(doc.stored_name or "").endswith(("_form.pdf", f"_form.{FORM_WORD_EXTENSION}"))
         or _is_old_blank_generated_pdf(stored_path)
     )
 
@@ -405,12 +501,11 @@ def _regenerate_generated_document_if_needed(project, doc, project_dir):
         "plagiarism_declaration",
         "ai_declaration_form",
         "affidavit",
+        "assessment_summary",
     } or doc.doc_type.startswith(
         (
             "assessor_profile_",
-            "assessment_result_",
             "assessor_report_",
-            "assessor_narrative_",
             "assessor_banking_",
             "assessor_temp_appointment_",
             "assessor_temp_claim_",
@@ -515,6 +610,27 @@ def upload_project_form(project_id):
         ):
             flash("Upload the Ethics Certificate or Ethics Exemption Form before uploading supporting documents.", "error")
             return redirect(url_for("mba.student_dashboard"))
+        if not (
+            _project_has_document(project.id, "jbs1_declaration")
+            and _project_has_document(project.id, "plagiarism_declaration")
+            and _project_has_document(project.id, "affidavit_stamped")
+        ):
+            flash(
+                "Complete JBS 1 Declaration, the combined plagiarism declaration, and upload the stamped JBS 2 Affidavit before uploading supporting documents.",
+                "error",
+            )
+            return redirect(url_for("mba.student_dashboard"))
+    elif doc_key == "affidavit_stamped":
+        if not project.jbs5_hdc_approved_at:
+            flash("JBS5 must be approved by HDC before the stamped affidavit can be uploaded.", "error")
+            return redirect(url_for("mba.student_dashboard"))
+        if not _project_has_document(project.id, "jbs10") or not _project_has_document(project.id, "intent_to_submit"):
+            flash("Submit JBS10 and Intent to Submit before uploading the stamped affidavit.", "error")
+            return redirect(url_for("mba.student_dashboard"))
+        affidavit_form = MbaForm.query.filter_by(project_id=project.id, form_type="affidavit").first()
+        if not affidavit_form or not isinstance(affidavit_form.payload, dict):
+            flash("Complete and download the JBS 2 Affidavit before uploading the stamped copy.", "error")
+            return redirect(url_for("mba.student_dashboard"))
 
     uploaded_file = request.files.get("form_file")
     file_error = _validate_uploaded_pdf(uploaded_file)
@@ -544,6 +660,7 @@ def upload_project_form(project_id):
         "ethics_exemption_form",
         "global_document",
         "combined_turnitin_ai_report",
+        "affidavit_stamped",
     }:
         from ..mail import send_email
 
@@ -577,8 +694,6 @@ def _combined_declaration_ready(project):
         uploaded_doc_for(project, "plagiarism_declaration")
         and payload.get("signature_name")
         and payload.get("signature_date")
-        and payload.get("supervisor_signature_name")
-        and payload.get("supervisor_signature_date")
     )
 
 
@@ -592,9 +707,16 @@ def admin_upload_capstone_submission(project_id):
     if not project:
         abort(404)
 
+    if not assessor_hr_documents_sent(project):
+        flash(
+            "Send the approved assessor temporary appointment and claim forms to HR before uploading the Capstone Manuscript.",
+            "error",
+        )
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
     if not _combined_declaration_ready(project):
         flash(
-            "The combined plagiarism, Turnitin and AI declaration must be signed by the student and supervisor before Admin uploads the Capstone Manuscript.",
+            "The combined plagiarism, Turnitin and AI declaration must be signed by the student before Admin uploads the Capstone Manuscript.",
             "error",
         )
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
@@ -703,11 +825,15 @@ def _load_project_document_for_current_user(project_id, doc_id):
         and not can_view_released_pool_jbs5
     ):
         abort(403)
+    nomination_doc_types = {
+        external_examiner_nomination_doc_type(),
+        additional_external_examiner_nomination_doc_type(),
+    }
     restricted_assessor_doc = doc.doc_type.startswith(
         (
-            "assessment_result_",
+            "assessment_summary",
             "assessor_report_",
-            "assessor_narrative_",
+            "assessor_detailed_report_",
             "assessor_profile_",
             "assessor_cv_",
             "assessor_highest_qualification_",
@@ -715,8 +841,14 @@ def _load_project_document_for_current_user(project_id, doc_id):
             "assessor_temp_appointment_",
             "assessor_temp_claim_",
         )
+    ) or doc.doc_type in nomination_doc_types
+    owner_can_view_released_detailed_report = (
+        is_owner
+        and doc.doc_type.startswith("assessor_detailed_report_")
+        and project_has_active_corrections(project)
+        and corrections_released_to_student(project)
     )
-    if is_owner and not (is_admin or is_hdc) and restricted_assessor_doc:
+    if is_owner and not (is_admin or is_hdc) and restricted_assessor_doc and not owner_can_view_released_detailed_report:
         abort(403)
     is_hdc_results_document = doc.doc_type.startswith(HDC_ASSESSOR_RESULTS_DOCUMENT_PREFIXES)
     supervisor_can_view_forwarded_assessment_docs = (
@@ -747,6 +879,9 @@ def _load_project_document_for_current_user(project_id, doc_id):
         return project, doc, None
     if doc.doc_type.startswith(("assessor_banking_", "assessor_temp_appointment_", "assessor_temp_claim_")):
         if not is_admin and doc.uploaded_by_id != current_user.id:
+            abort(403)
+    if doc.doc_type in nomination_doc_types:
+        if not (is_admin or is_hdc or current_user.id == project.primary_supervisor_id):
             abort(403)
     if doc.doc_type.startswith(("assessor_profile_", "assessor_cv_", "assessor_highest_qualification_")):
         hdc_assessor_doc_allowed_statuses = {
@@ -847,12 +982,12 @@ def view_project_document(project_id, doc_id):
 
     project_dir = os.path.join(_uploads_dir(), str(project_id))
     _regenerate_generated_document_if_needed(project, doc, project_dir)
-    db_response = _project_document_db_response(doc, as_attachment=not str(doc.original_name or "").lower().endswith(".pdf"))
+    if not str(doc.original_name or "").lower().endswith(".pdf"):
+        return _download_only_view_response(project, doc)
+    db_response = _project_document_db_response(doc, as_attachment=False)
     if db_response:
         db.session.commit()
         return db_response
-    if not str(doc.original_name or "").lower().endswith(".pdf"):
-        return send_from_directory(project_dir, doc.stored_name, as_attachment=True, download_name=doc.original_name)
     return send_from_directory(
         project_dir,
         doc.stored_name,

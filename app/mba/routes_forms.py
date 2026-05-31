@@ -3,7 +3,7 @@ Web form fill routes - replace PDF uploads with fillable HTML forms.
 
 Student forms:  GET/POST /projects/<id>/fill-form/<form_type>
                 form_type in: jbs5, jbs10, intent_to_submit, supervisor_agreement,
-                corrections_response
+                jbs1_declaration, plagiarism_declaration, affidavit, corrections_response
 
 Supervisor form: GET/POST /projects/<id>/supervisor-fill-form
                 Fills the Supervisor Agreement AND accepts the invitation.
@@ -26,41 +26,58 @@ from ..models import (
     MbaScholarProfile,
     ProjectStatus,
 )
+from .grading import project_grade_summary
 from .route_support import (
+    ALL_ASSESSOR_SLOTS,
     FORM_REQUIRED_FIELDS,
     DISSERTATION_CORRECTIONS_CLOSED_STATUSES,
     HDC_ASSESSOR_APPROVED,
     HDC_ASSESSOR_DECLINED,
     _project_has_document,
     _store_project_document,
+    _validate_optional_assessor_detailed_report,
     _validate_uploaded_pdf,
     INVITATION_ACCEPTED,
     INVITATION_PENDING,
+    ADDITIONAL_ASSESSOR_SLOT,
     PRIMARY_ASSESSOR_SLOTS,
+    additional_external_examiner_nomination_doc_type,
+    additional_external_examiner_nomination_ready,
     append_comment,
     apply_assessor_suggestions_if_ready,
+    apply_saved_signature_snapshot,
     assessment_doc_type,
-    assessment_result_pack_complete,
+    assessment_result_submitted,
+    assessment_summary_doc_type,
+    assessment_summary_supervisor_signing_block_reason,
     assessor_hdc_decision,
     assessor_can_view_student_dissertation,
     assessor_cv_doc_type,
     assessor_highest_qualification_doc_type,
-    assessor_narrative_doc_type,
-    assessor_profile_doc_type,
+    assessor_detailed_report_doc_type,
     assessor_report_doc_type,
     assessor_slots_for_user,
     assessor_temp_appointment_doc_type,
     assessor_temp_claim_doc_type,
+    build_additional_external_examiner_nomination_payload,
+    build_assessment_summary_payload,
+    build_external_examiner_nomination_payload,
     clear_project_corrections,
+    clear_signature_snapshots,
+    copy_signature_snapshots,
     corrections_released_to_student,
     correction_request_reference_time,
     corrections_requested_email_messages,
     all_assessment_results_received,
     document_label,
+    external_examiner_nomination_doc_type,
+    external_examiner_nomination_supervisor_signed,
     format_project_title,
     generate_form_submission_download_bytes,
+    hdc_can_access_document,
     hdc_assessor_nomination_admin_email_messages,
     hdc_assessor_nomination_decision_summary,
+    hdc_results_admin_email_messages,
     mba_bp,
     mba_admin_notification_emails,
     project_supervisor_notification_emails,
@@ -69,6 +86,8 @@ from .route_support import (
     project_title_validation_error,
     parse_non_negative_int,
     recommendation_requests_corrections,
+    refresh_saved_signature_snapshot,
+    required_hdc_results_documents_missing,
     require_mba_role,
     require_mba_user,
     reset_jbs5_review_state,
@@ -78,10 +97,13 @@ from .route_support import (
     sync_hdc_assessor_nomination_status,
     supervisor_approved_corrections,
     submit_project_to_admin_from_jbs5,
+    supervisor_can_manage_corrections,
     uploaded_doc_for,
     activate_project_corrections,
     activate_additional_assessment,
     primary_assessment_conflict_detected,
+    accepted_assessor_count,
+    all_assessor_acceptance_packs_complete,
 )
 
 # Form types a student can fill via web form
@@ -102,18 +124,186 @@ CORRECTIONS_RESPONSE_ROW_LIMITS = {
     "assessor_3": 5,
 }
 
+HDC_SIGNATURE_FIELDS_BY_FORM = {
+    "jbs5": (
+        ("head_of_department_signature", "Head of Department signature"),
+        ("head_of_department_signature_date", "Head of Department signature date"),
+        ("jbs_hdc_signature", "JBS HDC signature"),
+        ("jbs_hdc_signature_date", "JBS HDC signature date"),
+    ),
+    "jbs10": (
+        ("head_of_department_signature", "Head of Department signature"),
+        ("head_of_department_signature_date", "Head of Department signature date"),
+        ("jbs_hdc_signature", "JBS HDC signature"),
+        ("jbs_hdc_signature_date", "JBS HDC signature date"),
+    ),
+    external_examiner_nomination_doc_type(): (
+        ("hod_signature_name", "Head of Department signature"),
+        ("hod_signature_date", "Head of Department signature date"),
+        ("executive_dean_signature_name", "Executive Dean signature"),
+        ("executive_dean_signature_date", "Executive Dean signature date"),
+    ),
+    additional_external_examiner_nomination_doc_type(): (
+        ("hod_signature_name", "Head of Department signature"),
+        ("hod_signature_date", "Head of Department signature date"),
+        ("executive_dean_signature_name", "Executive Dean signature"),
+        ("executive_dean_signature_date", "Executive Dean signature date"),
+    ),
+    assessment_summary_doc_type(): (
+        ("hod_signature_name", "Head of Department signature"),
+        ("hod_signature_date", "Head of Department signature date"),
+        ("chair_fhdc_signature_name", "Chair of FHDC signature"),
+        ("chair_fhdc_signature_date", "Chair of FHDC signature date"),
+    ),
+}
+
+ASSESSMENT_SUMMARY_SIGNATURE_FIELDS = (
+    "supervisor_signature_name",
+    "supervisor_signature_date",
+    "hod_signature_name",
+    "hod_signature_date",
+    "chair_fhdc_signature_name",
+    "chair_fhdc_signature_date",
+    "hdc_signature_name",
+    "hdc_signature_date",
+    "executive_dean_signature_name",
+    "executive_dean_signature_date",
+)
+
+ASSESSMENT_SUMMARY_RESULT_INPUT_FIELDS = tuple(
+    field
+    for slot in ("assessor_1", "assessor_2", "assessor_3")
+    for field in (
+        f"{slot}_id",
+        f"{slot}_grade",
+        f"{slot}_recommendation",
+        f"{slot}_submitted_at",
+    )
+) + (
+    "capstone_total",
+    "capstone_average",
+    "final_mark",
+    "corrections_required",
+    "corrections_complete",
+)
+
+SUPERVISOR_AGREEMENT_SIGNATURE_FIELDS = {
+    "student": {
+        "student_signing_location": "student signing location",
+        "student_signature_day": "student signature day",
+        "student_signature_month": "student signature month",
+        "student_signature_year": "student signature year",
+        "student_signature": "student signature",
+        "student_signature_name": "student printed name",
+    },
+    "supervisor": {
+        "supervisor_signing_location": "supervisor signing location",
+        "supervisor_signature_day": "supervisor signature day",
+        "supervisor_signature_month": "supervisor signature month",
+        "supervisor_signature_year": "supervisor signature year",
+        "supervisor_signature": "supervisor signature",
+        "supervisor_signature_name": "supervisor printed name",
+    },
+}
+
+
+def _missing_supervisor_agreement_signature_fields(payload, signer):
+    fields = SUPERVISOR_AGREEMENT_SIGNATURE_FIELDS.get(signer, {})
+    return [label for field, label in fields.items() if not (payload.get(field) or "").strip()]
+
+
+def _submitted_hdc_signature_values(form_type):
+    return {
+        field: (request.form.get(field) or "").strip()
+        for field, _label in HDC_SIGNATURE_FIELDS_BY_FORM.get(form_type, ())
+    }
+
+
+def _missing_hdc_signature_fields(form_type, values):
+    return [
+        label
+        for field, label in HDC_SIGNATURE_FIELDS_BY_FORM.get(form_type, ())
+        if not values.get(field)
+    ]
+
+
+def _assessment_grade_summary(project):
+    grade_form_types = [assessment_doc_type(slot) for slot in ALL_ASSESSOR_SLOTS]
+    forms = MbaForm.query.filter(
+        MbaForm.project_id == project.id,
+        MbaForm.form_type.in_(grade_form_types),
+    ).all()
+    forms_by_project = {project.id: {form.form_type: form for form in forms}}
+    return project_grade_summary(project.id, forms_by_project)
+
+
+def _validate_hdc_results_approval_ready(project):
+    if not all_assessment_results_received(project):
+        raise ValueError("Assessment results are not ready for HDC approval.")
+    missing_hdc_docs = required_hdc_results_documents_missing(project)
+    if missing_hdc_docs:
+        missing_labels = ", ".join(document_label(doc_key) for doc_key in missing_hdc_docs)
+        raise ValueError(
+            "HDC cannot approve results until these documents are available for review: "
+            + missing_labels
+        )
+
+
+def _record_hdc_results_decision(project, decision_action, comment):
+    if project.project_status != ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value:
+        raise ValueError("Assessment results are not waiting for HDC review.")
+
+    if decision_action == "approve_results":
+        _validate_hdc_results_approval_ready(project)
+        project.project_status = ProjectStatus.RESULTS_APPROVED.value
+        project.results_hdc_decision = "approved"
+        grade_summary = _assessment_grade_summary(project)
+        project.results_hdc_approved_mark = grade_summary.get("final")
+        project.results_hdc_approved_classification = grade_summary.get("classification") or None
+        message = "Assessment results signed and approved by HDC."
+    elif decision_action == "decline_results":
+        project.project_status = ProjectStatus.RESULTS_DECLINED.value
+        project.results_hdc_decision = "declined"
+        project.results_hdc_approved_mark = None
+        project.results_hdc_approved_classification = None
+        message = "Assessment results signed and declined by HDC."
+    else:
+        raise ValueError("Choose whether to approve or decline the assessment results.")
+
+    project.results_hdc_reviewed_at = datetime.utcnow()
+    project.results_released_to_supervisor_at = None
+    if comment:
+        project.results_hdc_comments = append_comment(project.results_hdc_comments, f"{current_user.email}: {comment}")
+    project.comments = append_comment(
+        project.comments,
+        f"{current_user.email}: signed the assessment summary and recorded an HDC results decision.",
+    )
+
+    admin_messages = hdc_results_admin_email_messages(project, current_user.email)
+    if admin_messages:
+        email_result = send_bulk_emails(admin_messages)
+        project.comments = append_comment(
+            project.comments,
+            (
+                "System: HDC results decision admin alert email result: "
+                f"delivered={len(email_result['delivered'])}, failed={len(email_result['failed'])}"
+            ),
+        )
+    else:
+        project.comments = append_comment(
+            project.comments,
+            "System: HDC results decision recorded; no MBA Admin email recipients are configured.",
+        )
+    return message
+
 
 def _uploads_dir():
     from flask import current_app
     return os.path.join(current_app.root_path, "..", "uploads", "mba_forms")
 
 
-def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id=None):
-    """
-    Persist form data in MbaForm and generate a downloadable document as MbaProjectDocument.
-    Returns the MbaForm instance.
-    """
-    # Upsert MbaForm
+def _save_form_payload(project, form_type, payload):
+    """Persist form data in MbaForm and return the saved form row."""
     mba_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
     if mba_form:
         mba_form.payload = payload
@@ -126,6 +316,15 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
             submitted_at=datetime.utcnow(),
         )
         db.session.add(mba_form)
+    return mba_form
+
+
+def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id=None):
+    """
+    Persist form data in MbaForm and generate a downloadable document as MbaProjectDocument.
+    Returns the MbaForm instance.
+    """
+    mba_form = _save_form_payload(project, form_type, payload)
 
     # Write the generated document to disk.
     project_dir = os.path.join(_uploads_dir(), str(project.id))
@@ -169,9 +368,149 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
 
     project.comments = append_comment(
         project.comments,
-        f"{current_user.email} submitted {document_label(doc_type)} via web form",
+        f"{getattr(current_user, 'email', None) or 'system'} submitted {document_label(doc_type)} via web form",
     )
     return mba_form
+
+
+def _delete_generated_project_document(project, doc_type):
+    project_dir = os.path.join(_uploads_dir(), str(project.id))
+    doc = MbaProjectDocument.query.filter_by(project_id=project.id, doc_type=doc_type).first()
+    if not doc:
+        return False
+    stored_path = os.path.join(project_dir, doc.stored_name or "")
+    if doc.stored_name and os.path.exists(stored_path):
+        try:
+            os.remove(stored_path)
+        except OSError:
+            current_app.logger.warning("Could not remove obsolete project document %s", stored_path, exc_info=True)
+    db.session.delete(doc)
+    return True
+
+
+def _prune_obsolete_assessment_documents(project):
+    removed = False
+    for slot in ("assessor_1", "assessor_2", "assessor_3"):
+        removed = _delete_generated_project_document(project, assessment_doc_type(slot)) or removed
+        removed = _delete_generated_project_document(project, f"assessor_narrative_{slot}") or removed
+        narrative_form = MbaForm.query.filter_by(project_id=project.id, form_type=f"assessor_narrative_{slot}").first()
+        if narrative_form:
+            db.session.delete(narrative_form)
+            removed = True
+    return removed
+
+
+def refresh_assessment_summary_if_ready(project):
+    if not all_assessment_results_received(project):
+        return None
+    existing_form = MbaForm.query.filter_by(project_id=project.id, form_type=assessment_summary_doc_type()).first()
+    existing_payload = existing_form.payload if existing_form and isinstance(existing_form.payload, dict) else {}
+    payload = build_assessment_summary_payload(project, existing_payload)
+    summary_inputs_changed = bool(existing_form) and any(
+        str(existing_payload.get(field, "") or "") != str(payload.get(field, "") or "")
+        for field in ASSESSMENT_SUMMARY_RESULT_INPUT_FIELDS
+    )
+    if summary_inputs_changed:
+        for field in ASSESSMENT_SUMMARY_SIGNATURE_FIELDS:
+            payload.pop(field, None)
+        clear_signature_snapshots(
+            payload,
+            (
+                "supervisor_signature_name",
+                "hod_signature_name",
+                "chair_fhdc_signature_name",
+                "hdc_signature_name",
+                "executive_dean_signature_name",
+            ),
+        )
+        existing_form.supervisor_signed = False
+    _prune_obsolete_assessment_documents(project)
+    return _save_form_as_document(
+        project,
+        assessment_summary_doc_type(),
+        assessment_summary_doc_type(),
+        payload,
+        uploaded_by_id=current_user.id,
+    )
+
+
+def refresh_external_examiner_nomination_if_ready(project):
+    if not project or accepted_assessor_count(project) < len(PRIMARY_ASSESSOR_SLOTS):
+        return None
+    if not all_assessor_acceptance_packs_complete(project):
+        return None
+
+    form_type = external_examiner_nomination_doc_type()
+    existing_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
+    existing_payload = existing_form.payload if existing_form and isinstance(existing_form.payload, dict) else {}
+    current_assessor_ids = {
+        f"_{slot}_id": str(getattr(project, f"{slot}_id", "") or "")
+        for slot in PRIMARY_ASSESSOR_SLOTS
+    }
+    assessor_lineup_changed = any(
+        existing_payload.get(key) and str(existing_payload.get(key)) != value
+        for key, value in current_assessor_ids.items()
+    )
+    payload = build_external_examiner_nomination_payload(project, existing_payload)
+    if assessor_lineup_changed:
+        for field in (
+            "supervisor_signature_name",
+            "supervisor_signature_date",
+            "nomination_forwarded_to_supervisor_at",
+            "nomination_forwarded_to_supervisor_by",
+        ):
+            payload.pop(field, None)
+        clear_signature_snapshots(payload, ("supervisor_signature_name",))
+        if existing_form:
+            existing_form.supervisor_signed = False
+
+    nomination_form = _save_form_as_document(
+        project,
+        form_type,
+        form_type,
+        payload,
+        uploaded_by_id=getattr(project, "primary_supervisor_id", None) or current_user.id,
+    )
+    if existing_form and not assessor_lineup_changed and existing_form.supervisor_signed:
+        nomination_form.supervisor_signed = True
+    return nomination_form
+
+
+def refresh_additional_external_examiner_nomination_if_ready(project):
+    if not project or not additional_external_examiner_nomination_ready(project):
+        return None
+
+    form_type = additional_external_examiner_nomination_doc_type()
+    existing_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
+    existing_payload = existing_form.payload if existing_form and isinstance(existing_form.payload, dict) else {}
+    current_assessor_id = str(getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", "") or "")
+    assessor_changed = bool(
+        existing_payload.get("_assessor_3_id")
+        and str(existing_payload.get("_assessor_3_id")) != current_assessor_id
+    )
+    payload = build_additional_external_examiner_nomination_payload(project, existing_payload)
+    if assessor_changed:
+        for field in (
+            "supervisor_signature_name",
+            "supervisor_signature_date",
+            "nomination_forwarded_to_supervisor_at",
+            "nomination_forwarded_to_supervisor_by",
+        ):
+            payload.pop(field, None)
+        clear_signature_snapshots(payload, ("supervisor_signature_name",))
+        if existing_form:
+            existing_form.supervisor_signed = False
+
+    nomination_form = _save_form_as_document(
+        project,
+        form_type,
+        form_type,
+        payload,
+        uploaded_by_id=getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None) or current_user.id,
+    )
+    if existing_form and not assessor_changed and existing_form.supervisor_signed:
+        nomination_form.supervisor_signed = True
+    return nomination_form
 
 
 def _sync_project_from_student_form(project, form_type, payload):
@@ -367,7 +706,8 @@ def _build_student_prefill(project):
         or (profile.degree if profile else "")
         or "MBA"
     )
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today_dt = datetime.utcnow()
+    today = today_dt.strftime("%Y-%m-%d")
     return {
         "full_name": full_name,
         "surname": profile.surname if profile else "",
@@ -396,6 +736,9 @@ def _build_student_prefill(project):
         "signature_name": full_name,
         "signature_date": today,
         "affidavit_date": today,
+        "affidavit_day": today_dt.strftime("%d"),
+        "affidavit_month": today_dt.strftime("%B"),
+        "affidavit_year": today_dt.strftime("%y"),
         "signing_location": profile.address if profile else "",
         "student_id_number": "",
         "ethical_clearance_number": "",
@@ -426,11 +769,40 @@ def _build_student_prefill(project):
         "previous_supervisor_lineup": "",
         "amended_supervisor_lineup": "",
         "assessor_1_name": "",
+        "assessor_1_staff_number": "",
         "assessor_1_qualification": "",
         "assessor_1_email": "",
         "assessor_2_name": "",
+        "assessor_2_staff_number": "",
         "assessor_2_qualification": "",
         "assessor_2_email": "",
+        "assessor_3_name": "",
+        "assessor_3_staff_number": "",
+        "assessor_3_qualification": "",
+        "assessor_3_email": "",
+        "assessor_4_name": "",
+        "assessor_4_staff_number": "",
+        "assessor_4_qualification": "",
+        "assessor_4_email": "",
+        "internal_assessor_name": "",
+        "amended_supervisor_staff_number": "",
+        "amended_co_supervisor_lineup": "",
+        "amended_co_supervisor_staff_number": "",
+        "amended_internal_assessor_name": "",
+        "amended_internal_assessor_qualification": "",
+        "amended_internal_assessor_staff_number": "",
+        "amended_external_assessor_1_name": "",
+        "amended_external_assessor_1_staff_number": "",
+        "amended_external_assessor_1_qualification": "",
+        "amended_external_assessor_1_email": "",
+        "amended_external_assessor_2_name": "",
+        "amended_external_assessor_2_staff_number": "",
+        "amended_external_assessor_2_qualification": "",
+        "amended_external_assessor_2_email": "",
+        "amended_external_assessor_3_name": "",
+        "amended_external_assessor_3_staff_number": "",
+        "amended_external_assessor_3_qualification": "",
+        "amended_external_assessor_3_email": "",
     }
 
 
@@ -438,6 +810,7 @@ def _build_student_supervisor_agreement_prefill(project):
     student_profile = getattr(current_user, "student_profile", None)
     supervisor = project.primary_supervisor
     supervisor_profile = getattr(supervisor, "scholar_profile", None) if supervisor else None
+    today = datetime.utcnow()
     supervisor_name = ""
     if supervisor_profile:
         supervisor_name = (
@@ -483,7 +856,20 @@ def _build_student_supervisor_agreement_prefill(project):
         "co_supervisor_department": "",
         "co_supervisor_surname": "",
         "co_supervisor_initials": "",
-        "capacity_statement": "",
+        "student_signing_location": "",
+        "supervisor_signing_location": "",
+        "co_supervisor_signing_location": "",
+        "student_signature_date": today.strftime("%Y-%m-%d"),
+        "student_signature_day": today.strftime("%d"),
+        "student_signature_month": today.strftime("%B"),
+        "student_signature_year": today.strftime("%y"),
+        "student_signature_name": (
+            f"{student_profile.name or ''} {student_profile.surname or ''}".strip()
+            if student_profile
+            else current_user.email
+        ),
+        "supervisor_signature": "",
+        "supervisor_signature_name": supervisor_name,
     }
 
 
@@ -582,6 +968,15 @@ def fill_project_form(project_id, form_type):
     if form_type == "jbs5" and not (existing_form and existing_form.supervisor_signed):
         prefill["supervisor_signature"] = ""
         prefill["supervisor_signature_date"] = ""
+    student_signature_fields_by_form = {
+        "jbs5": ("student_signature",),
+        "supervisor_agreement": ("student_signature",),
+        "jbs1_declaration": ("signature_name",),
+        "plagiarism_declaration": ("signature_name",),
+        "affidavit": ("signature_name",),
+        "intent_to_submit": ("signature_name",),
+    }
+    apply_saved_signature_snapshot(prefill, student_signature_fields_by_form.get(form_type, ()), current_user)
 
     template_name = f"mba/form_fill_{form_type}.html"
     template_context = {
@@ -616,33 +1011,39 @@ def fill_project_form(project_id, form_type):
             payload["supervisor_signature_date"] = ""
             payload.pop("supervisor_signature_user_id", None)
             payload.pop("supervisor_signature_email", None)
+            clear_signature_snapshots(payload, ("supervisor_signature", "head_of_department_signature", "jbs_hdc_signature"))
             payload.pop("jbs_hdc_signature", None)
             payload.pop("jbs_hdc_signature_date", None)
             if existing_form and existing_form.supervisor_signed and isinstance(saved_payload, dict):
                 for signature_field in ("supervisor_signature", "supervisor_signature_date"):
                     if saved_payload.get(signature_field):
                         payload[signature_field] = saved_payload.get(signature_field)
+                copy_signature_snapshots(payload, saved_payload, ("supervisor_signature",))
         if form_type == "supervisor_agreement":
+            payload["research_title"] = payload.get("research_title") or project.project_title or prefill.get("research_title", "")
+            payload["supervisor_full_name"] = payload.get("supervisor_full_name") or prefill.get("supervisor_full_name", "")
             payload["_student_acceptance"] = "1"
-            payload["student_agreement_declaration"] = "1" if request.form.get("student_agreement_declaration") else ""
+            missing_signature_fields = _missing_supervisor_agreement_signature_fields(payload, "student")
+            if missing_signature_fields:
+                flash(
+                    "Student signature fields are required before submitting the Supervisor Agreement: "
+                    + ", ".join(missing_signature_fields),
+                    "error",
+                )
+                template_context["prefill"] = payload
+                return render_template(template_name, **template_context)
+            payload["student_agreement_declaration"] = "1"
             if (
                 isinstance(saved_payload, dict)
                 and saved_payload.get("supervisor_agreement_declaration")
             ) or (existing_form and existing_form.supervisor_signed):
                 payload["supervisor_agreement_declaration"] = saved_payload.get("supervisor_agreement_declaration") or "1"
+                copy_signature_snapshots(payload, saved_payload, ("supervisor_signature",))
         if form_type == "jbs10":
             payload.pop("jbs_hdc_signature", None)
             payload.pop("jbs_hdc_signature_date", None)
 
         consent_messages = {
-            "supervisor_agreement": (
-                "student_agreement_declaration",
-                "You must confirm the student supervisor agreement declaration before submitting.",
-            ),
-            "jbs10": (
-                "declaration",
-                "You must confirm the JBS 10 declaration before submitting.",
-            ),
             "plagiarism_declaration": (
                 "plagiarism_consent",
                 "You must confirm the combined plagiarism, Turnitin and AI declaration before submitting.",
@@ -708,9 +1109,18 @@ def fill_project_form(project_id, form_type):
                 template_context["prefill"] = payload
                 return render_template(template_name, **template_context)
 
+        refresh_saved_signature_snapshot(payload, student_signature_fields_by_form.get(form_type, ()), current_user)
+
         try:
-            saved_form = _save_form_as_document(project, form_type, form_type, payload)
-            if form_type in {"jbs5", "supervisor_agreement", "plagiarism_declaration"}:
+            if form_type == "affidavit":
+                saved_form = _save_form_payload(project, form_type, payload)
+                project.comments = append_comment(
+                    project.comments,
+                    f"{current_user.email} generated {document_label(form_type)} for Commissioner of Oaths stamping",
+                )
+            else:
+                saved_form = _save_form_as_document(project, form_type, form_type, payload)
+            if form_type in {"jbs5", "supervisor_agreement", "plagiarism_declaration", "affidavit"}:
                 saved_form.student_signed = True
             if form_type == "jbs5":
                 reset_jbs5_review_state(project, clear_supervisor_signature=True, clear_hdc_signature=True)
@@ -761,11 +1171,6 @@ def fill_project_form(project_id, form_type):
                         f"delivered={len(email_result['delivered'])}, failed={len(email_result['failed'])}"
                     ),
                 )
-            if form_type == "plagiarism_declaration":
-                saved_form.supervisor_signed = bool(
-                    payload.get("supervisor_signature_name")
-                    and payload.get("supervisor_signature_date")
-                )
             _sync_project_from_student_form(project, form_type, payload)
             if form_type == "jbs5":
                 db.session.flush()
@@ -792,7 +1197,6 @@ def fill_project_form(project_id, form_type):
             "intent_to_submit",
             "supervisor_agreement",
             "plagiarism_declaration",
-            "affidavit",
             "jbs1_declaration",
         }:
             _notify_admins_form_submitted(project, form_type)
@@ -811,6 +1215,12 @@ def fill_project_form(project_id, form_type):
                 "success",
             )
             return redirect(url_for("mba.student_corrections"))
+        if form_type == "affidavit":
+            flash(
+                "JBS 2 Affidavit generated. Download it for Commissioner of Oaths stamping, then upload the stamped PDF as the final submission.",
+                "success",
+            )
+            return redirect(url_for("mba.student_dashboard"))
         flash(f"{document_label(form_type)} submitted.", "success")
         return redirect(url_for("mba.student_dashboard"))
 
@@ -864,7 +1274,12 @@ def _send_hdc_nomination_admin_alert(project):
 def hdc_sign_project_form(project_id, form_type):
     if not require_mba_role(MbaRole.HDC.value):
         return redirect(role_landing_url())
-    if form_type not in {"jbs5", "jbs10"}:
+    nomination_signature_form_types = {
+        external_examiner_nomination_doc_type(),
+        additional_external_examiner_nomination_doc_type(),
+    }
+    signature_only_form_types = {*nomination_signature_form_types, assessment_summary_doc_type()}
+    if form_type not in {"jbs5", "jbs10", *signature_only_form_types}:
         abort(404)
 
     project = db.session.get(MbaProject, project_id)
@@ -879,8 +1294,14 @@ def hdc_sign_project_form(project_id, form_type):
             ProjectStatus.ADMIN_APPROVED.value,
         },
     }
-    if project.project_status not in allowed_statuses[form_type]:
+    if form_type in allowed_statuses and project.project_status not in allowed_statuses[form_type]:
         flash(f"{document_label(form_type)} is not waiting for HDC review.", "error")
+        return redirect(url_for("mba.hdc_dashboard"))
+    if form_type == assessment_summary_doc_type() and project.project_status != ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value:
+        flash("The assessment summary is not waiting for an HDC results decision.", "error")
+        return redirect(url_for("mba.hdc_dashboard"))
+    if form_type in signature_only_form_types and not hdc_can_access_document(project, form_type):
+        flash(f"{document_label(form_type)} is not available for HDC signature editing.", "error")
         return redirect(url_for("mba.hdc_dashboard"))
 
     form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
@@ -889,41 +1310,139 @@ def hdc_sign_project_form(project_id, form_type):
         return redirect(url_for("mba.hdc_dashboard"))
 
     payload = dict(form.payload or {})
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today_dt = datetime.utcnow()
+    today = today_dt.strftime("%Y-%m-%d")
     prefill = dict(payload)
     prefill.setdefault("jbs_hdc_signature", _hdc_signature_name())
     prefill.setdefault("jbs_hdc_signature_date", today)
-    template_name = f"mba/form_fill_{form_type}.html"
+    prefill["_doc_type"] = form_type
+    apply_saved_signature_snapshot(
+        prefill,
+        tuple(field for field, _label in HDC_SIGNATURE_FIELDS_BY_FORM.get(form_type, ()) if not field.endswith("_date")),
+        current_user,
+    )
+    if form_type in nomination_signature_form_types:
+        template_name = "mba/form_fill_external_examiner_nomination.html"
+    elif form_type == assessment_summary_doc_type():
+        template_name = "mba/form_fill_assessment_summary.html"
+    else:
+        template_name = f"mba/form_fill_{form_type}.html"
     template_context = {
         "project": project,
         "prefill": prefill,
         "hdc_signature_mode": True,
+        "form_type": form_type,
+        "document_doc": uploaded_doc_for(project, form_type),
+        "all_results_ready": all_assessment_results_received(project) if form_type == assessment_summary_doc_type() else True,
+        "missing_hdc_results_docs": (
+            required_hdc_results_documents_missing(project)
+            if form_type == assessment_summary_doc_type()
+            else []
+        ),
     }
+
+    if form_type in signature_only_form_types:
+        if request.method == "POST":
+            decision_action = (request.form.get("action") or "").strip()
+            comment = (request.form.get("comment") or "").strip()
+            signature_values = _submitted_hdc_signature_values(form_type)
+            prefill.update(signature_values)
+            missing_fields = _missing_hdc_signature_fields(form_type, signature_values)
+            if missing_fields:
+                flash(
+                    "Complete these signature fields before saving: "
+                    + ", ".join(missing_fields),
+                    "error",
+                )
+                template_context["prefill"] = prefill
+                return render_template(template_name, **template_context)
+            if form_type == assessment_summary_doc_type() and decision_action not in {"approve_results", "decline_results"}:
+                flash("Choose whether to approve or decline the assessment results after signing.", "error")
+                template_context["prefill"] = prefill
+                return render_template(template_name, **template_context)
+            if form_type == assessment_summary_doc_type() and decision_action == "approve_results":
+                try:
+                    _validate_hdc_results_approval_ready(project)
+                except ValueError as exc:
+                    flash(str(exc), "error")
+                    template_context["prefill"] = prefill
+                    return render_template(template_name, **template_context)
+            payload.update(signature_values)
+            refresh_saved_signature_snapshot(
+                payload,
+                tuple(field for field in signature_values if not field.endswith("_date")),
+                current_user,
+            )
+            try:
+                _save_form_as_document(
+                    project,
+                    form_type,
+                    form_type,
+                    payload,
+                    uploaded_by_id=current_user.id,
+                )
+                if form_type == assessment_summary_doc_type():
+                    db.session.flush()
+                    db.session.expire(project, ["documents"])
+                    message = _record_hdc_results_decision(project, decision_action, comment)
+                else:
+                    message = f"{document_label(form_type)} signature fields saved."
+                project.comments = append_comment(
+                    project.comments,
+                    f"{current_user.email}: completed HDC-level signature fields on {document_label(form_type)}.",
+                )
+                db.session.commit()
+            except ValueError as exc:
+                db.session.rollback()
+                flash(str(exc), "error")
+                template_context["prefill"] = prefill
+                return render_template(template_name, **template_context)
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("HDC signature save failed")
+                flash("The HDC signature fields could not be saved. Please try again.", "error")
+                template_context["prefill"] = prefill
+                return render_template(template_name, **template_context)
+            flash(message, "success")
+            return redirect(url_for("mba.hdc_dashboard"))
+
+        return render_template(template_name, **template_context)
 
     if request.method == "POST":
         decision = (request.form.get("decision") or "").strip()
         comment = (request.form.get("comment") or "").strip()
-        signature = (request.form.get("jbs_hdc_signature") or "").strip()
-        signature_date = (request.form.get("jbs_hdc_signature_date") or "").strip()
+        signature_values = _submitted_hdc_signature_values(form_type)
+        prefill.update(signature_values)
         if decision not in {"approve", "decline"}:
             flash("Choose an HDC decision before submitting.", "error")
             return render_template(template_name, **template_context)
-        if decision == "approve" and (not signature or not signature_date):
-            flash("HDC signature and date are required before approval.", "error")
-            prefill["jbs_hdc_signature"] = signature
-            prefill["jbs_hdc_signature_date"] = signature_date
+        missing_fields = _missing_hdc_signature_fields(form_type, signature_values)
+        signature_required = decision == "approve" or form_type == "jbs10"
+        if signature_required and missing_fields:
+            flash(
+                "Complete these signature fields before submitting this HDC decision: "
+                + ", ".join(missing_fields),
+                "error",
+            )
             template_context["prefill"] = prefill
             return render_template(template_name, **template_context)
         if decision == "decline" and not comment:
             flash("Add HDC feedback before returning the document.", "error")
             return render_template(template_name, **template_context)
 
-        if decision == "approve":
-            payload["jbs_hdc_signature"] = signature
-            payload["jbs_hdc_signature_date"] = signature_date
+        if decision == "approve" or form_type == "jbs10":
+            payload.update(signature_values)
+            refresh_saved_signature_snapshot(
+                payload,
+                tuple(field for field in signature_values if not field.endswith("_date")),
+                current_user,
+            )
         else:
             payload.pop("jbs_hdc_signature", None)
             payload.pop("jbs_hdc_signature_date", None)
+            payload.pop("head_of_department_signature", None)
+            payload.pop("head_of_department_signature_date", None)
+            clear_signature_snapshots(payload, ("jbs_hdc_signature", "head_of_department_signature"))
 
         try:
             _save_form_as_document(
@@ -965,7 +1484,7 @@ def hdc_sign_project_form(project_id, form_type):
                 for slot in PRIMARY_ASSESSOR_SLOTS:
                     if getattr(project, f"{slot}_id", None) and not assessor_hdc_decision(project, slot):
                         set_assessor_hdc_decision(project, slot, decision_value)
-                review_status = sync_hdc_assessor_nomination_status(project, finalize_declined=(decision == "decline"))
+                review_status = sync_hdc_assessor_nomination_status(project)
                 if review_status == "approved":
                     project.comments = append_comment(
                         project.comments,
@@ -1159,6 +1678,7 @@ def supervisor_sign_jbs5(project_id):
     prefill.setdefault("abstract", project.project_description)
     prefill["supervisor_signature"] = default_name
     prefill["supervisor_signature_date"] = datetime.utcnow().strftime("%Y-%m-%d")
+    apply_saved_signature_snapshot(prefill, ("supervisor_signature",), current_user)
     template_context = {
         "project": project,
         "prefill": prefill,
@@ -1173,12 +1693,6 @@ def supervisor_sign_jbs5(project_id):
             prefill["supervisor_signature"] = supervisor_signature
             prefill["supervisor_signature_date"] = supervisor_signature_date
             return render_template(template_name, **template_context)
-        if not request.form.get("jbs5_supervisor_declaration"):
-            flash("Confirm that signing JBS5 means no title changes are required and the form will be locked.", "error")
-            prefill["supervisor_signature"] = supervisor_signature
-            prefill["supervisor_signature_date"] = supervisor_signature_date
-            return render_template(template_name, **template_context)
-
         try:
             sign_student_jbs5_as_supervisor(
                 project,
@@ -1201,6 +1715,199 @@ def supervisor_sign_jbs5(project_id):
         return redirect(url_for("mba.scholar_dashboard"))
 
     return render_template(template_name, **template_context)
+
+
+@mba_bp.route("/projects/<int:project_id>/supervisor-sign-external-examiner-nomination", methods=["GET", "POST"])
+@login_required
+def supervisor_sign_external_examiner_nomination(project_id):
+    if not require_mba_role(MbaRole.SCHOLAR.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+    if project.primary_supervisor_id != current_user.id:
+        abort(403)
+
+    form_type = external_examiner_nomination_doc_type()
+    nomination_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
+    if not nomination_form or not isinstance(nomination_form.payload, dict):
+        flash("The amended external examiner nomination form is not ready yet.", "error")
+        return redirect(role_landing_url())
+
+    payload = dict(nomination_form.payload or {})
+    if not payload.get("nomination_forwarded_to_supervisor_at") and not nomination_form.supervisor_signed:
+        flash("MBA Admin has not forwarded the amended external examiner nomination form for signature yet.", "error")
+        return redirect(role_landing_url())
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    supervisor_name = (
+        f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+        or current_user.email
+        or ""
+    )
+    payload.setdefault("supervisor_signature_name", supervisor_name)
+    payload.setdefault("supervisor_signature_date", today)
+    apply_saved_signature_snapshot(payload, ("supervisor_signature_name",), current_user)
+
+    if request.method == "POST":
+        signature_name = (request.form.get("supervisor_signature_name") or "").strip()
+        signature_date = (request.form.get("supervisor_signature_date") or "").strip()
+        if not signature_name or not signature_date:
+            flash("Supervisor signature name and date are required.", "error")
+            payload["supervisor_signature_name"] = signature_name
+            payload["supervisor_signature_date"] = signature_date
+            return render_template(
+                "mba/form_sign_external_examiner_nomination.html",
+                project=project,
+                prefill=payload,
+                nomination_doc=uploaded_doc_for(project, form_type),
+            )
+        payload["supervisor_signature_name"] = signature_name
+        payload["supervisor_signature_date"] = signature_date
+        refresh_saved_signature_snapshot(payload, ("supervisor_signature_name",), current_user)
+        try:
+            saved_form = _save_form_as_document(
+                project,
+                form_type,
+                form_type,
+                payload,
+                uploaded_by_id=current_user.id,
+            )
+            saved_form.supervisor_signed = True
+            project.comments = append_comment(
+                project.comments,
+                f"{current_user.email}: signed the amended external examiner nomination form.",
+            )
+            for admin_email in mba_admin_notification_emails():
+                _send_email_safely(
+                    admin_email,
+                    f"External Examiner Nomination Signed: {project.project_title}",
+                    (
+                        f"Supervisor {current_user.email} signed the amended external examiner "
+                        f"nomination form for '{project.project_title}'. MBA Admin can now forward "
+                        "the assessor nomination to HDC."
+                    ),
+                )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("External examiner nomination supervisor signature failed")
+            flash("The nomination form could not be signed. Please try again.", "error")
+            return render_template(
+                "mba/form_sign_external_examiner_nomination.html",
+                project=project,
+                prefill=payload,
+                nomination_doc=uploaded_doc_for(project, form_type),
+            )
+        flash("External examiner nomination form signed. MBA Admin has been notified.", "success")
+        return redirect(role_landing_url())
+
+    return render_template(
+        "mba/form_sign_external_examiner_nomination.html",
+        project=project,
+        prefill=payload,
+        nomination_doc=uploaded_doc_for(project, form_type),
+    )
+
+
+@mba_bp.route("/projects/<int:project_id>/supervisor-sign-assessment-summary", methods=["GET", "POST"])
+@login_required
+def supervisor_sign_assessment_summary(project_id):
+    if not require_mba_role(MbaRole.SCHOLAR.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+    if not supervisor_can_manage_corrections(project, current_user):
+        abort(403)
+
+    refresh_assessment_summary_if_ready(project)
+    form_type = assessment_summary_doc_type()
+    summary_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
+    if not summary_form or not isinstance(summary_form.payload, dict):
+        flash("The assessment summary is not ready yet.", "error")
+        return redirect(role_landing_url())
+
+    block_reason = assessment_summary_supervisor_signing_block_reason(project)
+    if block_reason:
+        flash(block_reason, "error")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    payload = build_assessment_summary_payload(project, dict(summary_form.payload or {}))
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    supervisor_name = (
+        f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+        or current_user.email
+        or ""
+    )
+    payload.setdefault("supervisor_signature_name", supervisor_name)
+    payload.setdefault("supervisor_signature_date", today)
+    payload["_doc_type"] = form_type
+    apply_saved_signature_snapshot(payload, ("supervisor_signature_name",), current_user)
+    template_context = {
+        "project": project,
+        "prefill": payload,
+        "supervisor_signature_mode": True,
+        "form_type": form_type,
+        "document_doc": uploaded_doc_for(project, form_type),
+    }
+
+    if request.method == "POST":
+        signature_name = (request.form.get("supervisor_signature_name") or "").strip()
+        signature_date = (request.form.get("supervisor_signature_date") or "").strip()
+        payload["supervisor_signature_name"] = signature_name
+        payload["supervisor_signature_date"] = signature_date
+        template_context["prefill"] = payload
+        if not signature_name or not signature_date:
+            flash("Supervisor signature name and date are required.", "error")
+            return render_template("mba/form_fill_assessment_summary.html", **template_context)
+        refresh_saved_signature_snapshot(payload, ("supervisor_signature_name",), current_user)
+        try:
+            saved_form = _save_form_as_document(
+                project,
+                form_type,
+                form_type,
+                payload,
+                uploaded_by_id=current_user.id,
+            )
+            saved_form.supervisor_signed = True
+            project.comments = append_comment(
+                project.comments,
+                f"{current_user.email}: signed the assessment summary report.",
+            )
+            messages = [
+                {
+                    "recipient": admin_email,
+                    "subject": f"Assessment Summary Signed: {project.project_title}",
+                    "body": (
+                        f"Supervisor {current_user.email} signed the assessment summary report "
+                        f"for '{project.project_title}'. MBA Admin can continue the results workflow "
+                        "once all corrections and additional assessment checks are clear."
+                    ),
+                }
+                for admin_email in mba_admin_notification_emails()
+            ]
+            if messages:
+                email_result = send_bulk_emails(messages)
+                project.comments = append_comment(
+                    project.comments,
+                    (
+                        "Assessment summary supervisor signature admin email result: "
+                        f"delivered={len(email_result['delivered'])}, failed={len(email_result['failed'])}"
+                    ),
+                )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Assessment summary supervisor signature failed")
+            flash("The assessment summary could not be signed. Please try again.", "error")
+            return render_template("mba/form_fill_assessment_summary.html", **template_context)
+        flash("Assessment summary signed. MBA Admin has been notified.", "success")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    return render_template("mba/form_fill_assessment_summary.html", **template_context)
 
 
 # ---------------------------------------------------------------------------
@@ -1239,6 +1946,7 @@ def supervisor_fill_form(project_id):
     student_profile = (
         getattr(project.student, "student_profile", None) if project.student else None
     )
+    today = datetime.utcnow()
     existing_form = MbaForm.query.filter_by(
         project_id=project.id, form_type="supervisor_agreement"
     ).first()
@@ -1281,9 +1989,31 @@ def supervisor_fill_form(project_id):
         "co_supervisor_department": "",
         "co_supervisor_surname": "",
         "co_supervisor_initials": "",
-        "capacity_statement": "",
+        "student_signing_location": "",
+        "supervisor_signing_location": "",
+        "co_supervisor_signing_location": "",
+        "student_signature_name": (
+            f"{student_profile.name or ''} {student_profile.surname or ''}".strip()
+            if student_profile
+            else (project.student.email if project.student else "")
+        ),
+        "supervisor_signature_date": today.strftime("%Y-%m-%d"),
+        "supervisor_signature_day": today.strftime("%d"),
+        "supervisor_signature_month": today.strftime("%B"),
+        "supervisor_signature_year": today.strftime("%y"),
+        "supervisor_signature": (
+            f"{profile.title or ''} {profile.name or ''} {profile.surname or ''}".strip()
+            if profile
+            else ""
+        ),
+        "supervisor_signature_name": (
+            f"{profile.title or ''} {profile.name or ''} {profile.surname or ''}".strip()
+            if profile
+            else ""
+        ),
     }
     prefill.update(saved_payload)
+    apply_saved_signature_snapshot(prefill, ("supervisor_signature",), current_user)
 
     if request.method == "POST":
         payload = {
@@ -1291,9 +2021,11 @@ def supervisor_fill_form(project_id):
             for k in request.form
             if k not in {"csrf_token", "_csrf_token"}
         }
+        payload["research_title"] = payload.get("research_title") or project.project_title or prefill.get("research_title", "")
+        payload["supervisor_full_name"] = payload.get("supervisor_full_name") or prefill.get("supervisor_full_name", "")
 
-        if not payload.get("supervisor_full_name") or not payload.get("research_title"):
-            flash("Supervisor name and research title are required.", "error")
+        if not payload.get("supervisor_full_name"):
+            flash("Supervisor name is required.", "error")
             return render_template(
                 "mba/form_fill_supervisor_agreement.html",
                 project=project,
@@ -1301,8 +2033,13 @@ def supervisor_fill_form(project_id):
                 invitation=invitation,
             )
 
-        if not request.form.get("supervisor_agreement_declaration"):
-            flash("You must confirm the supervisor agreement declaration to accept.", "error")
+        missing_signature_fields = _missing_supervisor_agreement_signature_fields(payload, "supervisor")
+        if missing_signature_fields:
+            flash(
+                "Supervisor signature fields are required before accepting the Supervisor Agreement: "
+                + ", ".join(missing_signature_fields),
+                "error",
+            )
             return render_template(
                 "mba/form_fill_supervisor_agreement.html",
                 project=project,
@@ -1317,6 +2054,8 @@ def supervisor_fill_form(project_id):
                 and saved_payload.get("student_agreement_declaration")
             ) or (existing_form and existing_form.student_signed):
                 payload["student_agreement_declaration"] = saved_payload.get("student_agreement_declaration") or "1"
+                copy_signature_snapshots(payload, saved_payload, ("student_signature",))
+            refresh_saved_signature_snapshot(payload, ("supervisor_signature",), current_user)
             supervisor_form = _save_form_as_document(project, "supervisor_agreement", "supervisor_agreement", payload)
             supervisor_form.supervisor_signed = True
 
@@ -1598,7 +2337,7 @@ def _assessor_acceptance_prefill(project, slot):
         "alternate_contact_number": "",
         "alternate_email_address": "",
         "requestor_extension": "",
-        "requestor_email": "",
+        "requestor_email": "vukonac@uj.ac.za",
         "claim_unit_basis": "Per Hour",
         "contract_eit_number": "",
         "claim_total_units": "1.53",
@@ -1645,7 +2384,6 @@ def _assessor_acceptance_prefill(project, slot):
     for saved_form_type in [
         assessor_temp_appointment_doc_type(slot),
         assessor_temp_claim_doc_type(slot),
-        assessor_profile_doc_type(slot),
     ]:
         saved_form = MbaForm.query.filter_by(project_id=project.id, form_type=saved_form_type).first()
         if (
@@ -1687,6 +2425,7 @@ def assessor_acceptance_form(project_id, slot):
 
     slot_label = slot.replace("_", " ").title()
     prefill = _assessor_acceptance_prefill(project, slot)
+    apply_saved_signature_snapshot(prefill, ("employee_signature_name", "claim_signature_name"), current_user)
     reason_options = [
         "Services will not exceed 3 months",
         "Specific project for limited time and clear deliverable",
@@ -1788,14 +2527,14 @@ def assessor_acceptance_form(project_id, slot):
             "total_claimed": "Total claimed is required.",
             "claim_signature_name": "Claim signature / full name is required.",
             "claim_signature_date": "Claim signature date is required.",
-            "assessor_name": "Assessor full name is required for the nomination form.",
-            "highest_qualification": "Qualification is required for the nomination form.",
-            "assessor_affiliation": "Affiliation is required for the nomination form.",
-            "assessor_address": "Street address is required for the nomination form.",
-            "assessor_contact": "Cell number is required for the nomination form.",
-            "assessor_email": "Email address is required for the nomination form.",
+            "assessor_name": "Assessor full name is required for the nomination document.",
+            "highest_qualification": "Qualification is required for the nomination document.",
+            "assessor_affiliation": "Affiliation is required for the nomination document.",
+            "assessor_address": "Street address is required for the nomination document.",
+            "assessor_contact": "Cell number is required for the nomination document.",
+            "assessor_email": "Email address is required for the nomination document.",
             "students_supervised_total": "The approximate number of postgraduate students supervised to completion is required.",
-            "current_university_affiliation": "Current affiliation with a university is required for the nomination form.",
+            "current_university_affiliation": "Current affiliation with a university is required for the nomination document.",
             "publication_count": "Approximate number of publications is required for the nomination form.",
             "international_assessor": "Please indicate whether this is an international assessor.",
         }
@@ -1814,10 +2553,6 @@ def assessor_acceptance_form(project_id, slot):
 
         if not request.form.get("claim_declaration"):
             flash("You must confirm the claim declaration before accepting.", "error")
-            return _render_acceptance_form(payload)
-
-        if not request.form.get("assessor_profile_declaration"):
-            flash("You must confirm the external examiner nomination form declaration before accepting.", "error")
             return _render_acceptance_form(payload)
 
         if uploaded_cv and uploaded_cv.filename:
@@ -1902,9 +2637,18 @@ def assessor_acceptance_form(project_id, slot):
                 "employee_signature_name",
                 "employee_signature_date",
                 "appointment_declaration",
+                "assessor_name",
+                "assessor_affiliation",
+                "assessor_address",
+                "assessor_telephone_number",
+                "students_supervised_total",
+                "current_university_affiliation",
+                "publication_count",
+                "international_assessor",
             ]
         }
         appointment_payload["_submitted_by"] = str(current_user.id)
+        refresh_saved_signature_snapshot(appointment_payload, ("employee_signature_name",), current_user)
         claim_payload = {
             key: payload.get(key, "")
             for key in [
@@ -1933,6 +2677,7 @@ def assessor_acceptance_form(project_id, slot):
                 "appointed_against_permanent_position",
                 "position_number",
                 "total_budget_for_appointment",
+                "conflict_of_interest_details",
                 "contract_eit_number",
                 "claim_total_units",
                 "claim_rate",
@@ -1954,53 +2699,11 @@ def assessor_acceptance_form(project_id, slot):
             ]
         }
         claim_payload["_submitted_by"] = str(current_user.id)
-        dossier_payload = {
-            key: payload.get(key, "")
-            for key in [
-                "project_title",
-                "student_name",
-                "student_number",
-                "student_initials_surname",
-                "current_degree_registered",
-                "qualification_description",
-                "supervisor_name",
-                "supervisor_department",
-                "supervisor_phone",
-                "supervisor_email",
-                "co_supervisor_name",
-                "co_supervisor_department",
-                "co_supervisor_phone",
-                "co_supervisor_email",
-                "slot_label",
-                "assessor_name",
-                "assessor_telephone_number",
-                "assessor_email",
-                "assessor_contact",
-                "assessor_affiliation",
-                "assessor_address",
-                "highest_qualification",
-                "students_supervised_total",
-                "current_university_affiliation",
-                "international_assessor",
-                "publication_count",
-                "supervisor_signature_name",
-                "supervisor_signature_date",
-                "hod_signature_name",
-                "hod_signature_date",
-                "executive_dean_signature_name",
-                "executive_dean_signature_date",
-                "assessor_profile_date",
-                "assessor_profile_declaration",
-            ]
-        }
-        dossier_payload["cv_filename"] = uploaded_cv.filename if uploaded_cv and uploaded_cv.filename else (existing_cv_doc.original_name if existing_cv_doc else "")
-        dossier_payload["_submitted_by"] = str(current_user.id)
-
+        refresh_saved_signature_snapshot(claim_payload, ("claim_signature_name",), current_user)
         status_before_submit = getattr(project, f"{slot}_invitation_status")
         try:
             _save_form_as_document(project, assessor_temp_appointment_doc_type(slot), assessor_temp_appointment_doc_type(slot), appointment_payload)
             _save_form_as_document(project, assessor_temp_claim_doc_type(slot), assessor_temp_claim_doc_type(slot), claim_payload)
-            _save_form_as_document(project, assessor_profile_doc_type(slot), assessor_profile_doc_type(slot), dossier_payload)
             if uploaded_cv and uploaded_cv.filename:
                 _store_project_document(project, assessor_cv_doc_type(slot), uploaded_cv)
             if uploaded_highest_qualification and uploaded_highest_qualification.filename:
@@ -2008,7 +2711,7 @@ def assessor_acceptance_form(project_id, slot):
             _sync_scholar_profile_from_assessor_payload(
                 {
                     **payload,
-                    "cv_filename": dossier_payload["cv_filename"],
+                    "cv_filename": uploaded_cv.filename if uploaded_cv and uploaded_cv.filename else (existing_cv_doc.original_name if existing_cv_doc else ""),
                 },
                 cv_uploaded=bool((uploaded_cv and uploaded_cv.filename) or existing_cv_doc),
             )
@@ -2016,7 +2719,7 @@ def assessor_acceptance_form(project_id, slot):
                 setattr(project, f"{slot}_invitation_status", INVITATION_ACCEPTED)
                 project.comments = append_comment(
                     project.comments,
-                    f"{slot_label} onboarding pack submitted and invitation accepted by {current_user.email}",
+                    f"{slot_label} acceptance documents submitted and invitation accepted by {current_user.email}",
                 )
                 if assessor_can_view_student_dissertation(project):
                     dissertation_doc = uploaded_doc_for(project, "dissertation")
@@ -2035,29 +2738,31 @@ def assessor_acceptance_form(project_id, slot):
                         if delivered_count or failed_count:
                             project.comments = append_comment(
                                 project.comments,
-                                f"Capstone Project release email after assessor acceptance pack: delivered={delivered_count}; failed={failed_count}",
+                                f"Capstone Project release email after assessor acceptance documents: delivered={delivered_count}; failed={failed_count}",
                             )
             else:
                 project.comments = append_comment(
                     project.comments,
-                    f"{slot_label} onboarding pack updated by {current_user.email}",
+                    f"{slot_label} acceptance documents updated by {current_user.email}",
                 )
+            refresh_external_examiner_nomination_if_ready(project)
+            refresh_additional_external_examiner_nomination_if_ready(project)
             db.session.commit()
         except Exception:
             current_app.logger.exception(
-                "Assessor acceptance pack submission failed for project %s slot %s user %s",
+                "Assessor acceptance documents submission failed for project %s slot %s user %s",
                 project.id,
                 slot,
                 current_user.id,
             )
             db.session.rollback()
-            flash("Assessor acceptance pack submission failed. Please try again.", "error")
+            flash("Assessor acceptance documents submission failed. Please try again.", "error")
             return _render_acceptance_form(payload)
 
         if status_before_submit == INVITATION_PENDING:
-            flash("Assessor acceptance pack, external examiner nomination form, and CV submitted. Invitation accepted.", "success")
+            flash("Assessor acceptance documents and CV submitted. Invitation accepted.", "success")
         else:
-            flash("Assessor acceptance pack, external examiner nomination form, and CV updated.", "success")
+            flash("Assessor acceptance documents and CV updated.", "success")
         return redirect(role_landing_url())
 
     return _render_acceptance_form(prefill)
@@ -2083,7 +2788,7 @@ def assessor_grade_form(project_id, slot):
         return redirect(role_landing_url())
 
     if not assessor_can_view_student_dissertation(project):
-        flash("Assessor pack submission opens after MBA Admin releases the Capstone Manuscript to assessors.", "error")
+        flash("Assessor result submission opens after MBA Admin releases the Capstone Manuscript to assessors.", "error")
         return redirect(role_landing_url())
 
     if project.project_status not in {
@@ -2091,16 +2796,16 @@ def assessor_grade_form(project_id, slot):
         ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value,
         ProjectStatus.RESULTS_DECLINED.value,
     }:
-        flash("Assessor pack submission opens after HDC verifies the assessor nominations.", "error")
+        flash("Assessor result submission opens after HDC verifies the assessor nominations.", "error")
         return redirect(role_landing_url())
 
-    if assessment_result_pack_complete(project, slot):
+    if assessment_result_submitted(project, slot):
         flash("Assessment results have already been submitted and can no longer be edited.", "info")
         return redirect(role_landing_url())
 
     form_type = assessment_doc_type(slot)
     report_form_type = assessor_report_doc_type(slot)
-    narrative_form_type = assessor_narrative_doc_type(slot)
+    detailed_report_doc_type = assessor_detailed_report_doc_type(slot)
     appointment_form_type = assessor_temp_appointment_doc_type(slot)
     claim_form_type = assessor_temp_claim_doc_type(slot)
     profile = getattr(current_user, "scholar_profile", None)
@@ -2124,6 +2829,13 @@ def assessor_grade_form(project_id, slot):
         "Major revisions and re-examination by the same assessor",
         "Outright rejection",
     ]
+    recommendation_answer_fields = [
+        ("recommendation_accept_as_stands", recommendation_options[0]),
+        ("recommendation_minor_revisions", recommendation_options[1]),
+        ("recommendation_major_revisions", recommendation_options[2]),
+        ("recommendation_reexamination", recommendation_options[3]),
+        ("recommendation_outright_rejection", recommendation_options[4]),
+    ]
     yes_no_options = ["Yes", "No"]
 
     prefill = {
@@ -2145,7 +2857,7 @@ def assessor_grade_form(project_id, slot):
         "assessor_signature_name": assessor_display_name,
         "certification_date": datetime.utcnow().strftime("%Y-%m-%d"),
     }
-    for saved_form_type in [appointment_form_type, claim_form_type, form_type, report_form_type, narrative_form_type]:
+    for saved_form_type in [appointment_form_type, claim_form_type, form_type, report_form_type]:
         saved_form = MbaForm.query.filter_by(project_id=project.id, form_type=saved_form_type).first()
         if (
             saved_form
@@ -2156,6 +2868,7 @@ def assessor_grade_form(project_id, slot):
             )
         ):
             prefill.update(saved_form.payload)
+    apply_saved_signature_snapshot(prefill, ("assessor_signature_name",), current_user)
 
     template = "mba/form_fill_assessor_grade.html"
 
@@ -2168,6 +2881,7 @@ def assessor_grade_form(project_id, slot):
             slot_label=slot_label,
             recommendation_options=recommendation_options,
             yes_no_options=yes_no_options,
+            detailed_report_doc=uploaded_doc_for(project, detailed_report_doc_type),
         )
 
     if request.method == "POST":
@@ -2182,6 +2896,32 @@ def assessor_grade_form(project_id, slot):
             for key in request.form
             if key not in {"csrf_token", "_csrf_token"}
         }
+        detailed_report_file = request.files.get("detailed_report_file")
+        detailed_report_file_selected = bool(detailed_report_file and detailed_report_file.filename)
+        existing_detailed_report_doc = uploaded_doc_for(project, detailed_report_doc_type)
+        detailed_report_file_error = _validate_optional_assessor_detailed_report(detailed_report_file)
+        if detailed_report_file_error:
+            flash(detailed_report_file_error, "error")
+            return _render_grade_form(payload)
+
+        if any(field in payload for field, _label in recommendation_answer_fields):
+            unanswered_recommendations = [
+                label
+                for field, label in recommendation_answer_fields
+                if payload.get(field) not in {"yes", "no"}
+            ]
+            selected_recommendations = [
+                label
+                for field, label in recommendation_answer_fields
+                if payload.get(field) == "yes"
+            ]
+            if unanswered_recommendations:
+                flash("Please tick YES or NO for every examiner recommendation question.", "error")
+                return _render_grade_form(payload)
+            if len(selected_recommendations) > 1:
+                flash("Please tick YES for only one examiner recommendation outcome.", "error")
+                return _render_grade_form(payload)
+            payload["recommendation"] = selected_recommendations[0] if selected_recommendations else ""
 
         try:
             grade_val = int(payload.get("grade", ""))
@@ -2204,7 +2944,6 @@ def assessor_grade_form(project_id, slot):
             "assessor_email": "Assessor email address is required.",
             "assessor_contact": "Assessor contact number is required.",
             "consent_name_disclosure": "Choose whether your name may be divulged to a successful candidate.",
-            "written_assessment": "The examiner's detailed report is required.",
             "assessor_signature_name": "External assessor signature / full name is required.",
             "certification_date": "Date is required.",
         }
@@ -2213,8 +2952,8 @@ def assessor_grade_form(project_id, slot):
                 flash(message, "error")
                 return _render_grade_form(payload)
 
-        if not request.form.get("declaration"):
-            flash("You must confirm the declaration before submitting.", "error")
+        if not payload.get("written_assessment") and not detailed_report_file_selected and not existing_detailed_report_doc:
+            flash("Enter the examiner's detailed report or upload it as a separate document.", "error")
             return _render_grade_form(payload)
 
         assessment_payload = {
@@ -2231,10 +2970,8 @@ def assessor_grade_form(project_id, slot):
             "written_assessment": payload.get("written_assessment", ""),
             "assessor_signature_name": payload.get("assessor_signature_name", ""),
             "certification_date": payload.get("certification_date", ""),
-            "declaration": payload.get("declaration", ""),
         }
-        report_payload = dict(assessment_payload)
-        narrative_payload = dict(assessment_payload)
+        refresh_saved_signature_snapshot(assessment_payload, ("assessor_signature_name",), current_user)
         assessment_requests_corrections = recommendation_requests_corrections(
             assessment_payload.get("recommendation")
         )
@@ -2247,9 +2984,18 @@ def assessor_grade_form(project_id, slot):
         )
 
         try:
-            _save_form_as_document(project, form_type, form_type, assessment_payload)
+            detailed_report_doc = None
+            if detailed_report_file_selected:
+                detailed_report_doc = _store_project_document(project, detailed_report_doc_type, detailed_report_file)
+            elif existing_detailed_report_doc:
+                detailed_report_doc = existing_detailed_report_doc
+            if detailed_report_doc:
+                assessment_payload["detailed_report_doc_type"] = detailed_report_doc.doc_type
+                assessment_payload["detailed_report_filename"] = detailed_report_doc.original_name
+            report_payload = dict(assessment_payload)
+            _save_form_payload(project, form_type, assessment_payload)
             _save_form_as_document(project, report_form_type, report_form_type, report_payload)
-            _save_form_as_document(project, narrative_form_type, narrative_form_type, narrative_payload)
+            _prune_obsolete_assessment_documents(project)
             db.session.flush()
             if primary_assessment_conflict_detected(project):
                 activate_additional_assessment(project)
@@ -2259,7 +3005,8 @@ def assessor_grade_form(project_id, slot):
             elif not project_correction_requests(project):
                 clear_project_corrections(project)
             if all_assessment_results_received(project):
-                project.comments = append_comment(project.comments, "All assessor submission packs received.")
+                refresh_assessment_summary_if_ready(project)
+                project.comments = append_comment(project.comments, "All assessor reports received. Assessment summary generated.")
             db.session.commit()
         except Exception:
             current_app.logger.exception(
@@ -2281,11 +3028,12 @@ def assessor_grade_form(project_id, slot):
                         "slot_label": slot_label,
                         "assessor_name": assessment_payload.get("assessor_name", ""),
                         "recommendation": assessment_payload.get("recommendation", ""),
+                        "detailed_report_filename": assessment_payload.get("detailed_report_filename", ""),
                     },
                 )
             )
 
-        flash(f"Grade and capstone assessor forms submitted for {slot_label}.", "success")
+        flash(f"Grade and capstone assessor report submitted for {slot_label}.", "success")
         return redirect(role_landing_url())
 
     return _render_grade_form(prefill)

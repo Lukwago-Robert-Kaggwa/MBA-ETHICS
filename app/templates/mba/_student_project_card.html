@@ -7,7 +7,8 @@
 {% set intent_docs = project.documents | selectattr('doc_type', 'equalto', 'intent_to_submit') | list %}
 {% set jbs1_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
 {% set plagiarism_docs = project.documents | selectattr('doc_type', 'equalto', 'plagiarism_declaration') | list %}
-{% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit') | list %}
+{% set affidavit_form = project.forms | selectattr('form_type', 'equalto', 'affidavit') | list | first %}
+{% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit_stamped') | list %}
 {% set dissertation_docs = project.documents | selectattr('doc_type', 'equalto', 'dissertation') | list %}
 {% set global_document_docs = project.documents | selectattr('doc_type', 'equalto', 'global_document') | list %}
 {% set combined_turnitin_ai_report_docs = project.documents | selectattr('doc_type', 'equalto', 'combined_turnitin_ai_report') | list %}
@@ -88,7 +89,11 @@
         {% elif not plagiarism_docs %}
           Complete the Combined Plagiarism, Turnitin and AI Declaration.
         {% elif not affidavit_docs %}
-          Complete the JBS 2 Affidavit.
+          {% if affidavit_form %}
+            Download the JBS 2 Affidavit, obtain the Commissioner of Oaths stamp/signature, then upload the stamped PDF.
+          {% else %}
+            Complete the JBS 2 Affidavit.
+          {% endif %}
         {% endif %}
       {% elif not student_support_docs_complete %}
         Upload the Global Document and combined Turnitin-AI report here. Submit the Capstone Manuscript through Moodle.

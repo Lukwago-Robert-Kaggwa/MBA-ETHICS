@@ -9,9 +9,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ethics-shell.css', v=asset_version('css/ethics-shell.css')) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=asset_version('css/app.css')) }}">
   </head>
-  <body class="ethics-app-shell">
+  {% set public_page = public_page|default(false) %}
+  <body class="ethics-app-shell{% if public_page %} ethics-app-shell--public{% endif %}">
     <a href="#main-content" class="skip-link">Skip to main content</a>
-    <div class="ethics-layout">
+    <div class="ethics-layout{% if public_page %} ethics-layout--public{% endif %}">
+      {% if not public_page %}
       <aside class="ethics-sidebar" aria-label="Primary navigation">
         <div class="ethics-sidebar__brand">
           <div class="ethics-sidebar__mark" aria-hidden="true">JBS</div>
@@ -199,8 +201,10 @@
           {% endif %}
         </div>
       </aside>
+      {% endif %}
 
-      <main class="ethics-main" id="main-content" tabindex="-1">
+      <main class="ethics-main{% if public_page %} ethics-main--public{% endif %}" id="main-content" tabindex="-1">
+        {% if not public_page %}
         {% set topbar_reminders_nav = mba_reminders_nav() if current_user.is_authenticated and current_user.system_name == 'mba' and current_user.role in ['admin', 'main_admin'] else none %}
         <header class="ethics-topbar">
           <form class="ethics-topbar__search" method="get" action="{{ request.path }}" role="search">
@@ -242,6 +246,7 @@
             {% endif %}
           </div>
         </header>
+        {% endif %}
 
         <section class="page-title-block">
           <h1>{% block page_heading %}Dashboard{% endblock %}</h1>

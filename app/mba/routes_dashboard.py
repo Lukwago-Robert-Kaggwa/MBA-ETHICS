@@ -1,4 +1,4 @@
-from flask import flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
@@ -81,12 +81,46 @@ def _change_current_user_password():
     return True
 
 
+@mba_bp.route("/profile/signature-image")
+@login_required
+def profile_signature_image():
+    if not require_mba_user():
+        abort(403)
+    path = user_signature_path(current_user)
+    if not path:
+        abort(404)
+    response = send_file(path, mimetype=user_signature_mime_type(current_user))
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
 @mba_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     if not require_mba_user():
         return redirect(url_for("auth.login"))
     is_student = current_user.role == MbaRole.STUDENT.value
+    if request.method == "POST" and request.form.get("action") == "save_signature":
+        try:
+            save_user_signature(
+                current_user,
+                uploaded_file=request.files.get("signature_file"),
+                signature_data=request.form.get("signature_data"),
+            )
+            db.session.commit()
+            flash("Your saved signature has been updated.", "success")
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+        except Exception:
+            db.session.rollback()
+            flash("Your signature could not be saved. Please try again.", "error")
+        return redirect(url_for("mba.profile"))
+    if request.method == "POST" and request.form.get("action") == "delete_signature":
+        delete_user_signature(current_user)
+        db.session.commit()
+        flash("Your saved signature has been removed.", "success")
+        return redirect(url_for("mba.profile"))
     if request.method == "POST" and request.form.get("action") == "change_password":
         _change_current_user_password()
         return redirect(url_for("mba.profile"))
@@ -177,7 +211,23 @@ def profile():
                 db.session.commit()
                 flash("Your staff profile has been saved.", "success")
                 return redirect(url_for("mba.profile"))
-    return render_template("mba/profile.html", profile=profile, is_student=is_student, role_label=profile_role_label(current_user))
+    signature_path = user_signature_path(current_user)
+    signature_preview_url = ""
+    if signature_path:
+        try:
+            signature_preview_url = url_for(
+                "mba.profile_signature_image",
+                v=int(signature_path.stat().st_mtime),
+            )
+        except OSError:
+            signature_preview_url = url_for("mba.profile_signature_image")
+    return render_template(
+        "mba/profile.html",
+        profile=profile,
+        is_student=is_student,
+        role_label=profile_role_label(current_user),
+        signature_preview_url=signature_preview_url,
+    )
 
 
 @mba_bp.route("/student-dashboard")
@@ -457,6 +507,7 @@ def scholar_dashboard():
         assessor_can_view_project_documents=assessor_can_view_project_documents,
         assessor_can_view_student_dissertation=assessor_can_view_student_dissertation,
         assessment_doc_type=assessment_doc_type,
+        assessor_report_doc_type=assessor_report_doc_type,
         assessor_profile_doc_type=assessor_profile_doc_type,
         assessor_cv_doc_type=assessor_cv_doc_type,
         assessor_highest_qualification_doc_type=assessor_highest_qualification_doc_type,
@@ -481,11 +532,16 @@ def scholar_dashboard():
         project_corrections_status=project_corrections_status,
         corrections_status_label=corrections_status_label,
         assessment_results_forwarded_to_supervisor=assessment_results_forwarded_to_supervisor,
+        assessment_summary_supervisor_signed=assessment_summary_supervisor_signed,
+        assessment_summary_supervisor_signing_block_reason=assessment_summary_supervisor_signing_block_reason,
         results_released_to_supervisor=results_released_to_supervisor,
+        assessment_result_submitted=assessment_result_submitted,
         assessment_result_pack_complete=assessment_result_pack_complete,
         additional_assessment_required=additional_assessment_required,
         additional_assessment_stage=additional_assessment_stage,
         additional_assessment_status_label=additional_assessment_status_label,
+        external_examiner_nomination_doc_type=external_examiner_nomination_doc_type,
+        external_examiner_nomination_supervisor_signed=external_examiner_nomination_supervisor_signed,
     )
 
 
@@ -600,6 +656,8 @@ def scholar_corrections():
         project_status_badge_class=public_project_status_badge_class,
         assessment_results_forwarded_to_supervisor=assessment_results_forwarded_to_supervisor,
         corrections_released_to_student=corrections_released_to_student,
+        assessment_summary_supervisor_signed=assessment_summary_supervisor_signed,
+        assessment_summary_supervisor_signing_block_reason=assessment_summary_supervisor_signing_block_reason,
         kpis=mba_kpis(),
     )
 
@@ -644,6 +702,7 @@ def examiner_dashboard():
         assessor_can_view_project_documents=assessor_can_view_project_documents,
         assessor_can_view_student_dissertation=assessor_can_view_student_dissertation,
         assessment_doc_type=assessment_doc_type,
+        assessor_report_doc_type=assessor_report_doc_type,
         assessor_profile_doc_type=assessor_profile_doc_type,
         assessor_cv_doc_type=assessor_cv_doc_type,
         assessor_highest_qualification_doc_type=assessor_highest_qualification_doc_type,
@@ -654,6 +713,7 @@ def examiner_dashboard():
         kpis=mba_kpis(),
         project_status_label=public_project_status_label,
         project_status_badge_class=public_project_status_badge_class,
+        assessment_result_submitted=assessment_result_submitted,
         assessment_result_pack_complete=assessment_result_pack_complete,
         additional_assessment_required=additional_assessment_required,
         additional_assessment_stage=additional_assessment_stage,
@@ -852,5 +912,6 @@ def hdc_dashboard():
         project_status_label=project_status_label,
         assessor_hdc_decision=assessor_hdc_decision,
         assessor_hdc_decision_label=assessor_hdc_decision_label,
+        external_examiner_nomination_supervisor_signed=external_examiner_nomination_supervisor_signed,
     )
 

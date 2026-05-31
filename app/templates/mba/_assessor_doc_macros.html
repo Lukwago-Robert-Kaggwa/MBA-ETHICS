@@ -1,0 +1,97 @@
+{% macro appointment_approval_tables() -%}
+  <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+    <tr>
+      <th colspan="3">PRIMARY LINE MANAGER (Final approver can be the Line Manager, Head of Department, Vice-Dean, Executive Dean, Executive Director or Senior Director)</th>
+    </tr>
+    <tr>
+      <td><input class="mba-doc-input" value="Prof Adri Drotskie, Academic Director" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Full name and Surname [Please print]</td>
+      <td class="mba-doc-label">Signature</td>
+      <td class="mba-doc-label">Date</td>
+    </tr>
+  </table>
+
+  <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+    <tr>
+      <th colspan="3">HUMAN CAPITAL MANAGEMENT BUSINESS PARTNER (I confirm that due process was followed as per the Temporary / Fixed Term Appointment Policy)</th>
+    </tr>
+    <tr>
+      <td><input class="mba-doc-input" value="NONE" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Full name and Surname [Please print]</td>
+      <td class="mba-doc-label">Signature</td>
+      <td class="mba-doc-label">Date</td>
+    </tr>
+  </table>
+
+  <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+    <tr>
+      <th colspan="3">SECONDARY LINE MANAGER (Final approver can be the Line Manager, Head of Department, Vice-Dean, Executive Dean, Executive Director or Senior Director)</th>
+    </tr>
+    <tr>
+      <td><input class="mba-doc-input" value="Prof Alistair Mokoena, Dean" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Full name and Surname [Please print]</td>
+      <td class="mba-doc-label">Signature</td>
+      <td class="mba-doc-label">Date</td>
+    </tr>
+  </table>
+{%- endmacro %}
+
+{% macro claim_approval_tables(prefill) -%}
+  <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+    <tr>
+      <th colspan="3">PRIMARY LINE MANAGER (Final approver can be the Line Manager, Head of Department, Vice-Dean, Executive Dean, Executive Director or Senior Director)</th>
+    </tr>
+    <tr>
+      <td><input class="mba-doc-input" value="Prof Adri Drotskie, Academic Director" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Full name and Surname[Please print]</td>
+      <td class="mba-doc-label">Signature</td>
+      <td class="mba-doc-label">Date</td>
+    </tr>
+  </table>
+
+  <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+    <tr>
+      <th colspan="3">SECONDARY LINE MANAGER (Final approver can be the Line Manager, Head of Department, Vice-Dean, Executive Dean, Executive Director or Senior Director)</th>
+    </tr>
+    <tr>
+      <td><input class="mba-doc-input" value="Prof Alistair Mokoena, Dean" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+      <td><input class="mba-doc-input" value="" readonly></td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Full name and Surname[Please print]</td>
+      <td class="mba-doc-label">Signature</td>
+      <td class="mba-doc-label">Date</td>
+    </tr>
+  </table>
+
+  <table class="mba-doc-table assessor-doc-table">
+    <tr>
+      <th class="mba-doc-section-title">IF ANY NEW CONFLICT(S) OF INTEREST OR THOSE PREVIOUSLY NOT DISCLOSED, PLEASE DESCRIBE FULLY:</th>
+    </tr>
+    <tr>
+      <td><textarea class="mba-doc-textarea" rows="3" readonly>{{ prefill.get('conflict_of_interest_details') or 'NONE' }}</textarea></td>
+    </tr>
+    <tr>
+      <td class="mba-doc-note">
+        From 1 January 2022, the UJ is a COVID-19 mandatory vaccination site. It will be mandatory for all employees, requiring access to UJ campuses and premises, to be vaccinated.
+      </td>
+    </tr>
+  </table>
+{%- endmacro %}

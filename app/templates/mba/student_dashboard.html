@@ -187,7 +187,8 @@
               {% set intent_docs = project.documents | selectattr('doc_type', 'equalto', 'intent_to_submit') | list %}
               {% set jbs1_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
               {% set plagiarism_docs = project.documents | selectattr('doc_type', 'equalto', 'plagiarism_declaration') | list %}
-              {% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit') | list %}
+              {% set affidavit_form = project.forms | selectattr('form_type', 'equalto', 'affidavit') | list | first %}
+              {% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit_stamped') | list %}
               {% set dissertation_docs = project.documents | selectattr('doc_type', 'equalto', 'dissertation') | list %}
               {% set global_document_docs = project.documents | selectattr('doc_type', 'equalto', 'global_document') | list %}
               {% set combined_turnitin_ai_report_docs = project.documents | selectattr('doc_type', 'equalto', 'combined_turnitin_ai_report') | list %}
@@ -306,7 +307,7 @@
                         Do not upload the Capstone Manuscript in this MBA system.</p>
                     </div>
                   {% endif %}
-                  {% for doc_key, doc_info in [('jbs1_declaration', 'JBS 1 Declaration'), ('plagiarism_declaration', 'Combined Plagiarism, Turnitin and AI Declaration'), ('affidavit', 'JBS 2 Affidavit')] %}
+                  {% for doc_key, doc_info in [('jbs1_declaration', 'JBS 1 Declaration'), ('plagiarism_declaration', 'Combined Plagiarism, Turnitin and AI Declaration')] %}
                     <div class="form-download-row">
                       <div class="form-download-info">
                         <strong>{{ doc_info }}</strong>
@@ -326,6 +327,42 @@
                       <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
                     </div>
                   {% endfor %}
+
+                  <div class="form-download-row">
+                    <div class="form-download-info">
+                      <strong>JBS 2 Affidavit</strong>
+                      {% if affidavit_form and not affidavit_docs %}
+                        <p class="muted" style="margin:0.35rem 0 0;font-size:0.86rem;">
+                          Download the generated affidavit, obtain the Commissioner of Oaths stamp/signature, then upload the stamped PDF here for official submission.
+                        </p>
+                      {% endif %}
+                    </div>
+                    {% if affidavit_docs %}
+                      <div class="uploaded-files">
+                        <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Stamped copy uploaded</span>
+                        {% for uploaded in affidavit_docs %}
+                          <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                            <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
+                            &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
+                          </span>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                    {% if affidavit_form %}
+                      <a href="{{ url_for('mba.download_generated_project_form', project_id=project.id, form_type='affidavit') }}" class="secondary-button small-button" style="display:inline-block;margin-top:0.5rem;">Download for Stamping</a>
+                    {% endif %}
+                    <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='affidavit') }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if affidavit_form %}Edit Affidavit Details{% else %}Fill Form{% endif %}</a>
+                    {% if affidavit_form %}
+                      <form action="{{ url_for('mba.upload_project_form', project_id=project.id) }}" method="post" enctype="multipart/form-data" class="upload-form" style="margin-top:0.5rem;">
+                        <input type="hidden" name="doc_type" value="affidavit_stamped">
+                        <label class="upload-label">
+                          {{ 'Update Stamped PDF' if affidavit_docs else 'Upload Stamped PDF' }}
+                          <input type="file" name="form_file" accept=".pdf" required>
+                        </label>
+                        <button type="submit" class="primary-button small-button">{{ 'Update' if affidavit_docs else 'Upload' }}</button>
+                      </form>
+                    {% endif %}
+                  </div>
 
                   <hr style="margin:1.5rem 0;">
                   <section class="dissertation-pack-panel">
@@ -381,7 +418,7 @@
                       {% endfor %}
                     {% else %}
                       <p class="muted dissertation-pack-note">
-                        Complete JBS 1 Declaration, the combined plagiarism declaration, and JBS 2 Affidavit to unlock supporting document uploads.
+                        Complete JBS 1 Declaration, the combined plagiarism declaration, and upload the stamped JBS 2 Affidavit to unlock supporting document uploads.
                       </p>
                     {% endif %}
                   </section>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "mba/_assessor_doc_macros.html" as assessor_doc %}
 {% block title %}Temporary Appointment Form - {{ slot_label }}{% endblock %}
 {% block app_name %}MBA{% endblock %}
 {% block page_heading %}Temporary Appointment Form{% endblock %}
@@ -15,7 +16,7 @@
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel">
-    <div class="mba-doc-paper">
+    <div class="mba-doc-paper mba-doc-paper--assessor">
       <div class="mba-doc-header mba-doc-header--centered">
         <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
         <div class="mba-doc-title-stack">
@@ -27,8 +28,8 @@
         </div>
       </div>
 
-      <div class="mba-doc-form">
-        <table class="mba-doc-table">
+      <div class="mba-doc-form assessor-doc-form">
+        <table class="mba-doc-table assessor-doc-table">
           <colgroup>
             <col style="width:19%;">
             <col style="width:11%;">
@@ -68,7 +69,7 @@
           </tr>
         </table>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table assessor-doc-table">
           <tr>
             <th class="mba-doc-section-title" colspan="4">Personal Particulars of Employee</th>
           </tr>
@@ -141,6 +142,10 @@
             <td><input class="mba-doc-input" value="{{ prefill.get('income_tax_number','') }}" readonly></td>
           </tr>
           <tr>
+            <td class="mba-doc-label">Confirm Care of Intermediary</td>
+            <td colspan="3"><input class="mba-doc-input" value="{{ prefill.get('care_of_intermediary','None') }}" readonly></td>
+          </tr>
+          <tr>
             <td class="mba-doc-label">Cell / Mobile Number</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('assessor_contact','') }}" readonly></td>
             <td class="mba-doc-label">Email Address</td>
@@ -190,7 +195,7 @@
           </tr>
         </table>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table assessor-doc-table">
           <tr>
             <th class="mba-doc-section-title" colspan="4">Qualification and Banking Details</th>
           </tr>
@@ -253,7 +258,7 @@
           </tr>
         </table>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table assessor-doc-table">
           <tr>
             <th class="mba-doc-section-title" colspan="4">Temporary Appointment Details</th>
           </tr>
@@ -318,7 +323,7 @@
           </tr>
         </table>
 
-        <table class="mba-doc-table mba-doc-table--tight">
+        <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
           <tr>
             <th colspan="3">EMPLOYEE</th>
           </tr>
@@ -328,16 +333,20 @@
             <td class="mba-doc-label">Date</td>
           </tr>
           <tr>
-            <td><input class="mba-doc-input" value="{{ prefill.get('employee_signature_name','') }}" readonly></td>
+            <td>
+              <div class="mba-doc-signature-field">
+                {% if prefill.get('employee_signature_name_image') %}
+                  <img class="mba-doc-signature-image" src="{{ prefill.get('employee_signature_name_image') }}" alt="Saved signature">
+                {% endif %}
+                <input class="mba-doc-input" value="{{ prefill.get('employee_signature_name','') }}" readonly>
+              </div>
+            </td>
             <td><input class="mba-doc-input" value="{{ prefill.get('employee_signature_name','') }}" readonly></td>
             <td><input class="mba-doc-input" type="date" value="{{ prefill.get('employee_signature_date','') }}" readonly></td>
           </tr>
         </table>
 
-        <div class="mba-doc-muted-box">
-          <p class="mba-doc-note" style="font-weight:700;color:#111827;margin-bottom:6px;">Office Sign-off</p>
-          <p class="mba-doc-note">Primary line manager, Human Capital Management business partner, and secondary line manager sections are completed outside this assessor submission step.</p>
-        </div>
+        {{ assessor_doc.appointment_approval_tables() }}
 
         <label class="mba-doc-checkline">
           <span>I confirm the temporary appointment information above is complete and accurate.</span>

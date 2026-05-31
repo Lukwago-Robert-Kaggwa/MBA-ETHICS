@@ -52,6 +52,9 @@
         {% set corrected_doc = uploaded_doc_for(project, 'corrected_dissertation') %}
         {% set response_doc = uploaded_doc_for(project, 'corrections_response') %}
         {% set turnitin_doc = uploaded_doc_for(project, 'corrections_turnitin_report') %}
+        {% set assessment_summary_signed = assessment_summary_supervisor_signed(project) if assessment_summary_supervisor_signed is defined else false %}
+        {% set assessment_summary_sign_reason = assessment_summary_supervisor_signing_block_reason(project) if assessment_summary_supervisor_signing_block_reason is defined else '' %}
+        {% set can_sign_assessment_summary = not assessment_summary_signed and not assessment_summary_sign_reason %}
         {% set student_number_value = project.student.student_profile.student_number if project.student and project.student.student_profile and project.student.student_profile.student_number else 'Not captured' %}
         {% call project_disclosure(project, 'project-disclosure--supervisor') %}
         <article class="record-card">
@@ -90,7 +93,7 @@
           <details class="response-section" open>
             <summary>Assessment Documents</summary>
             <div class="invite-list invite-list--documents" style="margin-top:0.5rem;">
-              {% for doc in project.documents if doc.doc_type.startswith('assessment_result_') or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_narrative_') %}
+              {% for doc in project.documents if doc.doc_type == 'assessment_summary' or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_detailed_report_') %}
                 <div class="invite-row invite-row--document scholar-assessment-doc-row">
                   <div class="scholar-assessment-doc-copy">
                     <strong>{{ document_label(doc.doc_type) }}</strong>
@@ -98,7 +101,7 @@
                   </div>
                   <div class="inline-action scholar-assessment-doc-actions">
                     <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">View</a>
-                    <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">Download</a>
+                    <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=doc.id) }}" class="secondary-button small-button">{{ 'Download Word' if doc.doc_type == 'assessment_summary' or doc.doc_type.startswith('assessor_report_') else 'Download' }}</a>
                   </div>
                 </div>
               {% else %}
@@ -111,7 +114,7 @@
             <section class="response-section">
               <strong>Release Comments to Student</strong>
               <p class="muted" style="margin:0.5rem 0 0.75rem;">
-                Release the assessment summary and assessor comments to the student so they can complete the Response to Assessors' Comments form.
+                Release the assessor comments and any separate detailed assessor reports to the student so they can complete the Response to Assessors' Comments form.
               </p>
               <form action="{{ url_for('mba.supervisor_release_corrections', project_id=project.id) }}" method="post" class="inline-action">
                 <button class="primary-button small-button" type="submit">Release Comments</button>
@@ -191,6 +194,15 @@
             {% if project.corrections_supervisor_comments %}
               <p class="muted" style="margin-top:0.35rem;white-space:pre-wrap;">{{ project.corrections_supervisor_comments }}</p>
             {% endif %}
+            <div class="inline-action" style="margin-top:0.75rem;">
+              {% if assessment_summary_signed %}
+                <span class="muted" style="display:inline-flex;align-items:center;">Assessment summary signed.</span>
+              {% elif can_sign_assessment_summary %}
+                <a href="{{ url_for('mba.supervisor_sign_assessment_summary', project_id=project.id) }}" class="primary-button small-button">Sign Assessment Summary</a>
+              {% elif assessment_summary_sign_reason %}
+                <span class="muted" style="display:inline-flex;align-items:center;">{{ assessment_summary_sign_reason }}</span>
+              {% endif %}
+            </div>
           {% elif correction_status_value == 'rejected_by_supervisor' %}
             <p style="margin-top:0.75rem;color:var(--danger,#b91c1c);font-weight:700;">
               Corrections returned to the student{% if project.corrections_supervisor_rejected_at %} on {{ project.corrections_supervisor_rejected_at.strftime('%d %b %Y %H:%M') }}{% endif %}. Waiting for resubmission.

@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Amended External Examiner Nomination Form{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Amended External Examiner Nomination Form{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+{% set hdc_signature_mode = hdc_signature_mode|default(false) %}
+{% set active_form_type = form_type|default(prefill.get('_doc_type', 'external_examiner_nomination')) %}
+
+{% macro readonly_input(value) -%}
+  <input class="mba-doc-input" value="{{ value or '' }}" readonly>
+{%- endmacro %}
+
+{% macro readonly_textarea(value, rows=3) -%}
+  <textarea class="mba-doc-textarea" rows="{{ rows }}" readonly>{{ value or '' }}</textarea>
+{%- endmacro %}
+
+{% macro hdc_signature_input(name, value, type='text') -%}
+  <div class="mba-doc-signature-field">
+    {% if prefill.get(name ~ '_image') %}
+      <img class="mba-doc-signature-image" src="{{ prefill.get(name ~ '_image') }}" alt="Saved signature">
+    {% endif %}
+    <input class="mba-doc-input" type="{{ type }}" name="{{ name }}" value="{{ value or '' }}" {% if hdc_signature_mode %}required{% else %}readonly{% endif %}>
+  </div>
+{%- endmacro %}
+
+{% macro readonly_signature_input(name, value) -%}
+  <div class="mba-doc-signature-field">
+    {% if prefill.get(name ~ '_image') %}
+      <img class="mba-doc-signature-image" src="{{ prefill.get(name ~ '_image') }}" alt="Saved signature">
+    {% endif %}
+    <input class="mba-doc-input" value="{{ value or '' }}" readonly>
+  </div>
+{%- endmacro %}
+
+{% macro assessor_section(prefix, heading) -%}
+  <table class="mba-doc-table assessor-doc-table">
+    <colgroup>
+      <col style="width:28%;">
+      <col style="width:72%;">
+    </colgroup>
+    <tr>
+      <th class="mba-doc-section-title" colspan="2">{{ heading }}</th>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Full name</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_name')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Qualification</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_qualification')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Affiliation</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_affiliation')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Street Address</td>
+      <td>{{ readonly_textarea(prefill.get(prefix ~ '_address'), 3) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Telephone number</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_telephone')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Cell number</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_cell')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Email address</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_email')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Postgraduate students supervised to completion</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_students_supervised')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Current affiliation with a university</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_current_university_affiliation')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">Approximate number of publications</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_publication_count')) }}</td>
+    </tr>
+    <tr>
+      <td class="mba-doc-label">International assessor</td>
+      <td>{{ readonly_input(prefill.get(prefix ~ '_international')) }}</td>
+    </tr>
+  </table>
+{%- endmacro %}
+
+{% block body %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    {% if hdc_signature_mode %}
+    <form action="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type=active_form_type) }}" method="post" class="mba-doc-paper mba-doc-paper--assessor">
+    {% else %}
+    <div class="mba-doc-paper mba-doc-paper--assessor">
+    {% endif %}
+      <div class="mba-doc-form assessor-doc-form">
+        <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+          <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+        </div>
+        <div style="text-align:center;margin-top:-4px;">
+          <div style="font-weight:700;font-size:1rem;">UNIVERSITY OF JOHANNESBURG</div>
+          <div style="margin-top:0.25rem;">Johannesburg Business School</div>
+          <div style="margin-top:0.75rem;font-weight:700;font-size:1.05rem;">NOMINATION OF ASSESSORS</div>
+          <div style="margin-top:0.45rem;font-weight:700;text-decoration:underline;">*Please note that all the information must be typed in sentence case</div>
+          <div style="margin-top:0.35rem;">The supervisor is requested to complete all sections electronically.</div>
+        </div>
+
+        <table class="mba-doc-table assessor-doc-table" style="margin-top:1rem;">
+          <colgroup>
+            <col style="width:24%;">
+            <col style="width:26%;">
+            <col style="width:22%;">
+            <col style="width:28%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">INITIALS AND SURNAME</td>
+            <td>{{ readonly_input(prefill.get('student_initials_surname')) }}</td>
+            <td class="mba-doc-label">STUDENT NUMBER</td>
+            <td>{{ readonly_input(prefill.get('student_number')) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">CURRENT DEGREE REGISTERED FOR</td>
+            <td colspan="3">{{ readonly_input(prefill.get('current_degree_registered')) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">QUALIFICATION</td>
+            <td colspan="3">{{ readonly_input(prefill.get('qualification_description')) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">FINAL TITLE ON SUBMISSION</td>
+            <td colspan="3">{{ readonly_textarea(prefill.get('project_title', project.project_title), 3) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">SUPERVISOR</td>
+            <td>{{ readonly_input(prefill.get('supervisor_name')) }}</td>
+            <td class="mba-doc-label">DEPARTMENT</td>
+            <td>{{ readonly_input(prefill.get('supervisor_department')) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">PHONE/CELL PHONE</td>
+            <td>{{ readonly_input(prefill.get('supervisor_phone')) }}</td>
+            <td class="mba-doc-label">EMAIL ADDRESS</td>
+            <td>{{ readonly_input(prefill.get('supervisor_email')) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">CO-SUPERVISOR</td>
+            <td>{{ readonly_input(prefill.get('co_supervisor_name')) }}</td>
+            <td class="mba-doc-label">DEPARTMENT</td>
+            <td>{{ readonly_input(prefill.get('co_supervisor_department')) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">PHONE/CELL PHONE</td>
+            <td>{{ readonly_input(prefill.get('co_supervisor_phone')) }}</td>
+            <td class="mba-doc-label">EMAIL ADDRESS</td>
+            <td>{{ readonly_input(prefill.get('co_supervisor_email')) }}</td>
+          </tr>
+        </table>
+
+        <p class="mba-doc-note" style="margin:0.85rem 0 0.45rem;">
+          <strong>*Attached:</strong> A comprehensive curriculum vitae of the assessors.
+        </p>
+
+        {{ assessor_section('assessor_1', 'ASSESSOR ONE') }}
+        {{ assessor_section('assessor_2', 'ASSESSOR TWO') }}
+        {% if prefill.get('standby_name') %}
+          {{ assessor_section('standby', 'STANDBY ASSESSOR') }}
+        {% endif %}
+
+        <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+          <colgroup>
+            <col style="width:23%;">
+            <col style="width:39%;">
+            <col style="width:14%;">
+            <col style="width:24%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">SUPERVISOR</td>
+            <td>{{ readonly_signature_input('supervisor_signature_name', prefill.get('supervisor_signature_name')) }}</td>
+            <td class="mba-doc-label">DATE</td>
+            <td>{{ readonly_input(prefill.get('supervisor_signature_date')) }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">HEAD OF DEPARTMENT</td>
+            <td>{{ hdc_signature_input('hod_signature_name', prefill.get('hod_signature_name')) }}</td>
+            <td class="mba-doc-label">DATE</td>
+            <td>{{ hdc_signature_input('hod_signature_date', prefill.get('hod_signature_date'), 'date') }}</td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">EXECUTIVE DEAN</td>
+            <td>{{ hdc_signature_input('executive_dean_signature_name', prefill.get('executive_dean_signature_name')) }}</td>
+            <td class="mba-doc-label">DATE</td>
+            <td>{{ hdc_signature_input('executive_dean_signature_date', prefill.get('executive_dean_signature_date'), 'date') }}</td>
+          </tr>
+        </table>
+
+        {% if hdc_signature_mode %}
+          <div class="mba-doc-muted-box" style="border:1.5px solid #92400e;background:#fffbeb;margin-top:1rem;">
+            <p class="mba-doc-note" style="font-weight:700;color:#78350f;margin-bottom:8px;">HDC signature editing</p>
+            <p class="mba-doc-note" style="color:#78350f;">
+              Complete the Head of Department and Executive Dean signature fields, then save the updated nomination document.
+            </p>
+          </div>
+          <div class="mba-doc-actions">
+            <button class="primary-button" type="submit">Save Signature Fields</button>
+            <a href="{{ url_for('mba.hdc_dashboard') }}" class="secondary-button">Cancel</a>
+          </div>
+        {% endif %}
+      </div>
+    {% if hdc_signature_mode %}
+    </form>
+    {% else %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% endblock %}

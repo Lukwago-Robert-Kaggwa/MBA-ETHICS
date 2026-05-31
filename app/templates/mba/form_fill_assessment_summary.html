@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block title %}Summary Assessment Report{% endblock %}
+{% block app_name %}MBA{% endblock %}
+{% block page_heading %}Summary Assessment Report{% endblock %}
+{% block page_subheading %}{{ project.project_title }}{% endblock %}
+{% set hdc_signature_mode = hdc_signature_mode|default(false) %}
+{% set supervisor_signature_mode = supervisor_signature_mode|default(false) %}
+{% set marks_committee_mode = marks_committee_mode|default(false) %}
+{% set active_form_type = form_type|default(prefill.get('_doc_type', 'assessment_summary')) %}
+{% set summary_coursework_modules = summary_coursework_modules|default(['AFM9X01', 'CSM9X01', 'DIG9X01', 'PEM9X01', 'CON9X00', 'ADM9X02', 'AEP9X02', 'EIB9X02', 'OPS9X02', 'CSQ9X01', 'ELD9X01', 'IEA9X01', 'BDD9X01', 'CPM9X01']) %}
+
+{% macro readonly_input(value) -%}
+  <input class="mba-doc-input" value="{{ value or '' }}" readonly>
+{%- endmacro %}
+
+{% macro readonly_textarea(value, rows=2) -%}
+  <textarea class="mba-doc-textarea mba-doc-textarea--line" rows="{{ rows }}" readonly>{{ value or '' }}</textarea>
+{%- endmacro %}
+
+{% macro signature_input(name, value, editable=false, type='text') -%}
+  <div class="mba-doc-signature-field">
+    {% if prefill.get(name ~ '_image') %}
+      <img class="mba-doc-signature-image" src="{{ prefill.get(name ~ '_image') }}" alt="Saved signature">
+    {% endif %}
+    <input class="mba-doc-input" type="{{ type }}" name="{{ name }}" value="{{ value or '' }}" {% if editable %}required{% else %}readonly{% endif %}>
+  </div>
+{%- endmacro %}
+
+{% macro marks_input(name, value, editable=false, class_name='') -%}
+  <input class="mba-doc-input {{ class_name }}" type="number" step="0.01" min="0" name="{{ name }}" value="{{ value or '' }}" {% if editable %}required{% else %}readonly{% endif %}>
+{%- endmacro %}
+
+{% macro student_number_cells(value) -%}
+  {% set number = (value or '')|string %}
+  {% set spans = [1, 1, 1, 1, 2, 1, 1, 2, 1] %}
+  {% for idx in range(9) %}
+    <td{% if spans[idx] > 1 %} colspan="{{ spans[idx] }}"{% endif %}>{{ readonly_input(number[idx] if number|length > idx else '') }}</td>
+  {% endfor %}
+{%- endmacro %}
+
+{% macro recommendation_mark(recommendation, column) -%}
+  {% set text = (recommendation or '')|lower %}
+  {% set accepted = ('accept as' in text) or ('research stands' in text) %}
+  {% set minor = ('minor revisions' in text) or ('minor corrections' in text) %}
+  {% set substantial = ('re-examination' in text) or ('re examination' in text) or ('major revisions' in text) %}
+  {% set rejected = ('outright' in text) or ('rejection' in text) or ('rejected' in text) %}
+  {% set checked = (column == 1 and accepted) or (column == 2 and minor) or (column == 3 and substantial) or (column == 4 and rejected) %}
+  <span class="summary-doc-mark">{{ 'X' if checked else '' }}</span>
+{%- endmacro %}
+
+{% macro corrections_mark(value, target) -%}
+  {% set text = (value or 'Yes')|lower %}
+  {% set is_yes = text in ['yes', 'y', 'true', '1', 'checked', 'x'] %}
+  <span class="summary-doc-mark">{{ 'X' if (target == 'yes' and is_yes) or (target == 'no' and not is_yes) else '' }}</span>
+{%- endmacro %}
+
+{% block body %}
+<!-- MBA_FORM_START -->
+<div class="mba-page-stack mba-doc-page">
+  <section class="ethics-panel">
+    {% if hdc_signature_mode %}
+    <form action="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type=active_form_type) }}" method="post" class="mba-doc-paper mba-doc-paper--summary summary-doc">
+    {% elif supervisor_signature_mode %}
+    <form action="{{ url_for('mba.supervisor_sign_assessment_summary', project_id=project.id) }}" method="post" class="mba-doc-paper mba-doc-paper--summary summary-doc">
+    {% elif marks_committee_mode %}
+    <form action="{{ url_for('mba.module_completion_verification_response', token=module_completion_token) }}" method="post" class="mba-doc-paper mba-doc-paper--summary summary-doc" data-summary-coursework-form>
+    {% else %}
+    <div class="mba-doc-paper mba-doc-paper--summary summary-doc">
+    {% endif %}
+      <div class="mba-doc-form summary-doc-form">
+        <div class="summary-doc-heading">
+          <img class="summary-doc-logo" src="{{ url_for('static', filename='img/summary_assessment_logo.png') }}" alt="Johannesburg Business School and University of Johannesburg logo">
+          <div class="summary-doc-title-band">
+            <h2>SUMMARY ASSESSMENT REPORT FORM &ndash; MASTER (Capstone Project)</h2>
+            <p>JOHANNESBURG BUSINESS SCHOOL</p>
+          </div>
+        </div>
+
+        <table class="mba-doc-table summary-doc-table summary-doc-section-table">
+          <colgroup>
+            <col style="width:13.16%;">
+            <col style="width:14.99%;">
+            <col style="width:7.99%;">
+            <col style="width:7.99%;">
+            <col style="width:7.99%;">
+            <col style="width:7.99%;">
+            <col style="width:5.49%;">
+            <col style="width:2.47%;">
+            <col style="width:7.98%;">
+            <col style="width:7.99%;">
+            <col style="width:1%;">
+            <col style="width:7.22%;">
+            <col style="width:7.73%;">
+          </colgroup>
+          <tr><th colspan="13" class="mba-doc-section-title">SECTION A: Candidate&rsquo;s Details</th></tr>
+          <tr>
+            <td class="mba-doc-label">Surname:</td>
+            <td colspan="6">{{ readonly_input(prefill.get('student_surname')) }}</td>
+            <td colspan="2" class="mba-doc-label">Initials:</td>
+            <td colspan="2">{{ readonly_input(prefill.get('student_initials')) }}</td>
+            <td class="mba-doc-label">Title:</td>
+            <td>{{ readonly_input(prefill.get('student_title')) }}</td>
+          </tr>
+          <tr>
+            <td colspan="2" class="mba-doc-label">Student Number:</td>
+            {{ student_number_cells(prefill.get('student_number')) }}
+          </tr>
+          <tr>
+            <td colspan="2" class="mba-doc-label">Qualification (e.g., PhD):</td>
+            <td colspan="11">{{ readonly_input(prefill.get('qualification', 'Masters')) }}</td>
+          </tr>
+          <tr>
+            <td colspan="2" class="mba-doc-label">Discipline:</td>
+            <td colspan="11">{{ readonly_input(prefill.get('discipline', 'Master of Business Administration')) }}</td>
+          </tr>
+          <tr>
+            <td colspan="2" class="mba-doc-label">Title of minor-dissertation:</td>
+            <td colspan="11">{{ readonly_textarea(prefill.get('research_title'), 2) }}</td>
+          </tr>
+          <tr>
+            <td colspan="2" class="mba-doc-label">Date of first registration for this degree:</td>
+            <td colspan="11">{{ readonly_input(prefill.get('date_of_first_registration')) }}</td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table summary-doc-table summary-doc-section-table">
+          <colgroup>
+            <col style="width:25%;">
+            <col style="width:25%;">
+            <col style="width:13%;">
+            <col style="width:12%;">
+            <col style="width:10%;">
+            <col style="width:15%;">
+          </colgroup>
+          <tr><th colspan="6" class="mba-doc-section-title">SECTION B: Supervisors and Assessors&rsquo; details</th></tr>
+          <tr>
+            <td class="mba-doc-label">SUPERVISOR Surname:</td>
+            <td>{{ readonly_input(prefill.get('supervisor_surname')) }}</td>
+            <td class="mba-doc-label">Initials:</td>
+            <td>{{ readonly_input(prefill.get('supervisor_initials')) }}</td>
+            <td class="mba-doc-label">Title:</td>
+            <td>{{ readonly_input(prefill.get('supervisor_title')) }}</td>
+          </tr>
+          <tr><td class="mba-doc-label">Affiliation/ Employer:</td><td colspan="5">{{ readonly_input(prefill.get('supervisor_affiliation')) }}</td></tr>
+          <tr><td class="mba-doc-label">Highest academic qualification:</td><td colspan="5">{{ readonly_input(prefill.get('supervisor_qualification')) }}</td></tr>
+          <tr>
+            <td class="mba-doc-label">CO-SUPERVISOR Surname:</td>
+            <td>{{ readonly_input(prefill.get('co_supervisor_surname')) }}</td>
+            <td class="mba-doc-label">Initials:</td>
+            <td>{{ readonly_input(prefill.get('co_supervisor_initials')) }}</td>
+            <td class="mba-doc-label">Title:</td>
+            <td>{{ readonly_input(prefill.get('co_supervisor_title')) }}</td>
+          </tr>
+          <tr><td class="mba-doc-label">Affiliation/ Employer:</td><td colspan="5">{{ readonly_input(prefill.get('co_supervisor_affiliation')) }}</td></tr>
+          <tr><td class="mba-doc-label">Highest academic qualification:</td><td colspan="5">{{ readonly_input(prefill.get('co_supervisor_qualification')) }}</td></tr>
+          <tr>
+            <td class="mba-doc-label">ASSESSOR 1 Surname:</td>
+            <td>{{ readonly_input(prefill.get('assessor_1_surname')) }}</td>
+            <td class="mba-doc-label">Initials:</td>
+            <td>{{ readonly_input(prefill.get('assessor_1_initials')) }}</td>
+            <td class="mba-doc-label">Title:</td>
+            <td>{{ readonly_input(prefill.get('assessor_1_title')) }}</td>
+          </tr>
+          <tr><td class="mba-doc-label">Affiliation/ Employer:</td><td colspan="5">{{ readonly_input(prefill.get('assessor_1_affiliation')) }}</td></tr>
+          <tr><td class="mba-doc-label">Highest academic qualification:</td><td colspan="5">{{ readonly_input(prefill.get('assessor_1_qualification')) }}</td></tr>
+          <tr>
+            <td class="mba-doc-label">ASSESSOR 2 Surname:</td>
+            <td>{{ readonly_input(prefill.get('assessor_2_surname')) }}</td>
+            <td class="mba-doc-label">Initials:</td>
+            <td>{{ readonly_input(prefill.get('assessor_2_initials')) }}</td>
+            <td class="mba-doc-label">Title:</td>
+            <td>{{ readonly_input(prefill.get('assessor_2_title')) }}</td>
+          </tr>
+          <tr><td class="mba-doc-label">Affiliation/ Employer:</td><td colspan="5">{{ readonly_input(prefill.get('assessor_2_affiliation')) }}</td></tr>
+          <tr><td class="mba-doc-label">Highest academic qualification:</td><td colspan="5">{{ readonly_input(prefill.get('assessor_2_qualification')) }}</td></tr>
+        </table>
+
+        <table class="mba-doc-table summary-doc-table summary-doc-table--center summary-doc-section-table summary-doc-recommendation-table">
+          <colgroup>
+            <col style="width:24%;">
+            <col style="width:19%;">
+            <col style="width:20%;">
+            <col style="width:20%;">
+            <col style="width:17%;">
+          </colgroup>
+          <tr><th colspan="5" class="mba-doc-section-title">SECTION C: Assessment Recommendations by Assessors and FHDC/FPAC</th></tr>
+          <tr>
+            <th></th>
+            <th>Approved with or without minor changes</th>
+            <th>Approved with minor corrections to be made to thesatisfaction of the supervisor</th>
+            <th>Substantial changes to be made and resubmitted to theassessor for assessment</th>
+            <th>Rejected with no reassessment to be considered</th>
+          </tr>
+          {% for slot, label in [('assessor_1', 'External Assessor 1'), ('assessor_2', 'External Assessor 2'), ('assessor_3', '(If applicable) ADDITIONAL ASSESSOR')] %}
+            {% set rec = prefill.get(slot ~ '_recommendation') %}
+            <tr>
+              <td class="mba-doc-label">{{ label }}</td>
+              <td>{{ recommendation_mark(rec, 1) }}</td>
+              <td>{{ recommendation_mark(rec, 2) }}</td>
+              <td>{{ recommendation_mark(rec, 3) }}</td>
+              <td>{{ recommendation_mark(rec, 4) }}</td>
+            </tr>
+          {% endfor %}
+          <tr><td class="mba-doc-label">(If applicable) EXPERTADVISOR</td><td></td><td></td><td></td><td></td></tr>
+          <tr><td class="mba-doc-label">(If applicable) ARBITER</td><td></td><td></td><td></td><td></td></tr>
+          <tr><td class="mba-doc-label">JBSHDC</td><td></td><td></td><td></td><td></td></tr>
+        </table>
+
+        <table class="mba-doc-table summary-doc-table summary-doc-marks-table">
+          <colgroup>
+            <col style="width:55%;">
+            <col style="width:25%;">
+            <col style="width:20%;">
+          </colgroup>
+          <tr><th colspan="2">Marks</th><th>Credit value</th></tr>
+          <tr><th>Modules</th><th>Result</th><th>&nbsp;</th></tr>
+          {% for module_code in summary_coursework_modules %}
+            <tr>
+              <td>{{ module_code }}</td>
+              <td>{{ marks_input('module_' ~ module_code ~ '_result', prefill.get('module_' ~ module_code ~ '_result'), marks_committee_mode, 'summary-coursework-result') }}</td>
+              <td>{{ marks_input('module_' ~ module_code ~ '_credit', prefill.get('module_' ~ module_code ~ '_credit'), marks_committee_mode, 'summary-coursework-credit') }}</td>
+            </tr>
+          {% endfor %}
+          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr>
+            <td>Total Course work =</td>
+            <td>{{ marks_input('coursework_total', prefill.get('coursework_total'), marks_committee_mode, 'summary-coursework-total') }}</td>
+            <td>{{ marks_input('coursework_credit_total', prefill.get('coursework_credit_total'), marks_committee_mode, 'summary-credit-total') }}</td>
+          </tr>
+          <tr>
+            <td>Average for course work=</td>
+            <td>{{ marks_input('coursework_average', prefill.get('coursework_average'), marks_committee_mode, 'summary-coursework-average') }}</td>
+            <td>{{ marks_input('coursework_credit_average', prefill.get('coursework_credit_average'), marks_committee_mode, 'summary-credit-average') }}</td>
+          </tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr><th colspan="2">Capstone Project result</th><th>&nbsp;</th></tr>
+          <tr><td>Assessor 1</td><td>{{ readonly_input(prefill.get('assessor_1_grade')) }}</td><td>&nbsp;</td></tr>
+          <tr><td>Assessor 2</td><td>{{ readonly_input(prefill.get('assessor_2_grade')) }}</td><td>&nbsp;</td></tr>
+          <tr><td>Total Capstone Project =</td><td>{{ readonly_input(prefill.get('capstone_total')) }}</td><td>&nbsp;</td></tr>
+          <tr><td>Average for Capstone Project %</td><td>{{ readonly_input(prefill.get('capstone_average')) }}</td><td>&nbsp;</td></tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr><th colspan="3">Final resut:</th></tr>
+          <tr><td>Capstone project result (26%)</td><td>{{ readonly_input(prefill.get('capstone_weighted_result')) }}</td><td></td></tr>
+          <tr><td>Coursework module average result(74%)</td><td>{{ readonly_input(prefill.get('coursework_weighted_result')) }}</td><td></td></tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr><td></td><td class="mba-doc-label">Final mark</td><td>{{ readonly_input(prefill.get('final_mark')) }}</td></tr>
+        </table>
+
+        <table class="mba-doc-table summary-doc-table summary-doc-table--center summary-doc-final-table">
+          <colgroup>
+            <col style="width:25%;">
+            <col style="width:25%;">
+            <col style="width:25%;">
+            <col style="width:25%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Final mark</td>
+            <td>{{ readonly_input(prefill.get('final_mark')) }}</td>
+            <td class="mba-doc-label">With distinction</td>
+            <td><span class="summary-doc-mark">{{ 'X' if (prefill.get('final_mark')|int) >= 75 else '' }}</span></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table summary-doc-table summary-doc-section-table summary-doc-requirements-table">
+          <colgroup>
+            <col style="width:68%;">
+            <col style="width:8%;">
+            <col style="width:8%;">
+            <col style="width:8%;">
+            <col style="width:8%;">
+          </colgroup>
+          <tr><th colspan="5" class="mba-doc-section-title">SECTION D: Meeting of Requirements for the Degree</th></tr>
+          <tr>
+            <td>All corrections have been made and a letter specifying the corrections made has been submitted</td>
+            <td class="mba-doc-label">Yes</td>
+            <td class="summary-doc-center">{{ corrections_mark(prefill.get('corrections_complete', 'Yes'), 'yes') }}</td>
+            <td class="mba-doc-label">No</td>
+            <td class="summary-doc-center">{{ corrections_mark(prefill.get('corrections_complete', 'Yes'), 'no') }}</td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table summary-doc-table summary-doc-section-table summary-doc-approval-table">
+          <colgroup>
+            <col style="width:50%;">
+            <col style="width:50%;">
+          </colgroup>
+          <tr><th colspan="2" class="mba-doc-section-title">SECTION E: Faculty Approval of the Assessment Results</th></tr>
+          <tr><td class="mba-doc-label">Supervisor Signature:</td><td class="mba-doc-label summary-doc-shaded">Date:</td></tr>
+          <tr>
+            <td>{{ signature_input('supervisor_signature_name', prefill.get('supervisor_signature_name'), supervisor_signature_mode) }}</td>
+            <td>{{ signature_input('supervisor_signature_date', prefill.get('supervisor_signature_date'), supervisor_signature_mode, 'date') }}</td>
+          </tr>
+          <tr><td class="mba-doc-label">HoD or HoS Signature:</td><td class="mba-doc-label summary-doc-shaded">Date:</td></tr>
+          <tr>
+            <td>{{ signature_input('hod_signature_name', prefill.get('hod_signature_name'), hdc_signature_mode) }}</td>
+            <td>{{ signature_input('hod_signature_date', prefill.get('hod_signature_date'), hdc_signature_mode, 'date') }}</td>
+          </tr>
+          <tr><td class="mba-doc-label summary-doc-shaded">Chair of FHDC Signature:</td><td class="mba-doc-label summary-doc-shaded">Date:</td></tr>
+          <tr>
+            <td>{{ signature_input('chair_fhdc_signature_name', prefill.get('chair_fhdc_signature_name', prefill.get('hdc_signature_name')), hdc_signature_mode) }}</td>
+            <td>{{ signature_input('chair_fhdc_signature_date', prefill.get('chair_fhdc_signature_date', prefill.get('hdc_signature_date')), hdc_signature_mode, 'date') }}</td>
+          </tr>
+        </table>
+
+        {% if supervisor_signature_mode %}
+          <div class="mba-doc-actions">
+            <button class="primary-button" type="submit">Sign Assessment Summary</button>
+            <a href="{{ url_for('mba.scholar_dashboard') }}" class="secondary-button">Cancel</a>
+          </div>
+        {% elif marks_committee_mode %}
+          <div class="mba-doc-actions">
+            <button class="primary-button" type="submit">Submit Coursework Marks</button>
+          </div>
+        {% elif hdc_signature_mode %}
+          <div class="mba-doc-actions mba-doc-actions--stacked">
+            <label class="mba-doc-action-field">
+              <span>HDC results comment</span>
+              <textarea class="mba-doc-textarea" name="comment" rows="3">{{ request.form.get('comment', '') }}</textarea>
+            </label>
+            {% if missing_hdc_results_docs|default([]) %}
+              <p class="mba-doc-note">
+                Approval is blocked until these documents are available:
+                {% for doc_key in missing_hdc_results_docs %}{{ document_label(doc_key) }}{% if not loop.last %}, {% endif %}{% endfor %}.
+              </p>
+            {% endif %}
+            {% if all_results_ready is defined and not all_results_ready %}
+              <p class="mba-doc-note">Approval is blocked until all assessor results are received.</p>
+            {% endif %}
+            <div class="card-actions">
+              <button class="primary-button" name="action" value="approve_results" type="submit" {% if (all_results_ready is defined and not all_results_ready) or missing_hdc_results_docs|default([]) %}disabled{% endif %}>Sign &amp; Approve Results</button>
+              <button class="secondary-button" name="action" value="decline_results" type="submit">Sign &amp; Decline Results</button>
+            </div>
+            <a href="{{ url_for('mba.hdc_dashboard') }}" class="secondary-button">Cancel</a>
+          </div>
+        {% endif %}
+      </div>
+    {% if hdc_signature_mode or supervisor_signature_mode or marks_committee_mode %}
+    </form>
+    {% else %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+<!-- MBA_FORM_END -->
+{% if marks_committee_mode %}
+<script>
+  (function () {
+    const form = document.querySelector('[data-summary-coursework-form]');
+    if (!form) return;
+    const resultInputs = Array.from(form.querySelectorAll('.summary-coursework-result'));
+    const creditInputs = Array.from(form.querySelectorAll('.summary-coursework-credit'));
+    const totalInput = form.querySelector('.summary-coursework-total');
+    const averageInput = form.querySelector('.summary-coursework-average');
+    const creditTotalInput = form.querySelector('.summary-credit-total');
+    const creditAverageInput = form.querySelector('.summary-credit-average');
+    const formatNumber = (value) => Number.isFinite(value) ? value.toFixed(2).replace(/\.?0+$/, '') : '';
+    const recalculate = () => {
+      let simpleTotal = 0;
+      let resultCount = 0;
+      let creditTotal = 0;
+      let creditCount = 0;
+      resultInputs.forEach((resultInput) => {
+        const result = parseFloat(resultInput.value);
+        if (Number.isFinite(result)) {
+          simpleTotal += result;
+          resultCount += 1;
+        }
+      });
+      creditInputs.forEach((creditInput) => {
+        const credit = parseFloat(creditInput.value);
+        if (Number.isFinite(credit)) {
+          creditTotal += credit;
+          creditCount += 1;
+        }
+      });
+      if (totalInput) totalInput.value = formatNumber(simpleTotal);
+      if (averageInput) {
+        const average = resultCount ? simpleTotal / resultCount : NaN;
+        averageInput.value = formatNumber(average);
+      }
+      if (creditTotalInput) creditTotalInput.value = formatNumber(creditTotal);
+      if (creditAverageInput) {
+        const averageCredit = creditCount ? creditTotal / creditCount : NaN;
+        creditAverageInput.value = formatNumber(averageCredit);
+      }
+    };
+    resultInputs.concat(creditInputs).forEach((input) => input.addEventListener('input', recalculate));
+    if (!totalInput.value || !averageInput.value || !creditTotalInput.value || !creditAverageInput.value) recalculate();
+  })();
+</script>
+{% endif %}
+{% endblock %}

@@ -42,13 +42,32 @@ from .recommendation import (
 )
 
 ALLOWED_UPLOAD_EXTENSIONS = {"pdf"}
+DETAILED_REPORT_UPLOAD_EXTENSIONS = {"pdf", "doc", "docx"}
 DASHBOARD_PAGE_SIZE_OPTIONS = (5, 10, 20, 50)
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+SIGNATURE_MAX_BYTES = 2 * 1024 * 1024
+SIGNATURE_UPLOAD_EXTENSIONS = {"png", "jpg", "jpeg"}
 SUPERVISOR_SUGGESTION_LIMIT = SUPERVISOR_RECOMMENDATION_LIMIT
 ASSESSOR_SLOTS = ("assessor_1", "assessor_2")
 PRIMARY_ASSESSOR_SLOTS = ASSESSOR_SLOTS
 ADDITIONAL_ASSESSOR_SLOT = "assessor_3"
 ALL_ASSESSOR_SLOTS = PRIMARY_ASSESSOR_SLOTS + (ADDITIONAL_ASSESSOR_SLOT,)
+SUMMARY_COURSEWORK_MODULES = (
+    "AFM9X01",
+    "CSM9X01",
+    "DIG9X01",
+    "PEM9X01",
+    "CON9X00",
+    "ADM9X02",
+    "AEP9X02",
+    "EIB9X02",
+    "OPS9X02",
+    "CSQ9X01",
+    "ELD9X01",
+    "IEA9X01",
+    "BDD9X01",
+    "CPM9X01",
+)
 ASSESSOR_PROJECT_DOCUMENT_VISIBLE_STATUSES = {
     ProjectStatus.ADMIN_APPROVED.value,
     ProjectStatus.HDC_VERIFIED.value,
@@ -81,14 +100,13 @@ CORRECTION_REQUEST_RECOMMENDATIONS = {
     "Major revisions and re-examination by the same assessor",
 }
 HDC_ASSESSOR_NOMINATION_DOCUMENT_PREFIXES = (
-    "assessor_profile_",
     "assessor_cv_",
     "assessor_highest_qualification_",
 )
 HDC_ASSESSOR_RESULTS_DOCUMENT_PREFIXES = (
-    "assessment_result_",
+    "assessment_summary",
     "assessor_report_",
-    "assessor_narrative_",
+    "assessor_detailed_report_",
 )
 HDC_DOCUMENT_ALLOWED_STATUSES = {
     ProjectStatus.JBS5_SUBMITTED_TO_HDC.value,
@@ -168,12 +186,15 @@ MBA_DOCUMENT_LABELS = {
     "global_document": "Global Document",
     "plagiarism_declaration": "Combined Plagiarism, Turnitin and AI Declaration",
     "combined_turnitin_ai_report": "Combined Turnitin-AI Report",
+    "external_examiner_nomination": "Amended External Examiner Nomination Form",
+    "additional_external_examiner_nomination": "Additional Assessor Nomination Form",
     "turnitin_report": "Turnitin / Plagiarism Form (Legacy)",
     "ai_report": "AI Report (Legacy)",
     "ethics_certificate": "Ethics Certificate",
     "ethics_exemption_form": "Ethics Exemption Form",
     "ai_declaration_form": "TII AI Declaration (JBS) (Legacy)",
     "affidavit": "JBS 2 Affidavit",
+    "affidavit_stamped": "Stamped JBS 2 Affidavit",
     "corrected_dissertation": "Corrected Capstone Manuscript",
     "corrections_response": "Response to Assessors' Comments",
     "corrections_turnitin_report": "Resubmitted Turnitin Report",
@@ -182,7 +203,7 @@ MBA_DOCUMENT_LABELS = {
 MODULE_COMPLETION_STATUS_LABELS = {
     "not_checked": "Module Completion Not Checked",
     "completed": "Modules Completed",
-    "awaiting_marks_committee": "Awaiting Response from the Marks Committee",
+    "awaiting_marks_committee": "Awaiting Coursework Marks from the Marks Committee",
     "modules_incomplete": "Modules Incomplete",
     "response_received": "Response Received",
 }
@@ -206,12 +227,12 @@ PROJECT_STATUS_LABELS = {
 
 PUBLIC_PROJECT_STATUS_LABEL_OVERRIDES = {
     ProjectStatus.HDC_DECLINED.value: "Assessor Nominations In Progress",
-    ProjectStatus.RESULTS_APPROVED.value: "Final Results Processing",
+    ProjectStatus.RESULTS_APPROVED.value: "Results Verified",
 }
 
 PUBLIC_PROJECT_STATUS_BADGE_CLASSES = {
     ProjectStatus.HDC_DECLINED.value: "nomination_pending_public",
-    ProjectStatus.RESULTS_APPROVED.value: "results_submitted_to_hdc",
+    ProjectStatus.RESULTS_APPROVED.value: "results_approved",
 }
 
 ADDITIONAL_ASSESSMENT_STATUS_LABELS = {
@@ -222,7 +243,10 @@ ADDITIONAL_ASSESSMENT_STATUS_LABELS = {
     "none": "No Additional Assessment",
 }
 
-FORM_RENDER_VERSION = "v8"
+FORM_RENDER_VERSION = "v13"
+EXTERNAL_EXAMINER_NOMINATION_RENDER_VERSION = "external_nomination_v7"
+ADDITIONAL_EXTERNAL_EXAMINER_NOMINATION_RENDER_VERSION = "additional_external_nomination_v4"
+ASSESSMENT_SUMMARY_RENDER_VERSION = "assessment_summary_v1"
 FORM_HTML_PRINT_TEMPLATES = {
     "jbs5": "mba/form_fill_jbs5.html",
     "jbs10": "mba/form_fill_jbs10.html",
@@ -236,6 +260,9 @@ FORM_HTML_PRINT_TEMPLATES = {
     "assessor_profile": "mba/form_fill_assessor_profile.html",
     "assessor_temp_appointment": "mba/form_fill_assessor_temp_appointment.html",
     "assessor_temp_claim": "mba/form_fill_assessor_temp_claim.html",
+    "external_examiner_nomination": "mba/form_fill_external_examiner_nomination.html",
+    "additional_external_examiner_nomination": "mba/form_fill_external_examiner_nomination.html",
+    "assessment_summary": "mba/form_fill_assessment_summary.html",
     "assessment_result": "mba/form_fill_assessor_grade.html",
     "assessor_report": "mba/form_fill_assessor_grade.html",
     "assessor_narrative": "mba/form_fill_assessor_grade.html",
@@ -430,10 +457,18 @@ def hdc_jbs10_signature_complete(project):
     if not jbs10_form and getattr(project, "id", None):
         jbs10_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs10").first()
     payload = jbs10_form.payload if jbs10_form and isinstance(jbs10_form.payload, dict) else {}
-    return bool(payload.get("jbs_hdc_signature") and payload.get("jbs_hdc_signature_date"))
+    return all(
+        payload.get(field)
+        for field in (
+            "head_of_department_signature",
+            "head_of_department_signature_date",
+            "jbs_hdc_signature",
+            "jbs_hdc_signature_date",
+        )
+    )
 
 
-def sync_hdc_assessor_nomination_status(project, finalize_declined=False):
+def sync_hdc_assessor_nomination_status(project):
     decisions = hdc_assessor_nomination_decisions(project)
     if not hdc_assessor_nomination_review_complete(project):
         project.nomination_form_approved = False
@@ -443,21 +478,22 @@ def sync_hdc_assessor_nomination_status(project, finalize_declined=False):
 
     has_declined = any(decision == HDC_ASSESSOR_DECLINED for decision in decisions.values())
     if has_declined:
+        if not hdc_jbs10_signature_complete(project):
+            project.nomination_form_approved = False
+            project.project_status = ProjectStatus.ADMIN_APPROVED.value
+            return "signature_pending_declined"
         project.nomination_form_approved = False
-        if finalize_declined or hdc_jbs10_signature_complete(project):
-            project.project_status = ProjectStatus.HDC_DECLINED.value
-            return "declined"
-        project.project_status = ProjectStatus.ADMIN_APPROVED.value
-        return "signature_pending_declined"
+        project.project_status = ProjectStatus.HDC_DECLINED.value
+        return "declined"
 
     if all(decision == HDC_ASSESSOR_APPROVED for decision in decisions.values()):
-        if hdc_jbs10_signature_complete(project):
-            project.project_status = ProjectStatus.HDC_VERIFIED.value
-            project.nomination_form_approved = True
-            return "approved"
-        project.project_status = ProjectStatus.ADMIN_APPROVED.value
-        project.nomination_form_approved = False
-        return "signature_pending"
+        if not hdc_jbs10_signature_complete(project):
+            project.nomination_form_approved = False
+            project.project_status = ProjectStatus.ADMIN_APPROVED.value
+            return "signature_pending"
+        project.project_status = ProjectStatus.HDC_VERIFIED.value
+        project.nomination_form_approved = True
+        return "approved"
 
     project.project_status = ProjectStatus.HDC_DECLINED.value
     project.nomination_form_approved = False
@@ -539,6 +575,165 @@ def _uploads_dir():
     return os.path.join(current_app.root_path, "..", "uploads", "mba_forms")
 
 
+def _signature_upload_dir():
+    signature_dir = Path(current_app.root_path).parent / "uploads" / "mba_signatures"
+    signature_dir.mkdir(parents=True, exist_ok=True)
+    return signature_dir
+
+
+def _signature_extension_from_bytes(data):
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"\xff\xd8"):
+        return "jpg"
+    return ""
+
+
+def _signature_mime_from_extension(extension):
+    extension = str(extension or "").lower().lstrip(".")
+    if extension == "png":
+        return "image/png"
+    if extension in {"jpg", "jpeg"}:
+        return "image/jpeg"
+    return "application/octet-stream"
+
+
+def _clear_user_signature_files(user):
+    if not user or not getattr(user, "id", None):
+        return
+    signature_dir = _signature_upload_dir()
+    for extension in SIGNATURE_UPLOAD_EXTENSIONS:
+        path = signature_dir / f"user_{user.id}.{extension}"
+        if path.exists():
+            try:
+                path.unlink()
+            except OSError:
+                current_app.logger.warning("Could not remove signature file %s", path, exc_info=True)
+
+
+def user_signature_path(user):
+    if not user or not getattr(user, "id", None):
+        return None
+    signature_dir = _signature_upload_dir()
+    for extension in ("png", "jpg", "jpeg"):
+        path = signature_dir / f"user_{user.id}.{extension}"
+        if path.exists():
+            return path
+    return None
+
+
+def user_signature_mime_type(user):
+    path = user_signature_path(user)
+    if not path:
+        return ""
+    return _signature_mime_from_extension(path.suffix)
+
+
+def user_signature_data_uri(user):
+    path = user_signature_path(user)
+    if not path:
+        return ""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    mime_type = _signature_mime_from_extension(path.suffix)
+    return f"data:{mime_type};base64,{base64.b64encode(data).decode('ascii')}"
+
+
+def save_user_signature(user, *, uploaded_file=None, signature_data=None):
+    if not user or not getattr(user, "id", None):
+        raise ValueError("A signed-in MBA user is required.")
+    data = b""
+    if signature_data:
+        match = re.match(
+            r"^data:image/(?P<subtype>png|jpeg|jpg);base64,(?P<data>[A-Za-z0-9+/=\s]+)$",
+            str(signature_data).strip(),
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            raise ValueError("The drawn signature could not be read. Please draw it again.")
+        try:
+            data = base64.b64decode(match.group("data"), validate=False)
+        except Exception as exc:
+            raise ValueError("The drawn signature could not be read. Please draw it again.") from exc
+    elif uploaded_file and getattr(uploaded_file, "filename", ""):
+        data = uploaded_file.read()
+    else:
+        existing_path = user_signature_path(user)
+        if existing_path:
+            user.has_signature = True
+            return existing_path
+        raise ValueError("Upload or draw a signature before saving.")
+
+    if not data:
+        raise ValueError("The signature file is empty.")
+    if len(data) > SIGNATURE_MAX_BYTES:
+        raise ValueError("The signature image must be 2 MB or smaller.")
+
+    extension = _signature_extension_from_bytes(data)
+    if extension not in SIGNATURE_UPLOAD_EXTENSIONS:
+        raise ValueError("Use a PNG or JPG signature image.")
+
+    _clear_user_signature_files(user)
+    path = _signature_upload_dir() / f"user_{user.id}.{extension}"
+    path.write_bytes(data)
+    user.has_signature = True
+    return path
+
+
+def delete_user_signature(user):
+    _clear_user_signature_files(user)
+    if user:
+        user.has_signature = False
+
+
+SIGNATURE_SNAPSHOT_SUFFIXES = ("_image", "_image_source", "_image_user_id", "_image_email")
+
+
+def _signature_snapshot_keys(field):
+    return tuple(f"{field}{suffix}" for suffix in SIGNATURE_SNAPSHOT_SUFFIXES)
+
+
+def clear_signature_snapshots(payload, signature_fields):
+    if not isinstance(payload, dict):
+        return payload
+    for field in signature_fields:
+        for key in _signature_snapshot_keys(field):
+            payload.pop(key, None)
+    return payload
+
+
+def copy_signature_snapshots(payload, source_payload, signature_fields):
+    if not isinstance(payload, dict) or not isinstance(source_payload, dict):
+        return payload
+    for field in signature_fields:
+        for key in _signature_snapshot_keys(field):
+            if source_payload.get(key):
+                payload[key] = source_payload[key]
+    return payload
+
+
+def apply_saved_signature_snapshot(payload, signature_fields, user=None):
+    user = user or current_user
+    data_uri = user_signature_data_uri(user)
+    if not data_uri:
+        return payload
+    for field in signature_fields:
+        if not payload.get(field):
+            continue
+        payload[f"{field}_image"] = data_uri
+        payload[f"{field}_image_source"] = "saved_profile_signature"
+        payload[f"{field}_image_user_id"] = str(getattr(user, "id", "") or "")
+        payload[f"{field}_image_email"] = getattr(user, "email", "") or ""
+    return payload
+
+
+def refresh_saved_signature_snapshot(payload, signature_fields, user=None):
+    clear_signature_snapshots(payload, signature_fields)
+    return apply_saved_signature_snapshot(payload, signature_fields, user)
+
+
 def _validate_uploaded_pdf(uploaded_file):
     if not uploaded_file or not uploaded_file.filename:
         return "No file selected."
@@ -549,6 +744,20 @@ def _validate_uploaded_pdf(uploaded_file):
     uploaded_file.seek(0)
     if file_size > UPLOAD_MAX_BYTES:
         return "File exceeds the 10 MB limit."
+    return None
+
+
+def _validate_optional_assessor_detailed_report(uploaded_file):
+    if not uploaded_file or not uploaded_file.filename:
+        return None
+    extension = uploaded_file.filename.rsplit(".", 1)[1].lower() if "." in uploaded_file.filename else ""
+    if extension not in DETAILED_REPORT_UPLOAD_EXTENSIONS:
+        return "Detailed report attachment must be a PDF or Word document."
+    uploaded_file.seek(0, 2)
+    file_size = uploaded_file.tell()
+    uploaded_file.seek(0)
+    if file_size > UPLOAD_MAX_BYTES:
+        return "Detailed report attachment exceeds the 10 MB limit."
     return None
 
 
@@ -650,13 +859,19 @@ HTML_PDF_RENDERER_UNAVAILABLE_MESSAGE = (
 FORM_WORD_EXTENSION = "docx"
 FORM_WORD_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 JBS5_WORD_TEMPLATE = Path("mba") / "docx_templates" / "jbs5_registration_template.docx"
+SUPERVISOR_AGREEMENT_WORD_TEMPLATE = Path("mba") / "docx_templates" / "supervisor_agreement_template.docx"
 JBS10_WORD_TEMPLATE = Path("mba") / "docx_templates" / "jbs10_external_examiner_nomination_template.docx"
+INTENT_TO_SUBMIT_WORD_TEMPLATE = Path("mba") / "docx_templates" / "intent_to_submit_template.docx"
 CORRECTIONS_RESPONSE_WORD_TEMPLATE = Path("mba") / "docx_templates" / "corrections_response_template.docx"
 JBS1_WORD_TEMPLATE = Path("mba") / "docx_templates" / "jbs1_declaration_template.docx"
 AFFIDAVIT_WORD_TEMPLATE = Path("mba") / "docx_templates" / "affidavit_template.docx"
 CAPSTONE_EVALUATION_WORD_TEMPLATE = Path("mba") / "docx_templates" / "capstone_final_submission_evaluation_template.docx"
-PLAGIARISM_WORD_TEMPLATE = Path("mba") / "docx_templates" / "plagiarism_declaration_template.docx"
+CAPSTONE_ASSESSOR_REPORT_FORM_1_WORD_TEMPLATE = Path("mba") / "docx_templates" / "capstone_assessor_report_form_1_template.docx"
+SUMMARY_ASSESSMENT_REPORT_WORD_TEMPLATE = Path("mba") / "docx_templates" / "summary_assessment_report_template.docx"
 TII_AI_WORD_TEMPLATE = Path("mba") / "docx_templates" / "tii_ai_declaration_template.docx"
+ASSESSOR_TEMP_APPOINTMENT_WORD_TEMPLATE = Path("mba") / "docx_templates" / "assessor_temp_appointment_template.docx"
+ASSESSOR_TEMP_CLAIM_WORD_TEMPLATE = Path("mba") / "docx_templates" / "assessor_temp_claim_template.docx"
+EXTERNAL_EXAMINER_NOMINATION_WORD_TEMPLATE = Path("mba") / "docx_templates" / "external_examiner_nomination_template.docx"
 _DOCX_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _DOCX_NS = {
     "w": _DOCX_W_NS,
@@ -744,6 +959,50 @@ def _form_print_styles():
           border: 0;
           padding: 0;
         }
+        body.mba-print-body .supervisor-agreement-doc {
+          box-sizing: border-box;
+          width: 794px;
+          max-width: 100%;
+          margin: 0 auto;
+          padding: 46px 54px;
+        }
+        body.mba-print-body .supervisor-agreement-doc .mba-print-value {
+          min-height: 1.12em !important;
+          padding: 0 2px !important;
+          line-height: 1.05 !important;
+          font-family: "Times New Roman", Times, serif !important;
+        }
+        body.mba-print-body .mba-doc-paper--jbs-declaration {
+          max-width: 794px;
+          margin: 0 auto;
+          padding: 32px 48px 28px;
+          overflow: visible;
+        }
+        body.mba-print-body .mba-doc-paper--affidavit {
+          max-width: 794px;
+          margin: 0 auto;
+          padding: 34px 50px 30px;
+          overflow: visible;
+        }
+        body.mba-print-body .mba-doc-paper--integrity {
+          max-width: 794px;
+          margin: 0 auto;
+          padding: 28px 44px 30px;
+          overflow: visible;
+        }
+        body.mba-print-body .jbs-template-table .mba-print-value,
+        body.mba-print-body .integrity-doc-table .mba-print-value {
+          min-height: 17px !important;
+          padding: 0 2px !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          line-height: inherit !important;
+          font-family: inherit !important;
+        }
+        body.mba-print-body .integrity-doc-table .mba-print-value--textarea,
+        body.mba-print-body .jbs-template-table .mba-print-value--textarea {
+          min-height: 34px !important;
+        }
         body.mba-print-body .mba-doc-table {
           width: 100%;
           table-layout: fixed;
@@ -751,6 +1010,78 @@ def _form_print_styles():
         body.mba-print-body .mba-doc-table th,
         body.mba-print-body .mba-doc-table td {
           overflow-wrap: anywhere;
+          word-break: normal;
+        }
+        body.mba-print-body .mba-doc-paper--jbs5 {
+          max-width: none;
+          overflow: visible;
+        }
+        body.mba-print-body .mba-doc-paper--jbs10 {
+          max-width: none;
+          overflow: visible;
+        }
+        body.mba-print-body .mba-doc-paper--intent {
+          max-width: 760px;
+          margin: 0 auto;
+          overflow: visible;
+          font-size: 0.66rem;
+          line-height: 1.05;
+        }
+        body.mba-print-body .mba-doc-paper--assessor {
+          max-width: 780px;
+          margin: 0 auto;
+          padding: 0;
+          overflow: visible;
+          font-size: 0.76rem;
+          line-height: 1.2;
+        }
+        body.mba-print-body .mba-doc-paper--summary {
+          max-width: 690px;
+          margin: 0 auto;
+          padding: 18px 22px;
+          overflow: visible;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 8pt;
+          line-height: 1.05;
+          color: #000;
+        }
+        body.mba-print-body .mba-doc-paper--intent .mba-print-value {
+          min-height: 14px !important;
+          padding: 0 2px !important;
+          line-height: 1.05 !important;
+        }
+        body.mba-print-body .mba-doc-paper--intent .mba-print-value--textarea {
+          min-height: 44px !important;
+          padding: 2px 4px !important;
+          border-radius: 0 !important;
+        }
+        body.mba-print-body .mba-doc-paper--intent .mba-print-value--line-textarea {
+          min-height: 32px !important;
+          padding: 2px !important;
+        }
+        body.mba-print-body .jbs5-doc-table,
+        body.mba-print-body .jbs5-doc-sdgs,
+        body.mba-print-body .jbs10-doc-header,
+        body.mba-print-body .jbs10-doc-table,
+        body.mba-print-body .assessor-doc-table,
+        body.mba-print-body .summary-doc-table,
+        body.mba-print-body .mba-doc-header--intent,
+        body.mba-print-body .mba-doc-paper--intent .mba-doc-muted-box,
+        body.mba-print-body .intent-doc-table,
+        body.mba-print-body .jbs-template-table,
+        body.mba-print-body .integrity-doc-table {
+          min-width: 0;
+        }
+        body.mba-print-body .summary-doc-marks-table {
+          width: 72.3%;
+          min-width: 520px;
+          table-layout: fixed;
+        }
+        body.mba-print-body .summary-doc-marks-table th,
+        body.mba-print-body .summary-doc-marks-table td {
+          border: 0.5pt solid #000;
+          white-space: nowrap;
+          overflow-wrap: normal;
           word-break: normal;
         }
         body.mba-print-body .mba-doc-checkline,
@@ -800,6 +1131,11 @@ def _form_print_styles():
         body.mba-print-body .mba-print-check--radio {
           border-radius: 999px;
         }
+        body.mba-print-body .jbs10-print-mark {
+          margin: 0;
+          border-radius: 0;
+          font-weight: 800;
+        }
         input, textarea, select { caret-color: transparent; }
         body.mba-print-body input,
         body.mba-print-body textarea,
@@ -828,6 +1164,12 @@ def _replace_form_logo(fragment, logo_mode="web"):
         return fragment
 
     export_logos = {
+        "img/jbs5_logo.jpeg": "img/jbs5_logo.jpeg",
+        "img/jbs10_logo.png": "img/jbs10_logo.png",
+        "img/intent_to_submit_logo.jpeg": "img/intent_to_submit_logo.jpeg",
+        "img/summary_assessment_logo.png": "img/summary_assessment_logo.png",
+        "img/supervisor_agreement_logo.png": "img/supervisor_agreement_logo.png",
+        "img/tii_ai_logo.png": "img/tii_ai_logo.png",
         "img/uj_logo.png": "img/uj_orange_square.png",
         "img/uj_orange_square.png": "img/uj_orange_square.png",
     }
@@ -878,6 +1220,12 @@ _PRINT_TEXTAREA_STYLE = (
     "background:transparent;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;"
     "word-break:normal;font-family:Arial,Helvetica,sans-serif;"
 )
+_PRINT_LINE_TEXTAREA_STYLE = (
+    "box-sizing:border-box;display:block;width:100%;min-width:0;min-height:3.2em;"
+    "padding:4px 2px;border:0;border-bottom:1px solid #111827;color:#111827;"
+    "background:transparent;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;"
+    "word-break:normal;font-family:Arial,Helvetica,sans-serif;"
+)
 _PRINT_CHECK_STYLE = (
     "display:inline-block;width:14px;min-width:14px;height:14px;margin:0 6px 0 0;"
     "color:#111827;font-size:12px;line-height:14px;text-align:center;vertical-align:-2px;"
@@ -893,12 +1241,16 @@ def _print_value_html(value_html, modifier=""):
         class_name = f"{class_name} {class_name}--{modifier}"
         if modifier == "textarea":
             style = _PRINT_TEXTAREA_STYLE
+        elif modifier == "line-textarea":
+            style = _PRINT_LINE_TEXTAREA_STYLE
     return f'<div class="{class_name}" style="{style}">{value_html}</div>'
 
 
 def _replace_print_form_controls(fragment):
     def replace_textarea(match):
-        return _print_value_html(match.group(2), "textarea")
+        class_attr = _html_attr_value(match.group(1), "class")
+        modifier = "line-textarea" if "mba-doc-textarea--line" in class_attr else "textarea"
+        return _print_value_html(match.group(2), modifier)
 
     def replace_select(match):
         option_matches = list(
@@ -924,10 +1276,17 @@ def _replace_print_form_controls(fragment):
     def replace_input(match):
         attrs = match.group(1)
         input_type = (_html_attr_value(attrs, "type") or "text").lower()
+        class_attr = _html_attr_value(attrs, "class")
         if input_type in {"hidden", "submit", "button", "reset", "file"}:
             return ""
         if input_type in {"checkbox", "radio"}:
             is_checked = _html_has_attr(attrs, "checked")
+            if "jbs10-doc-mark" in class_attr or "assessor-doc-mark" in class_attr:
+                mark = "X" if is_checked else "&nbsp;"
+                class_name = "mba-print-check mba-print-check--checkbox jbs10-print-mark"
+                if is_checked:
+                    class_name = f"{class_name} is-checked"
+                return f'<span class="{class_name}" style="{_PRINT_CHECK_STYLE}" aria-hidden="true">{mark}</span>'
             class_name = f"mba-print-check mba-print-check--{input_type}"
             if is_checked:
                 class_name = f"{class_name} is-checked"
@@ -936,6 +1295,14 @@ def _replace_print_form_controls(fragment):
             else:
                 mark = "&#9679;" if is_checked else "&#9711;"
             return f'<span class="{class_name}" style="{_PRINT_CHECK_STYLE}" aria-hidden="true">{mark}</span>'
+        if "supervisor-agreement-line-fill" in class_attr:
+            safe_class = xml_escape(class_attr, {'"': "&quot;"})
+            value_html = xml_escape(_html_attr_value(attrs, "value")) or "&nbsp;"
+            return f'<span class="{safe_class}">{value_html}</span>'
+        if "jbs-doc-line-fill" in class_attr:
+            safe_class = xml_escape(class_attr, {'"': "&quot;"})
+            value_html = xml_escape(_html_attr_value(attrs, "value")) or "&nbsp;"
+            return f'<span class="{safe_class}">{value_html}</span>'
         return _print_value_html(_html_attr_value(attrs, "value"))
 
     fragment = re.sub(
@@ -955,6 +1322,18 @@ def _replace_print_form_controls(fragment):
 
 
 def _strip_print_web_controls(fragment):
+    fragment = re.sub(
+        r"<section\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\bmba-print-hide\b[^\"]*\"|'[^']*\bmba-print-hide\b[^']*'))[^>]*>.*?</section>",
+        "",
+        fragment,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    fragment = re.sub(
+        r"<div\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\bmba-print-hide\b[^\"]*\"|'[^']*\bmba-print-hide\b[^']*'))[^>]*>.*?</div>",
+        "",
+        fragment,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
     fragment = re.sub(
         r"<div\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\bmba-doc-actions\b[^\"]*\"|'[^']*\bmba-doc-actions\b[^']*'))[^>]*>.*?</div>",
         "",
@@ -1078,6 +1457,7 @@ def _build_html_form_fragment(project, form_type, payload, logo_mode="web"):
         extra_context["slot"] = slot
         extra_context["slot_label"] = slot.replace("_", " ").title()
         extra_context["display_doc_variant"] = "assessor_report"
+        extra_context["detailed_report_doc"] = uploaded_doc_for(project, assessor_detailed_report_doc_type(slot))
         extra_context["recommendation_options"] = [
             "Accept as the research stands",
             "Accept subject to minor revisions to the satisfaction of the Supervisor / Head of School",
@@ -1715,8 +2095,16 @@ def _jbs5_word_template_path():
     return Path(current_app.root_path) / JBS5_WORD_TEMPLATE
 
 
+def _supervisor_agreement_word_template_path():
+    return Path(current_app.root_path) / SUPERVISOR_AGREEMENT_WORD_TEMPLATE
+
+
 def _jbs10_word_template_path():
     return Path(current_app.root_path) / JBS10_WORD_TEMPLATE
+
+
+def _intent_to_submit_word_template_path():
+    return Path(current_app.root_path) / INTENT_TO_SUBMIT_WORD_TEMPLATE
 
 
 def _corrections_response_word_template_path():
@@ -1735,30 +2123,57 @@ def _capstone_evaluation_word_template_path():
     return Path(current_app.root_path) / CAPSTONE_EVALUATION_WORD_TEMPLATE
 
 
-def _plagiarism_word_template_path():
-    return Path(current_app.root_path) / PLAGIARISM_WORD_TEMPLATE
+def _capstone_assessor_report_form_1_word_template_path():
+    return Path(current_app.root_path) / CAPSTONE_ASSESSOR_REPORT_FORM_1_WORD_TEMPLATE
+
+
+def _summary_assessment_report_word_template_path():
+    return Path(current_app.root_path) / SUMMARY_ASSESSMENT_REPORT_WORD_TEMPLATE
 
 
 def _tii_ai_word_template_path():
     return Path(current_app.root_path) / TII_AI_WORD_TEMPLATE
 
 
+def _assessor_temp_appointment_word_template_path():
+    return Path(current_app.root_path) / ASSESSOR_TEMP_APPOINTMENT_WORD_TEMPLATE
+
+
+def _assessor_temp_claim_word_template_path():
+    return Path(current_app.root_path) / ASSESSOR_TEMP_CLAIM_WORD_TEMPLATE
+
+
+def _external_examiner_nomination_word_template_path():
+    return Path(current_app.root_path) / EXTERNAL_EXAMINER_NOMINATION_WORD_TEMPLATE
+
+
 def _native_word_template_path_for_form(form_type):
     form_type = str(form_type or "")
     exact_templates = {
         "jbs5": _jbs5_word_template_path,
+        "supervisor_agreement": _supervisor_agreement_word_template_path,
         "jbs10": _jbs10_word_template_path,
+        "intent_to_submit": _intent_to_submit_word_template_path,
         "corrections_response": _corrections_response_word_template_path,
         "jbs1_declaration": _jbs1_word_template_path,
         "affidavit": _affidavit_word_template_path,
-        "plagiarism_declaration": _plagiarism_word_template_path,
+        "plagiarism_declaration": _tii_ai_word_template_path,
         "ai_declaration_form": _tii_ai_word_template_path,
+        "external_examiner_nomination": _external_examiner_nomination_word_template_path,
+        "additional_external_examiner_nomination": _external_examiner_nomination_word_template_path,
+        "assessment_summary": _summary_assessment_report_word_template_path,
     }
     template_path_factory = exact_templates.get(form_type)
     if template_path_factory:
         return template_path_factory()
     if form_type.startswith("assessment_result_"):
         return _capstone_evaluation_word_template_path()
+    if form_type.startswith("assessor_report_"):
+        return _capstone_assessor_report_form_1_word_template_path()
+    if form_type.startswith("assessor_temp_appointment_"):
+        return _assessor_temp_appointment_word_template_path()
+    if form_type.startswith("assessor_temp_claim_"):
+        return _assessor_temp_claim_word_template_path()
     return None
 
 
@@ -1829,6 +2244,32 @@ def _docx_format_date(value, *, month_year=False):
     return parsed.strftime("%d %b %Y")
 
 
+def _docx_format_date_numeric(value):
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = datetime.strptime(value[:10], "%Y-%m-%d")
+    except ValueError:
+        return value
+    return parsed.strftime("%d-%m-%Y")
+
+
+def _docx_day_month_year_parts(payload, date_field, prefix):
+    day = _docx_first_value(payload, f"{prefix}_day")
+    month = _docx_first_value(payload, f"{prefix}_month")
+    year = _docx_first_value(payload, f"{prefix}_year")
+    if day or month or year:
+        return day, month, year
+
+    value = _docx_first_value(payload, date_field)
+    try:
+        parsed = datetime.strptime(str(value or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return "", "", ""
+    return parsed.strftime("%d"), parsed.strftime("%B"), parsed.strftime("%y")
+
+
 def _docx_cell(root, table_index, row_index, cell_index):
     tables = root.findall(".//w:tbl", _DOCX_NS)
     if table_index >= len(tables):
@@ -1874,6 +2315,46 @@ def _docx_set_paragraph_text(paragraph, value, *, size="16", bold=False):
         paragraph.append(_docx_text_run(line, size=size, bold=bold))
 
 
+def _docx_run_like_existing(paragraph, text=None, *, tab=False, source_props=None):
+    run = ET.Element(_docx_tag("r"))
+    if source_props is None:
+        source_run = paragraph.find("w:r", _DOCX_NS) if paragraph is not None else None
+        source_props = source_run.find("w:rPr", _DOCX_NS) if source_run is not None else None
+    if source_props is not None:
+        run.append(deepcopy(source_props))
+    if tab:
+        ET.SubElement(run, _docx_tag("tab"))
+    else:
+        text_node = ET.SubElement(run, _docx_tag("t"))
+        if str(text or "").strip() != str(text or ""):
+            text_node.set(_docx_xml_space_attr(), "preserve")
+        text_node.text = str(text or "")
+    return run
+
+
+def _docx_set_paragraph_text_preserving_style(paragraph, value):
+    if paragraph is None:
+        return
+    source_run = paragraph.find("w:r", _DOCX_NS)
+    source_props = deepcopy(source_run.find("w:rPr", _DOCX_NS)) if source_run is not None and source_run.find("w:rPr", _DOCX_NS) is not None else None
+    for child in list(paragraph):
+        if child.tag != _docx_tag("pPr"):
+            paragraph.remove(child)
+    lines = str(value or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    for line_index, line in enumerate(lines):
+        if line_index:
+            break_run = ET.SubElement(paragraph, _docx_tag("r"))
+            ET.SubElement(break_run, _docx_tag("br"))
+        tab_parts = line.split("\t")
+        for part_index, part in enumerate(tab_parts):
+            if part_index:
+                paragraph.append(_docx_run_like_existing(paragraph, tab=True, source_props=source_props))
+            if part:
+                paragraph.append(_docx_run_like_existing(paragraph, part, source_props=source_props))
+        if not tab_parts or line == "":
+            paragraph.append(_docx_run_like_existing(paragraph, "", source_props=source_props))
+
+
 def _docx_paragraph_text(paragraph):
     parts = []
     for node in paragraph.iter():
@@ -1888,6 +2369,153 @@ def _docx_set_indexed_paragraph_text(root, paragraph_index, value, *, size="16",
     paragraphs = root.findall(".//w:p", _DOCX_NS)
     if 0 <= paragraph_index < len(paragraphs):
         _docx_set_paragraph_text(paragraphs[paragraph_index], value, size=size, bold=bold)
+
+
+def _docx_set_indexed_paragraph_text_preserving_style(root, paragraph_index, value):
+    paragraphs = root.findall(".//w:p", _DOCX_NS)
+    if 0 <= paragraph_index < len(paragraphs):
+        _docx_set_paragraph_text_preserving_style(paragraphs[paragraph_index], value)
+
+
+def _docx_run_from_props(text, source_props=None, *, underline=False):
+    run = ET.Element(_docx_tag("r"))
+    run_props = deepcopy(source_props) if source_props is not None else None
+    if underline:
+        if run_props is None:
+            run_props = ET.Element(_docx_tag("rPr"))
+        for existing_underline in list(run_props.findall("w:u", _DOCX_NS)):
+            run_props.remove(existing_underline)
+        underline_node = ET.SubElement(run_props, _docx_tag("u"))
+        underline_node.set(_docx_tag("val"), "single")
+    if run_props is not None:
+        run.append(run_props)
+    text_node = ET.SubElement(run, _docx_tag("t"))
+    text = str(text or "")
+    if text.strip() != text or "\u00a0" in text:
+        text_node.set(_docx_xml_space_attr(), "preserve")
+    text_node.text = text
+    return run
+
+
+def _docx_set_paragraph_parts_preserving_style(paragraph, parts):
+    if paragraph is None:
+        return
+    source_run = paragraph.find("w:r", _DOCX_NS)
+    source_props = (
+        deepcopy(source_run.find("w:rPr", _DOCX_NS))
+        if source_run is not None and source_run.find("w:rPr", _DOCX_NS) is not None
+        else None
+    )
+    for child in list(paragraph):
+        if child.tag != _docx_tag("pPr"):
+            paragraph.remove(child)
+    for text, underline in parts:
+        if text is None:
+            continue
+        paragraph.append(_docx_run_from_props(text, source_props, underline=underline))
+
+
+def _docx_run_props_matching(paragraph, *, bold=None):
+    if paragraph is None:
+        return None
+    fallback = None
+    for run in paragraph.findall("w:r", _DOCX_NS):
+        run_props = run.find("w:rPr", _DOCX_NS)
+        if run_props is not None and fallback is None:
+            fallback = run_props
+        if bold is None:
+            continue
+        has_bold = bool(run_props is not None and run_props.find("w:b", _DOCX_NS) is not None)
+        if has_bold == bold:
+            return deepcopy(run_props) if run_props is not None else None
+    return deepcopy(fallback) if fallback is not None else None
+
+
+def _docx_single_line(value):
+    return " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())
+
+
+def _docx_set_paragraph_layout_runs(paragraph, parts):
+    if paragraph is None:
+        return
+    normal_props = _docx_run_props_matching(paragraph, bold=False)
+    bold_props = _docx_run_props_matching(paragraph, bold=True) or normal_props
+    for child in list(paragraph):
+        if child.tag != _docx_tag("pPr"):
+            paragraph.remove(child)
+    for kind, text, weight in parts:
+        source_props = bold_props if weight == "bold" else normal_props
+        if kind == "tab":
+            paragraph.append(_docx_run_like_existing(paragraph, tab=True, source_props=source_props))
+        elif kind == "text":
+            paragraph.append(_docx_run_like_existing(paragraph, text, source_props=source_props))
+
+
+def _docx_set_indexed_paragraph_layout_runs(root, paragraph_index, parts):
+    paragraphs = root.findall(".//w:p", _DOCX_NS)
+    if 0 <= paragraph_index < len(paragraphs):
+        _docx_set_paragraph_layout_runs(paragraphs[paragraph_index], parts)
+
+
+def _docx_paragraph_runs_at(root, paragraph_index):
+    paragraphs = root.findall(".//w:p", _DOCX_NS)
+    if not (0 <= paragraph_index < len(paragraphs)):
+        return None, []
+    paragraph = paragraphs[paragraph_index]
+    return paragraph, paragraph.findall("w:r", _DOCX_NS)
+
+
+def _docx_set_run_parts(run, parts):
+    if run is None:
+        return
+    for child in list(run):
+        if child.tag != _docx_tag("rPr"):
+            run.remove(child)
+    for kind, value in parts:
+        if kind == "tab":
+            ET.SubElement(run, _docx_tag("tab"))
+        elif kind == "text":
+            text_node = ET.SubElement(run, _docx_tag("t"))
+            value = str(value or "")
+            if value.strip() != value:
+                text_node.set(_docx_xml_space_attr(), "preserve")
+            text_node.text = value
+
+
+def _docx_set_indexed_run_parts(root, paragraph_index, run_index, parts):
+    _, runs = _docx_paragraph_runs_at(root, paragraph_index)
+    if 0 <= run_index < len(runs):
+        _docx_set_run_parts(runs[run_index], parts)
+
+
+def _docx_append_run_after(root, paragraph_index, run_index, parts):
+    paragraph, runs = _docx_paragraph_runs_at(root, paragraph_index)
+    if paragraph is None:
+        return
+    source_props = None
+    insert_after = None
+    if 0 <= run_index < len(runs):
+        insert_after = runs[run_index]
+        source_props = insert_after.find("w:rPr", _DOCX_NS)
+    elif runs:
+        insert_after = runs[-1]
+        source_props = insert_after.find("w:rPr", _DOCX_NS)
+    new_run = ET.Element(_docx_tag("r"))
+    if source_props is not None:
+        new_run.append(deepcopy(source_props))
+    _docx_set_run_parts(new_run, parts)
+    children = list(paragraph)
+    try:
+        insert_position = children.index(insert_after) + 1 if insert_after is not None else len(children)
+    except ValueError:
+        insert_position = len(children)
+    paragraph.insert(insert_position, new_run)
+
+
+def _docx_set_indexed_paragraph_parts_preserving_style(root, paragraph_index, parts):
+    paragraphs = root.findall(".//w:p", _DOCX_NS)
+    if 0 <= paragraph_index < len(paragraphs):
+        _docx_set_paragraph_parts_preserving_style(paragraphs[paragraph_index], parts)
 
 
 def _docx_set_cell_element_text(cell, value, *, size="16", bold=False):
@@ -1907,6 +2535,139 @@ def _docx_set_cell_text(root, table_index, row_index, cell_index, value, *, size
         return
     cell = _docx_cell(root, table_index, row_index, cell_index)
     _docx_set_cell_element_text(cell, value, size=size, bold=bold)
+
+
+def _docx_set_cell_text_preserving_style(root, table_index, row_index, cell_index, value):
+    value = str(value or "").strip()
+    if not value:
+        return
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return
+    paragraphs = cell.findall("w:p", _DOCX_NS)
+    paragraph = paragraphs[0] if paragraphs else ET.SubElement(cell, _docx_tag("p"))
+    _docx_set_paragraph_text_preserving_style(paragraph, value)
+    for extra_paragraph in paragraphs[1:]:
+        cell.remove(extra_paragraph)
+
+
+def _docx_set_cell_text_preserving_style_allow_blank(root, table_index, row_index, cell_index, value):
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return
+    paragraphs = cell.findall("w:p", _DOCX_NS)
+    paragraph = paragraphs[0] if paragraphs else ET.SubElement(cell, _docx_tag("p"))
+    _docx_set_paragraph_text_preserving_style(paragraph, str(value or "").strip())
+    for extra_paragraph in paragraphs[1:]:
+        cell.remove(extra_paragraph)
+
+
+def _docx_set_mark_cell(root, table_index, row_index, cell_index, checked):
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return
+    paragraphs = cell.findall("w:p", _DOCX_NS)
+    paragraph = paragraphs[0] if paragraphs else ET.SubElement(cell, _docx_tag("p"))
+    source_props = None
+    for source_paragraph in paragraphs:
+        source_run = source_paragraph.find("w:r", _DOCX_NS)
+        run_props = source_run.find("w:rPr", _DOCX_NS) if source_run is not None else None
+        if run_props is not None:
+            source_props = deepcopy(run_props)
+            break
+    for child in list(paragraph):
+        if child.tag != _docx_tag("pPr"):
+            paragraph.remove(child)
+    for extra_paragraph in paragraphs[1:]:
+        cell.remove(extra_paragraph)
+    paragraph.append(_docx_run_like_existing(paragraph, "X" if checked else "", source_props=source_props))
+
+
+def _docx_normalized(value):
+    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def _docx_is_yes(value):
+    return _docx_normalized(value) in {"yes", "y", "true", "1", "checked", "x"}
+
+
+def _docx_yes_no_marks(root, table_index, row_index, yes_cell_index, no_cell_index, value):
+    is_yes = _docx_is_yes(value)
+    _docx_set_mark_cell(root, table_index, row_index, yes_cell_index, is_yes)
+    _docx_set_mark_cell(root, table_index, row_index, no_cell_index, not is_yes)
+
+
+def _docx_mark_matching_option(root, table_index, options, selected_value):
+    selected = _docx_normalized(selected_value)
+    for option_value, row_index, cell_index in options:
+        _docx_set_mark_cell(root, table_index, row_index, cell_index, _docx_normalized(option_value) == selected)
+
+
+def _docx_fill_character_cells(root, table_index, row_index, start_cell_index, end_cell_index, value):
+    text = re.sub(r"\s+", "", str(value or ""))
+    for offset, cell_index in enumerate(range(start_cell_index, end_cell_index + 1)):
+        _docx_set_cell_text_preserving_style_allow_blank(
+            root,
+            table_index,
+            row_index,
+            cell_index,
+            text[offset] if offset < len(text) else "",
+        )
+
+
+def _docx_cost_centre_parts(value):
+    parts = re.split(r"[\s.:-]+", str(value or "").strip())
+    parts = [part for part in parts if part]
+    defaults = ["05", "05", "046904", "20", "31330"]
+    return (parts + defaults[len(parts):])[:5]
+
+
+def _docx_underlined_field_text(value, width):
+    value = str(value or "").strip()
+    return value + ("\u00a0" * max(2, width - len(value)))
+
+
+def _docx_append_cell_text(root, table_index, row_index, cell_index, value, *, size="18", bold=False, center=False):
+    value = str(value or "").strip()
+    if not value:
+        return
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return
+    paragraph = ET.SubElement(cell, _docx_tag("p"))
+    paragraph_props = ET.SubElement(paragraph, _docx_tag("pPr"))
+    spacing = ET.SubElement(paragraph_props, _docx_tag("spacing"))
+    spacing.set(_docx_tag("before"), "0")
+    spacing.set(_docx_tag("after"), "0")
+    if center:
+        justification = ET.SubElement(paragraph_props, _docx_tag("jc"))
+        justification.set(_docx_tag("val"), "center")
+    for line_index, line in enumerate(value.replace("\r\n", "\n").replace("\r", "\n").split("\n")):
+        if line_index:
+            break_run = ET.SubElement(paragraph, _docx_tag("r"))
+            ET.SubElement(break_run, _docx_tag("br"))
+        paragraph.append(_docx_text_run(line, size=size, bold=bold))
+
+
+def _docx_replace_cell_text(root, table_index, row_index, cell_index, value, *, size="18", bold=False, center=False):
+    value = str(value or "").strip()
+    if not value:
+        return
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return
+    for child in list(cell):
+        if child.tag != _docx_tag("tcPr"):
+            cell.remove(child)
+    paragraph = ET.SubElement(cell, _docx_tag("p"))
+    paragraph_props = ET.SubElement(paragraph, _docx_tag("pPr"))
+    spacing = ET.SubElement(paragraph_props, _docx_tag("spacing"))
+    spacing.set(_docx_tag("before"), "0")
+    spacing.set(_docx_tag("after"), "0")
+    if center:
+        justification = ET.SubElement(paragraph_props, _docx_tag("jc"))
+        justification.set(_docx_tag("val"), "center")
+    _docx_set_paragraph_text(paragraph, value, size=size, bold=bold)
 
 
 def _docx_set_checkbox(root, field_name, checked):
@@ -1937,9 +2698,169 @@ def _docx_write_template(entries, contents, root):
     contents["word/document.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as generated:
+        written = set()
         for entry in entries:
             generated.writestr(entry, contents[entry.filename])
+            written.add(entry.filename)
+        for filename, data in contents.items():
+            if filename not in written:
+                generated.writestr(filename, data)
     return buffer.getvalue()
+
+
+_DOCX_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+_DOCX_CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
+_DOCX_IMAGE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+
+
+def _docx_package_tag(namespace, name):
+    return f"{{{namespace}}}{name}"
+
+
+def _docx_signature_image_payload(payload, field):
+    data_uri = str((payload or {}).get(f"{field}_image") or "").strip()
+    if not data_uri:
+        return None
+    match = re.match(
+        r"^data:image/(?P<subtype>png|jpeg|jpg);base64,(?P<data>[A-Za-z0-9+/=\s]+)$",
+        data_uri,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    try:
+        image_bytes = base64.b64decode(match.group("data"), validate=False)
+    except Exception:
+        return None
+    extension = _signature_extension_from_bytes(image_bytes)
+    if extension not in SIGNATURE_UPLOAD_EXTENSIONS:
+        return None
+    mime_type = _signature_mime_from_extension(extension)
+    return image_bytes, extension, mime_type
+
+
+def _docx_ensure_image_content_type(contents, extension, mime_type):
+    content_types_path = "[Content_Types].xml"
+    if content_types_path not in contents:
+        return
+    root = ET.fromstring(contents[content_types_path])
+    for default in root.findall(_docx_package_tag(_DOCX_CT_NS, "Default")):
+        if str(default.get("Extension") or "").lower() == extension:
+            default.set("ContentType", mime_type)
+            contents[content_types_path] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            return
+    default = ET.SubElement(root, _docx_package_tag(_DOCX_CT_NS, "Default"))
+    default.set("Extension", extension)
+    default.set("ContentType", mime_type)
+    contents[content_types_path] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _docx_next_relationship_id(rels_root):
+    used_ids = {
+        rel.get("Id")
+        for rel in rels_root.findall(_docx_package_tag(_DOCX_REL_NS, "Relationship"))
+        if rel.get("Id")
+    }
+    index = 1
+    while f"rId{index}" in used_ids:
+        index += 1
+    return f"rId{index}"
+
+
+def _docx_add_image_relationship(contents, image_bytes, extension, mime_type):
+    rels_path = "word/_rels/document.xml.rels"
+    if rels_path in contents:
+        rels_root = ET.fromstring(contents[rels_path])
+    else:
+        rels_root = ET.Element(_docx_package_tag(_DOCX_REL_NS, "Relationships"))
+    rel_id = _docx_next_relationship_id(rels_root)
+    media_filename = f"word/media/mba_signature_{uuid.uuid4().hex[:12]}.{extension}"
+    contents[media_filename] = image_bytes
+    relationship = ET.SubElement(rels_root, _docx_package_tag(_DOCX_REL_NS, "Relationship"))
+    relationship.set("Id", rel_id)
+    relationship.set("Type", _DOCX_IMAGE_REL_TYPE)
+    relationship.set("Target", f"media/{Path(media_filename).name}")
+    contents[rels_path] = ET.tostring(rels_root, encoding="utf-8", xml_declaration=True)
+    _docx_ensure_image_content_type(contents, extension, mime_type)
+    return rel_id
+
+
+def _docx_signature_image_run(contents, payload, field, *, width_emu=1371600, height_emu=365760):
+    image_payload = _docx_signature_image_payload(payload, field)
+    if not image_payload:
+        return None
+    image_bytes, extension, mime_type = image_payload
+    rel_id = _docx_add_image_relationship(contents, image_bytes, extension, mime_type)
+    doc_pr_id = int(uuid.uuid4().int % 1000000) + 1
+    name = xml_escape(f"Signature {field}")
+    return ET.fromstring(
+        f"""
+        <w:r xmlns:w="{_DOCX_NS['w']}" xmlns:r="{_DOCX_NS['r']}" xmlns:wp="{_DOCX_NS['wp']}" xmlns:a="{_DOCX_NS['a']}" xmlns:pic="{_DOCX_NS['pic']}">
+          <w:drawing>
+            <wp:inline distT="0" distB="0" distL="0" distR="0">
+              <wp:extent cx="{width_emu}" cy="{height_emu}"/>
+              <wp:effectExtent l="0" t="0" r="0" b="0"/>
+              <wp:docPr id="{doc_pr_id}" name="{name}"/>
+              <wp:cNvGraphicFramePr>
+                <a:graphicFrameLocks noChangeAspect="1"/>
+              </wp:cNvGraphicFramePr>
+              <a:graphic>
+                <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                  <pic:pic>
+                    <pic:nvPicPr>
+                      <pic:cNvPr id="0" name="{name}"/>
+                      <pic:cNvPicPr/>
+                    </pic:nvPicPr>
+                    <pic:blipFill>
+                      <a:blip r:embed="{rel_id}"/>
+                      <a:stretch><a:fillRect/></a:stretch>
+                    </pic:blipFill>
+                    <pic:spPr>
+                      <a:xfrm>
+                        <a:off x="0" y="0"/>
+                        <a:ext cx="{width_emu}" cy="{height_emu}"/>
+                      </a:xfrm>
+                      <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                    </pic:spPr>
+                  </pic:pic>
+                </a:graphicData>
+              </a:graphic>
+            </wp:inline>
+          </w:drawing>
+        </w:r>
+        """
+    )
+
+
+def _docx_set_cell_signature_image(root, contents, table_index, row_index, cell_index, payload, field, **image_kwargs):
+    run = _docx_signature_image_run(contents, payload, field, **image_kwargs)
+    if run is None:
+        return False
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return False
+    paragraphs = cell.findall("w:p", _DOCX_NS)
+    paragraph = paragraphs[0] if paragraphs else ET.SubElement(cell, _docx_tag("p"))
+    for child in list(paragraph):
+        if child.tag != _docx_tag("pPr"):
+            paragraph.remove(child)
+    paragraph.append(run)
+    for extra_paragraph in paragraphs[1:]:
+        cell.remove(extra_paragraph)
+    return True
+
+
+def _docx_append_paragraph_signature_image(root, contents, paragraph_index, payload, field, **image_kwargs):
+    run = _docx_signature_image_run(contents, payload, field, **image_kwargs)
+    if run is None:
+        return False
+    paragraphs = root.findall(".//w:p", _DOCX_NS)
+    if not (0 <= paragraph_index < len(paragraphs)):
+        return False
+    paragraph = paragraphs[paragraph_index]
+    paragraph.append(_docx_run_like_existing(paragraph, tab=True))
+    paragraph.append(run)
+    return True
 
 
 def _jbs5_study_type_checks(payload):
@@ -1950,6 +2871,19 @@ def _jbs5_study_type_checks(payload):
         "Check6": study_type == "minor dissertation",
         "Check7": study_type == "dissertation",
         "Check8": study_type == "thesis",
+    }
+
+
+def _jbs10_study_type_checks(payload):
+    study_type = str(payload.get("study_type") or "Capstone Project").strip().lower()
+    normalized_study_type = re.sub(r"[^a-z0-9]+", " ", study_type).strip()
+    return {
+        "capstone": study_type in {"capstone project", "capstone consultancy project", "capstone"},
+        "limited_scope": "limited scope" in study_type,
+        "minor": study_type == "minor dissertation",
+        "dissertation": study_type == "dissertation",
+        "thesis_monograph": normalized_study_type in {"thesis", "thesis monograph", "monograph"},
+        "thesis_article": normalized_study_type in {"thesis by article", "by article"},
     }
 
 
@@ -2012,16 +2946,15 @@ def _generate_jbs5_template_word_bytes(project, payload):
     for table_index, row_index, cell_index, value in field_map:
         _docx_set_cell_text(root, table_index, row_index, cell_index, value)
 
+    _docx_set_cell_signature_image(root, contents, 6, 0, 1, payload, "supervisor_signature")
+    _docx_set_cell_signature_image(root, contents, 6, 2, 1, payload, "head_of_department_signature")
+    _docx_set_cell_signature_image(root, contents, 6, 4, 1, payload, "jbs_hdc_signature")
+
     is_4ir = str(payload.get("is_4ir_research") or "No").strip().lower()
     _docx_set_cell_text(root, 1, 7, 3, "X" if is_4ir == "yes" else "")
     _docx_set_cell_text(root, 1, 7, 5, "X" if is_4ir != "yes" else "")
 
-    contents["word/document.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-    buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as generated:
-        for entry in entries:
-            generated.writestr(entry, contents[entry.filename])
-    return buffer.getvalue()
+    return _docx_write_template(entries, contents, root)
 
 
 def _docx_user_name(user):
@@ -2136,6 +3069,182 @@ def _docx_assessor_payload(project, payload, slot):
     }
 
 
+def _supervisor_agreement_payload(project, payload):
+    payload = dict(payload or {})
+    student = getattr(project, "student", None)
+    student_profile = getattr(student, "student_profile", None) if student else None
+    if student_profile:
+        student_name = " ".join(
+            part for part in [getattr(student_profile, "name", ""), getattr(student_profile, "surname", "")] if part
+        ).strip()
+        payload.setdefault("student_name", student_name)
+        payload.setdefault("student_surname", getattr(student_profile, "surname", "") or "")
+        payload.setdefault("student_number", getattr(student_profile, "student_number", "") or "")
+        payload.setdefault("student_address", getattr(student_profile, "address", "") or "")
+        payload.setdefault("degree", getattr(student_profile, "degree", "") or "")
+    if not payload.get("student_name") and student:
+        payload["student_name"] = getattr(student, "email", "") or ""
+    payload.setdefault("degree", getattr(project, "qualification", "") or "MBA")
+    payload.setdefault("research_title", getattr(project, "project_title", "") or "")
+
+    supervisor = getattr(project, "primary_supervisor", None)
+    supervisor_profile = getattr(supervisor, "scholar_profile", None) if supervisor else None
+    if supervisor_profile:
+        supervisor_name = " ".join(
+            part
+            for part in [
+                getattr(supervisor_profile, "title", ""),
+                getattr(supervisor_profile, "name", ""),
+                getattr(supervisor_profile, "surname", ""),
+            ]
+            if part
+        ).strip()
+        payload.setdefault("supervisor_full_name", supervisor_name)
+        payload.setdefault("supervisor_surname", getattr(supervisor_profile, "surname", "") or "")
+        payload.setdefault("department", getattr(supervisor_profile, "department", "") or "")
+        payload.setdefault("affiliation", getattr(supervisor_profile, "affiliation", "") or "")
+        payload.setdefault("position", getattr(supervisor_profile, "position", "") or "")
+    if not payload.get("supervisor_full_name") and supervisor:
+        payload["supervisor_full_name"] = getattr(supervisor, "email", "") or ""
+
+    def initials_from(value):
+        return "".join(part[0].upper() for part in str(value or "").replace(".", " ").split() if part)
+
+    payload.setdefault("student_initials", initials_from(payload.get("student_name")))
+    payload.setdefault("supervisor_initials", initials_from(payload.get("supervisor_full_name")))
+    payload.setdefault("co_supervisor_initials", initials_from(payload.get("co_supervisor_full_name")))
+    payload.setdefault("student_signature_name", payload.get("student_name", ""))
+    payload.setdefault("supervisor_signature_name", payload.get("supervisor_full_name", ""))
+    payload.setdefault("co_supervisor_signature_name", payload.get("co_supervisor_full_name", ""))
+    return payload
+
+
+def _supervisor_agreement_date_parts(payload, prefix):
+    day = _docx_first_value(payload, f"{prefix}_signature_day")
+    month = _docx_first_value(payload, f"{prefix}_signature_month")
+    year = _docx_first_value(payload, f"{prefix}_signature_year")
+    date_value = _docx_first_value(payload, f"{prefix}_signature_date", "signature_date")
+    if date_value and not (day and month and year):
+        try:
+            parsed = datetime.strptime(str(date_value)[:10], "%Y-%m-%d")
+            day = day or parsed.strftime("%d")
+            month = month or parsed.strftime("%B")
+            year = year or parsed.strftime("%Y")
+        except ValueError:
+            pass
+    if len(year) == 4 and year.startswith("20"):
+        year = year[2:]
+    return day, month, year
+
+
+def _docx_underline_fill(value, width, *, leading_space=False, minimum_underscores=3):
+    value = " ".join(str(value or "").split())
+    if not value:
+        return "_" * width
+    prefix = " " if leading_space else ""
+    remaining = max(width - len(value) - len(prefix), minimum_underscores)
+    return f"{prefix}{value}{'_' * remaining}"
+
+
+def _supervisor_agreement_party_line(label, surname, initials, suffix=""):
+    return (
+        f"{label}{_docx_underline_fill(surname, 49, leading_space=True)}"
+        f"Initials{_docx_underline_fill(initials, 18, leading_space=True)}"
+        f"{suffix}"
+    )
+
+
+def _supervisor_agreement_signed_line(payload, prefix, label):
+    location = _docx_first_value(payload, f"{prefix}_signing_location")
+    day, month, year = _supervisor_agreement_date_parts(payload, prefix)
+    year = year[-2:] if len(year) == 4 and year.startswith("20") else year
+    return (
+        f"({label}) Signed at {_docx_underline_fill(location, 33)} on this "
+        f"{_docx_underline_fill(day, 8)} day of"
+        f"{_docx_underline_fill(month, 22, leading_space=True)}20{year or '___'}."
+    )
+
+
+def _supervisor_agreement_signature_line(payload, prefix, default_name=""):
+    signature = _docx_first_value(payload, f"{prefix}_signature")
+    printed_name = _docx_first_value(payload, f"{prefix}_signature_name") or default_name
+    return (
+        f"{_docx_underline_fill(signature, 44)}"
+        "\t"
+        f"{_docx_underline_fill(printed_name, 40)}"
+    )
+
+
+def _generate_supervisor_agreement_template_word_bytes(project, payload):
+    template_path = _supervisor_agreement_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _supervisor_agreement_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+
+    student_name = _docx_first_value(payload, "student_name") or _docx_student_full_name(project, payload)
+    student_surname = _docx_first_value(payload, "student_surname", "surname")
+    student_initials = _docx_first_value(payload, "student_initials")
+    student_number = _docx_first_value(payload, "student_number")
+    degree = _docx_first_value(payload, "degree", "qualification", default="MBA")
+    supervisor_name = _docx_first_value(payload, "supervisor_full_name", "supervisor_name")
+    supervisor_surname = _docx_first_value(payload, "supervisor_surname")
+    supervisor_initials = _docx_first_value(payload, "supervisor_initials")
+    department = _docx_first_value(payload, "department", "supervisor_department", default="Johannesburg Business School")
+    co_supervisor_name = _docx_first_value(payload, "co_supervisor_full_name", "co_supervisor_name")
+    co_supervisor_surname = _docx_first_value(payload, "co_supervisor_surname")
+    co_supervisor_initials = _docx_first_value(payload, "co_supervisor_initials")
+    co_supervisor_department = _docx_first_value(payload, "co_supervisor_department")
+    co_supervisor_has_signature = bool(
+        co_supervisor_name
+        or _docx_first_value(payload, "co_supervisor_signature")
+        or _docx_first_value(payload, "co_supervisor_signature_name")
+    )
+    co_supervisor_signature_payload = payload if co_supervisor_has_signature else {}
+
+    field_map = [
+        (1, 1, 1, student_name),
+        (1, 2, 1, student_number),
+        (1, 2, 3, degree),
+        (2, 1, 1, supervisor_name),
+        (2, 2, 1, department),
+        (3, 1, 1, co_supervisor_name),
+        (3, 2, 1, co_supervisor_department),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text_preserving_style(root, table_index, row_index, cell_index, value)
+
+    for index, digit in enumerate(student_number[:10]):
+        _docx_set_cell_text_preserving_style(root, 4, 0, index, digit)
+
+    paragraph_updates = {
+        48: _supervisor_agreement_party_line("Surname", student_surname, student_initials, "(hereafter called the student)"),
+        60: f"Address {_docx_underline_fill(_docx_first_value(payload, 'student_address'), 84)}",
+        61: f"{'_' * 71} Postal code {_docx_underline_fill(_docx_first_value(payload, 'student_postal_code'), 10)}",
+        62: f"Degree {_docx_underline_fill(degree, 49)}",
+        65: _supervisor_agreement_party_line("Surname", supervisor_surname, supervisor_initials),
+        67: f"School/Department {_docx_underline_fill(department, 74)},",
+        73: _supervisor_agreement_party_line("Surname", co_supervisor_surname, co_supervisor_initials),
+        75: f"School/Department {_docx_underline_fill(co_supervisor_department, 74)},",
+        153: _supervisor_agreement_signed_line(payload, "student", "a"),
+        156: _supervisor_agreement_signature_line(payload, "student", student_name),
+        160: _supervisor_agreement_signed_line(payload, "supervisor", "b"),
+        163: _supervisor_agreement_signature_line(payload, "supervisor", supervisor_name),
+        167: _supervisor_agreement_signed_line(co_supervisor_signature_payload, "co_supervisor", "c"),
+        170: _supervisor_agreement_signature_line(co_supervisor_signature_payload, "co_supervisor", co_supervisor_name),
+    }
+    for paragraph_index, value in paragraph_updates.items():
+        _docx_set_indexed_paragraph_text_preserving_style(root, paragraph_index, value)
+
+    _docx_append_paragraph_signature_image(root, contents, 156, payload, "student_signature")
+    _docx_append_paragraph_signature_image(root, contents, 163, payload, "supervisor_signature")
+    if co_supervisor_has_signature:
+        _docx_append_paragraph_signature_image(root, contents, 170, payload, "co_supervisor_signature")
+
+    return _docx_write_template(entries, contents, root)
+
+
 def _generate_jbs10_template_word_bytes(project, payload):
     template_path = _jbs10_word_template_path()
     if not template_path.exists():
@@ -2144,55 +3253,185 @@ def _generate_jbs10_template_word_bytes(project, payload):
     payload = _jbs5_payload(project, payload)
     entries, contents, root = _docx_read_template(template_path)
     supervisor = _docx_supervisor_payload(project, payload)
-    co_supervisor = {
-        "name": _docx_first_value(payload, "co_supervisor_1", "proposed_co_supervisors"),
-        "department": _docx_first_value(payload, "co_supervisor_1_department"),
-        "phone": _docx_first_value(payload, "co_supervisor_1_phone", "co_supervisor_1_contact"),
-        "email": _docx_first_value(payload, "co_supervisor_1_email"),
-    }
-    qualification = _docx_first_value(payload, "qualification", default=getattr(project, "qualification", "") or "MBA")
-    study_type = _docx_first_value(payload, "study_type", default="Capstone Project")
-    updates = {
-        10: f"INITIALS AND SURNAME: {_docx_student_initials_surname(project, payload)}    STUDENT NUMBER: {_docx_first_value(payload, 'student_number')}",
-        12: f"CURRENT DEGREE REGISTERED FOR: {_docx_degree_registered(qualification)}",
-        13: "QUALIFICATION:",
-        15: study_type,
-        16: f"FINAL TITLE ON SUBMISSION: {_docx_first_value(payload, 'research_title')}",
-        17: f"SUPERVISOR: {supervisor['name']}    DEPARTMENT: {supervisor['department']}",
-        18: f"PHONE/CELL PHONE: {supervisor['phone']}    EMAIL ADDRESS: {supervisor['email']}",
-        20: f"CO-SUPERVISOR: {co_supervisor['name']}    DEPARTMENT: {co_supervisor['department']}",
-        21: f"PHONE/CELL PHONE: {co_supervisor['phone']}    EMAIL ADDRESS: {co_supervisor['email']}",
-        64: f"SUPERVISOR: {_docx_first_value(payload, 'supervisor_signature') or supervisor['name']}    DATE: {_docx_format_date(_docx_first_value(payload, 'supervisor_signature_date'))}",
-        67: f"HEAD OF DEPARTMENT: {_docx_first_value(payload, 'head_of_department_signature')}    DATE: {_docx_format_date(_docx_first_value(payload, 'head_of_department_signature_date'))}",
-        70: f"EXECUTIVE DEAN: {_docx_first_value(payload, 'jbs_hdc_signature')}    DATE: {_docx_format_date(_docx_first_value(payload, 'jbs_hdc_signature_date'))}",
-    }
-    for paragraph_index, value in updates.items():
-        _docx_set_indexed_paragraph_text(root, paragraph_index, value)
 
-    assessor_paragraphs = {
-        "assessor_1": (25, [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11]),
-        "assessor_2": (38, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        "assessor_3": (52, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-    }
-    for slot, (start_index, paragraph_offsets) in assessor_paragraphs.items():
+    def user_staff_number(user):
+        return getattr(user, "staff_number", "") if user else ""
+
+    def assessor_name_line(slot):
         assessor = _docx_assessor_payload(project, payload, slot)
-        slot_updates = [
-            f"Full name: {assessor['name']}",
-            f"Qualification: {assessor['qualification']}",
-            f"Affiliation: {assessor['affiliation']}",
-            f"Street Address: {assessor['address']}",
-            f"Telephone number: {assessor['telephone']}",
-            f"Cell number: {assessor['cell']}",
-            f"Email address: {assessor['email']}",
-            "Indicate the approximate number of postgraduate students, MSc & PhD, supervised to completion: "
-            f"{assessor['students_supervised']}",
-            "Current affiliation with a university, (if not a motivation needs to be submitted): "
-            f"{assessor['current_affiliation']}",
-            f"Approximate number of publications: {assessor['publications']}",
-            f"International assessor: {assessor['international']}",
+        name = _docx_first_value(payload, f"{slot}_name") or assessor["name"]
+        affiliation = _docx_first_value(payload, f"{slot}_affiliation") or assessor["affiliation"]
+        if name and affiliation and affiliation.lower() not in name.lower():
+            return f"{name}, {affiliation}"
+        return name
+
+    def assessor_value(slot, key):
+        assessor = _docx_assessor_payload(project, payload, slot)
+        if key == "staff_number":
+            return _docx_first_value(payload, f"{slot}_staff_number") or user_staff_number(getattr(project, slot, None))
+        if key == "email":
+            return _docx_first_value(payload, f"{slot}_email") or assessor["email"]
+        if key == "qualification":
+            return _docx_first_value(payload, f"{slot}_qualification", f"{slot}_highest_qualification") or assessor["qualification"]
+        return _docx_first_value(payload, f"{slot}_{key}")
+
+    field_map = [
+        (0, 1, 1, _docx_first_value(payload, "surname")),
+        (0, 1, 3, _docx_first_value(payload, "student_title")),
+        (0, 2, 1, _docx_first_value(payload, "student_initials")),
+        (0, 2, 3, _docx_first_value(payload, "student_number")),
+        (0, 2, 5, _docx_yes_no(_docx_first_value(payload, "student_is_staff_member", default="No"))),
+        (0, 3, 1, _docx_first_value(payload, "qualification", default=getattr(project, "qualification", "") or "MBA")),
+        (0, 4, 1, _docx_first_value(payload, "ethical_clearance_number")),
+        (1, 2, 1, _docx_first_value(payload, "research_title")),
+        (1, 5, 1, _docx_first_value(payload, "amended_title", "previous_title")),
+        (1, 8, 1, _docx_first_value(payload, "supervisor_name", "proposed_supervisor") or supervisor["name"]),
+        (1, 8, 3, _docx_first_value(payload, "supervisor_staff_number") or user_staff_number(getattr(project, "primary_supervisor", None))),
+        (1, 9, 1, _docx_first_value(payload, "co_supervisor_1", "proposed_co_supervisors", "co_supervisor_name")),
+        (1, 9, 3, _docx_first_value(payload, "co_supervisor_1_staff_number")),
+        (1, 10, 1, _docx_first_value(payload, "co_supervisor_2")),
+        (1, 10, 3, _docx_first_value(payload, "co_supervisor_2_staff_number")),
+        (1, 12, 1, _docx_first_value(payload, "amended_supervisor_lineup", "amended_supervisor")),
+        (1, 12, 3, _docx_first_value(payload, "amended_supervisor_staff_number")),
+        (1, 13, 1, _docx_first_value(payload, "amended_co_supervisor_lineup", "amended_co_supervisors", "amended_co_supervisor")),
+        (1, 13, 3, _docx_first_value(payload, "amended_co_supervisor_staff_number")),
+        (1, 16, 1, _docx_first_value(payload, "internal_assessor_name")),
+        (2, 1, 1, assessor_name_line("assessor_1")),
+        (2, 1, 3, assessor_value("assessor_1", "staff_number")),
+        (2, 2, 1, assessor_value("assessor_1", "qualification")),
+        (2, 2, 3, assessor_value("assessor_1", "email")),
+        (2, 3, 1, assessor_name_line("assessor_2")),
+        (2, 3, 3, assessor_value("assessor_2", "staff_number")),
+        (2, 4, 1, assessor_value("assessor_2", "qualification")),
+        (2, 4, 3, assessor_value("assessor_2", "email")),
+        (2, 5, 1, assessor_name_line("assessor_3")),
+        (2, 5, 3, assessor_value("assessor_3", "staff_number")),
+        (2, 6, 1, assessor_value("assessor_3", "qualification")),
+        (2, 6, 3, assessor_value("assessor_3", "email")),
+        (2, 7, 1, assessor_name_line("assessor_4")),
+        (2, 7, 3, assessor_value("assessor_4", "staff_number")),
+        (2, 8, 1, assessor_value("assessor_4", "qualification")),
+        (2, 8, 3, assessor_value("assessor_4", "email")),
+        (2, 10, 1, _docx_first_value(payload, "amended_internal_assessor_name")),
+        (2, 11, 1, _docx_first_value(payload, "amended_internal_assessor_qualification")),
+        (2, 11, 3, _docx_first_value(payload, "amended_internal_assessor_staff_number")),
+        (2, 13, 1, _docx_first_value(payload, "amended_external_assessor_1_name")),
+        (2, 13, 3, _docx_first_value(payload, "amended_external_assessor_1_staff_number")),
+        (2, 14, 1, _docx_first_value(payload, "amended_external_assessor_1_qualification")),
+        (2, 14, 3, _docx_first_value(payload, "amended_external_assessor_1_email")),
+        (2, 15, 1, _docx_first_value(payload, "amended_external_assessor_2_name")),
+        (2, 15, 3, _docx_first_value(payload, "amended_external_assessor_2_staff_number")),
+        (2, 16, 1, _docx_first_value(payload, "amended_external_assessor_2_qualification")),
+        (2, 16, 3, _docx_first_value(payload, "amended_external_assessor_2_email")),
+        (2, 17, 1, _docx_first_value(payload, "amended_external_assessor_3_name")),
+        (2, 17, 3, _docx_first_value(payload, "amended_external_assessor_3_staff_number")),
+        (2, 18, 1, _docx_first_value(payload, "amended_external_assessor_3_qualification")),
+        (2, 18, 3, _docx_first_value(payload, "amended_external_assessor_3_email")),
+        (3, 0, 1, _docx_first_value(payload, "supervisor_signature") or supervisor["name"]),
+        (3, 0, 3, _docx_format_date(_docx_first_value(payload, "supervisor_signature_date"))),
+        (3, 1, 1, _docx_first_value(payload, "co_supervisor_signature", "co_supervisor_1")),
+        (3, 1, 3, _docx_format_date(_docx_first_value(payload, "co_supervisor_signature_date"))),
+        (4, 0, 1, _docx_first_value(payload, "head_of_department_signature")),
+        (4, 0, 3, _docx_format_date(_docx_first_value(payload, "head_of_department_signature_date"))),
+        (5, 0, 1, _docx_first_value(payload, "jbs_hdc_signature")),
+        (5, 0, 3, _docx_format_date(_docx_first_value(payload, "jbs_hdc_signature_date"))),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text_preserving_style_allow_blank(root, table_index, row_index, cell_index, value)
+
+    _docx_set_cell_signature_image(root, contents, 3, 0, 1, payload, "supervisor_signature")
+    _docx_set_cell_signature_image(root, contents, 3, 1, 1, payload, "co_supervisor_signature")
+    _docx_set_cell_signature_image(root, contents, 4, 0, 1, payload, "head_of_department_signature")
+    _docx_set_cell_signature_image(root, contents, 5, 0, 1, payload, "jbs_hdc_signature")
+
+    study_type_checks = _jbs10_study_type_checks(payload)
+    for table_index, row_index, cell_index, checked in (
+        (0, 5, 1, study_type_checks["capstone"]),
+        (0, 5, 3, study_type_checks["limited_scope"]),
+        (0, 5, 5, study_type_checks["minor"]),
+        (0, 5, 7, study_type_checks["dissertation"]),
+        (0, 5, 10, study_type_checks["thesis_monograph"]),
+        (0, 6, 10, study_type_checks["thesis_article"]),
+    ):
+        _docx_set_mark_cell(root, table_index, row_index, cell_index, checked)
+
+    is_4ir = _docx_yes_no(_docx_first_value(payload, "is_4ir_research", default="No")).lower() == "yes"
+    _docx_set_cell_text_preserving_style_allow_blank(root, 1, 3, 3, "X" if is_4ir else "")
+    _docx_set_cell_text_preserving_style_allow_blank(root, 1, 3, 5, "" if is_4ir else "X")
+
+    return _docx_write_template(entries, contents, root)
+
+
+def _intent_signature_line(payload, signature_key, date_key):
+    signature = _docx_first_value(payload, signature_key)
+    date_value = _docx_format_date(_docx_first_value(payload, date_key))
+    if signature and date_value:
+        return f"{signature}\nDate: {date_value}"
+    return signature or date_value
+
+
+def _generate_intent_to_submit_template_word_bytes(project, payload):
+    template_path = _intent_to_submit_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    supervisor = _docx_supervisor_payload(project, payload)
+
+    simple_cells = [
+        (0, 0, 1, _docx_student_full_name(project, payload)),
+        (0, 1, 1, _docx_first_value(payload, "student_number")),
+        (0, 2, 1, _docx_first_value(payload, "email")),
+        (0, 2, 3, _docx_first_value(payload, "contact")),
+        (0, 6, 1, _docx_first_value(payload, "supervisor_name", "proposed_supervisor") or supervisor["name"]),
+        (0, 7, 1, _docx_first_value(payload, "co_supervisor_name", "co_supervisor_1", "proposed_co_supervisors")),
+        (0, 20, 1, _docx_first_value(payload, "ethical_clearance_number")),
+    ]
+    for table_index, row_index, cell_index, value in simple_cells:
+        _docx_set_cell_text(root, table_index, row_index, cell_index, value, size="18")
+
+    intended_notice_date = _docx_format_date(_docx_first_value(payload, "intended_date"))
+    replace_cells = [
+        (0, 5, 0, _docx_first_value(payload, "research_title")),
+        (0, 8, 0, f"Date on which this notice is given: {intended_notice_date}" if intended_notice_date else ""),
+        (0, 11, 1, _intent_signature_line(payload, "signature_name", "signature_date")),
+        (0, 13, 1, _docx_first_value(payload, "supervisor_agree_signature")),
+        (0, 14, 1, _docx_first_value(payload, "co_supervisor_agree_signature")),
+        (0, 15, 1, _docx_first_value(payload, "supervisor_disagree_signature")),
+        (0, 16, 1, _docx_first_value(payload, "co_supervisor_disagree_signature")),
+        (0, 17, 1, _docx_first_value(payload, "disagree_reasons")),
+        (0, 18, 1, _docx_format_date(_docx_first_value(payload, "disagree_reasons_date"))),
+    ]
+    for table_index, row_index, cell_index, value in replace_cells:
+        _docx_replace_cell_text(root, table_index, row_index, cell_index, value, size="18")
+    _docx_set_cell_signature_image(root, contents, 0, 11, 1, payload, "signature_name")
+    _docx_set_cell_signature_image(root, contents, 0, 13, 1, payload, "supervisor_agree_signature")
+    _docx_set_cell_signature_image(root, contents, 0, 14, 1, payload, "co_supervisor_agree_signature")
+    _docx_set_cell_signature_image(root, contents, 0, 15, 1, payload, "supervisor_disagree_signature")
+    _docx_set_cell_signature_image(root, contents, 0, 16, 1, payload, "co_supervisor_disagree_signature")
+
+    for row_index, field_name in (
+        (19, "title_approved_by_hdc"),
+        (21, "examiners_approved_by_hdc"),
+        (22, "examiners_nominated_with_notice"),
+    ):
+        answer = _docx_yes_no(_docx_first_value(payload, field_name)).lower()
+        if answer == "yes":
+            _docx_replace_cell_text(root, 0, row_index, 1, "X  Yes", size="16", bold=True, center=True)
+        elif answer == "no":
+            _docx_replace_cell_text(root, 0, row_index, 2, "X  No", size="16", bold=True, center=True)
+
+    approval_line = "\n".join(
+        line
+        for line in [
+            _intent_signature_line(payload, "hod_signature", "hod_signature_date"),
+            _intent_signature_line(payload, "director_signature", "director_signature_date"),
         ]
-        for offset, value in zip(paragraph_offsets, slot_updates):
-            _docx_set_indexed_paragraph_text(root, start_index + offset, value)
+        if line
+    )
+    if approval_line:
+        _docx_set_indexed_paragraph_text(root, 7, approval_line, size="18")
 
     return _docx_write_template(entries, contents, root)
 
@@ -2305,7 +3544,10 @@ def _generate_jbs1_template_word_bytes(project, payload):
         (6, 0, 3, _docx_format_date(_docx_first_value(payload, "office_program_manager_date"))),
     ]
     for table_index, row_index, cell_index, value in field_map:
-        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
+        _docx_set_cell_text_preserving_style(root, table_index, row_index, cell_index, value)
+    _docx_set_cell_signature_image(root, contents, 3, 0, 1, payload, "signature_name")
+    _docx_set_cell_signature_image(root, contents, 4, 0, 1, payload, "supervisor_signature")
+    _docx_set_cell_signature_image(root, contents, 4, 1, 1, payload, "co_supervisor_signature")
     return _docx_write_template(entries, contents, root)
 
 
@@ -2317,46 +3559,60 @@ def _generate_affidavit_template_word_bytes(project, payload):
     payload = _jbs5_payload(project, payload)
     entries, contents, root = _docx_read_template(template_path)
     full_name = _docx_student_full_name(project, payload)
-    work_type = _docx_first_value(payload, "work_type", default="Capstone Project")
-    research_title = _docx_first_value(payload, "research_title")
-    affidavit_date = _docx_format_date(_docx_first_value(payload, "affidavit_date"))
+    affidavit_day, affidavit_month, affidavit_year = _docx_day_month_year_parts(payload, "affidavit_date", "affidavit")
+    affidavit_year_tail = str(affidavit_year or "").strip()
+    if len(affidavit_year_tail) == 4 and affidavit_year_tail.startswith("20"):
+        affidavit_year_tail = affidavit_year_tail[-2:]
+    student_id_number = _docx_first_value(payload, "student_id_number")
+    student_number = _docx_first_value(payload, "student_number")
+    qualification = _docx_first_value(payload, "qualification", default="MBA")
+    signing_location = _docx_first_value(payload, "signing_location")
+    signature_name = _docx_first_value(payload, "signature_name") or full_name
     updates = {
-        12: f"This serves to confirm that I {full_name}",
-        15: f"ID Number {_docx_first_value(payload, 'student_id_number')}",
-        17: f"Student number {_docx_first_value(payload, 'student_number')} enrolled for the",
-        19: f"Qualification {_docx_first_value(payload, 'qualification', default='MBA')} in the",
-        25: (
-            f"I further declare that the work presented in the {work_type}"
-            + (f", titled {research_title}," if research_title else "")
-            + " is authentic and original unless clearly indicated otherwise and in such instances fully referenced."
-        ),
-        32: f"Signed at {_docx_first_value(payload, 'signing_location')} on this {affidavit_date}.",
-        34: f"Signature {_docx_first_value(payload, 'signature_name') or full_name}    Print name {full_name}",
+        12: [
+            ("This serves to confirm that I ", False),
+            (_docx_underlined_field_text(full_name, 68), True),
+        ],
+        15: [
+            ("ID Number ", False),
+            (_docx_underlined_field_text(student_id_number, 82), True),
+        ],
+        17: [
+            ("Student number ", False),
+            (_docx_underlined_field_text(student_number, 65), True),
+            (" enrolled for the ", False),
+        ],
+        19: [
+            ("Qualification ", False),
+            (_docx_underlined_field_text(qualification, 76), True),
+            (" in the", False),
+        ],
+        32: [
+            ("Signed at ", False),
+            (_docx_underlined_field_text(signing_location, 29), True),
+            ("on this ", False),
+            (_docx_underlined_field_text(affidavit_day, 14), True),
+            ("day of ", False),
+            (_docx_underlined_field_text(affidavit_month, 21), True),
+            (" 20", False),
+            (_docx_underlined_field_text(affidavit_year_tail, 3), True),
+            (".", False),
+        ],
+        34: [
+            ("Signature ", False),
+            (_docx_underlined_field_text(signature_name, 34), True),
+            (" Print name ", False),
+            (_docx_underlined_field_text(full_name, 25), True),
+        ],
     }
-    for paragraph_index, value in updates.items():
-        _docx_set_indexed_paragraph_text(root, paragraph_index, value)
+    for paragraph_index, parts in updates.items():
+        _docx_set_indexed_paragraph_parts_preserving_style(root, paragraph_index, parts)
+    _docx_append_paragraph_signature_image(root, contents, 34, payload, "signature_name")
     return _docx_write_template(entries, contents, root)
 
 
 def _generate_plagiarism_template_word_bytes(project, payload):
-    template_path = _plagiarism_word_template_path()
-    if not template_path.exists():
-        return None
-
-    payload = _jbs5_payload(project, payload)
-    entries, contents, root = _docx_read_template(template_path)
-    field_map = [
-        (0, 0, 1, _docx_first_value(payload, "programme", "module_title", default="MBA")),
-        (0, 1, 1, _docx_first_value(payload, "assessment_title", "research_title")),
-        (0, 2, 1, _docx_first_value(payload, "module_lead", "lecturer_name", "supervisor_name")),
-        (0, 3, 1, _docx_format_date(_docx_first_value(payload, "submission_date", "due_date"))),
-        (1, 1, 0, _docx_student_initials_surname(project, payload) or _docx_student_full_name(project, payload)),
-        (1, 1, 1, _docx_first_value(payload, "student_number")),
-        (1, 1, 2, _docx_first_value(payload, "signature_name") or _docx_student_full_name(project, payload)),
-    ]
-    for table_index, row_index, cell_index, value in field_map:
-        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
-    return _docx_write_template(entries, contents, root)
+    return _generate_tii_ai_template_word_bytes(project, payload)
 
 
 def _generate_tii_ai_template_word_bytes(project, payload):
@@ -2389,10 +3645,12 @@ def _generate_tii_ai_template_word_bytes(project, payload):
         (4, 1, 2, _docx_first_value(payload, "ai_use_motivation")),
     ]
     for table_index, row_index, cell_index, value in common_fields:
-        _docx_set_cell_text(root, table_index, row_index, cell_index, value)
+        _docx_set_cell_text_preserving_style(root, table_index, row_index, cell_index, value)
+    _docx_set_cell_signature_image(root, contents, 1, 1, 2, payload, "signature_name")
+    _docx_set_cell_signature_image(root, contents, 3, 1, 2, payload, "signature_name")
     signature_date = _docx_format_date(_docx_first_value(payload, "signature_date"))
     if signature_date:
-        _docx_set_indexed_paragraph_text(root, 88, f"Date: {signature_date}")
+        _docx_set_indexed_paragraph_text_preserving_style(root, 88, f"Date: {signature_date}")
     return _docx_write_template(entries, contents, root)
 
 
@@ -2444,13 +3702,549 @@ def _generate_capstone_evaluation_template_word_bytes(project, payload):
     return _docx_write_template(entries, contents, root)
 
 
+def _docx_append_cell_paragraph_text(root, table_index, row_index, cell_index, value):
+    value = str(value or "").strip()
+    if not value:
+        return
+    cell = _docx_cell(root, table_index, row_index, cell_index)
+    if cell is None:
+        return
+    paragraphs = cell.findall("w:p", _DOCX_NS)
+    source_paragraph = paragraphs[-1] if paragraphs else None
+    source_p_props = deepcopy(source_paragraph.find("w:pPr", _DOCX_NS)) if source_paragraph is not None and source_paragraph.find("w:pPr", _DOCX_NS) is not None else None
+    source_run = source_paragraph.find("w:r", _DOCX_NS) if source_paragraph is not None else None
+    source_run_props = deepcopy(source_run.find("w:rPr", _DOCX_NS)) if source_run is not None and source_run.find("w:rPr", _DOCX_NS) is not None else None
+    for raw_line in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        paragraph = ET.SubElement(cell, _docx_tag("p"))
+        if source_p_props is not None:
+            paragraph.append(deepcopy(source_p_props))
+        paragraph.append(_docx_run_like_existing(paragraph, raw_line, source_props=source_run_props))
+
+
+def _generate_capstone_assessor_report_form_1_template_word_bytes(project, payload):
+    template_path = _capstone_assessor_report_form_1_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = _jbs5_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    field_map = [
+        (0, 0, 1, _docx_first_value(payload, "student_name") or _docx_student_full_name(project, payload)),
+        (0, 1, 1, _docx_first_value(payload, "student_number")),
+        (0, 2, 1, _docx_first_value(payload, "research_title")),
+        (0, 3, 1, _docx_first_value(payload, "assessor_name")),
+        (0, 4, 1, _docx_first_value(payload, "affiliation")),
+        (0, 5, 1, "\n".join(part for part in [_docx_first_value(payload, "assessor_email"), _docx_first_value(payload, "assessor_contact")] if part)),
+        (0, 6, 1, _docx_first_value(payload, "assessor_signature_name", "assessor_name")),
+        (0, 6, 3, _docx_format_date(_docx_first_value(payload, "certification_date"))),
+        (3, 0, 1, _docx_first_value(payload, "grade")),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text_preserving_style(root, table_index, row_index, cell_index, value)
+    _docx_set_cell_signature_image(root, contents, 0, 6, 1, payload, "assessor_signature_name")
+
+    recommendation = _docx_normalized(_docx_first_value(payload, "recommendation"))
+    recommendation_rows = [
+        (2, "as the research stands" in recommendation or "accept as the research stands" in recommendation),
+        (4, "minor revisions" in recommendation),
+        (5, "major revisions" in recommendation and "re-examination" not in recommendation and "re examination" not in recommendation),
+        (6, "re-examination" in recommendation or "re examination" in recommendation),
+        (7, "outright" in recommendation or "rejection" in recommendation),
+    ]
+    if recommendation:
+        for row_index, checked in recommendation_rows:
+            _docx_set_mark_cell(root, 1, row_index, 2, checked)
+            _docx_set_mark_cell(root, 1, row_index, 3, not checked)
+
+    consent = _docx_first_value(payload, "consent_name_disclosure")
+    if consent:
+        _docx_yes_no_marks(root, 1, 8, 2, 3, consent)
+
+    _docx_append_cell_paragraph_text(root, 4, 0, 0, _docx_first_value(payload, "written_assessment"))
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_assessment_summary_template_word_bytes(project, payload):
+    template_path = _summary_assessment_report_word_template_path()
+    if not template_path.exists():
+        return None
+
+    payload = build_assessment_summary_payload(project, payload)
+    entries, contents, root = _docx_read_template(template_path)
+    field_map = [
+        (0, 1, 1, _docx_first_value(payload, "student_surname")),
+        (0, 1, 3, _docx_first_value(payload, "student_initials")),
+        (0, 1, 5, _docx_first_value(payload, "student_title")),
+        (0, 3, 1, _docx_first_value(payload, "qualification", default="Masters")),
+        (0, 4, 1, _docx_first_value(payload, "discipline", default="Master of Business Administration")),
+        (0, 5, 1, _docx_first_value(payload, "research_title")),
+        (0, 6, 1, _docx_format_date(_docx_first_value(payload, "date_of_first_registration"), month_year=True)),
+        (1, 1, 1, _docx_first_value(payload, "supervisor_surname")),
+        (1, 1, 3, _docx_first_value(payload, "supervisor_initials")),
+        (1, 1, 5, _docx_first_value(payload, "supervisor_title")),
+        (1, 2, 1, _docx_first_value(payload, "supervisor_affiliation")),
+        (1, 3, 1, _docx_first_value(payload, "supervisor_qualification")),
+        (1, 4, 1, _docx_first_value(payload, "co_supervisor_surname")),
+        (1, 4, 3, _docx_first_value(payload, "co_supervisor_initials")),
+        (1, 4, 5, _docx_first_value(payload, "co_supervisor_title")),
+        (1, 5, 1, _docx_first_value(payload, "co_supervisor_affiliation")),
+        (1, 6, 1, _docx_first_value(payload, "co_supervisor_qualification")),
+        (1, 7, 1, _docx_first_value(payload, "assessor_1_surname")),
+        (1, 7, 3, _docx_first_value(payload, "assessor_1_initials")),
+        (1, 7, 5, _docx_first_value(payload, "assessor_1_title")),
+        (1, 8, 1, _docx_first_value(payload, "assessor_1_affiliation")),
+        (1, 9, 1, _docx_first_value(payload, "assessor_1_qualification")),
+        (1, 10, 1, _docx_first_value(payload, "assessor_2_surname")),
+        (1, 10, 3, _docx_first_value(payload, "assessor_2_initials")),
+        (1, 10, 5, _docx_first_value(payload, "assessor_2_title")),
+        (1, 11, 1, _docx_first_value(payload, "assessor_2_affiliation")),
+        (1, 12, 1, _docx_first_value(payload, "assessor_2_qualification")),
+        (3, 20, 1, _docx_first_value(payload, "coursework_total")),
+        (3, 20, 2, _docx_first_value(payload, "coursework_credit_total")),
+        (3, 21, 1, _docx_first_value(payload, "coursework_average")),
+        (3, 21, 2, _docx_first_value(payload, "coursework_credit_average")),
+        (3, 24, 1, _docx_first_value(payload, "assessor_1_grade")),
+        (3, 25, 1, _docx_first_value(payload, "assessor_2_grade")),
+        (3, 26, 1, _docx_first_value(payload, "capstone_total")),
+        (3, 27, 1, _docx_first_value(payload, "capstone_average")),
+        (3, 30, 1, _docx_first_value(payload, "capstone_weighted_result")),
+        (3, 31, 1, _docx_first_value(payload, "coursework_weighted_result")),
+        (3, 33, 2, _docx_first_value(payload, "final_mark")),
+        (4, 0, 1, _docx_first_value(payload, "final_mark")),
+        (6, 2, 0, _docx_first_value(payload, "supervisor_signature_name")),
+        (6, 2, 1, _docx_format_date(_docx_first_value(payload, "supervisor_signature_date"))),
+        (6, 4, 0, _docx_first_value(payload, "hod_signature_name")),
+        (6, 4, 1, _docx_format_date(_docx_first_value(payload, "hod_signature_date"))),
+        (
+            6,
+            6,
+            0,
+            _docx_first_value(payload, "chair_fhdc_signature_name", "hdc_signature_name", "executive_dean_signature_name"),
+        ),
+        (
+            6,
+            6,
+            1,
+            _docx_format_date(
+                _docx_first_value(payload, "chair_fhdc_signature_date", "hdc_signature_date", "executive_dean_signature_date")
+            ),
+        ),
+    ]
+    for table_index, row_index, cell_index, value in field_map:
+        _docx_set_cell_text_preserving_style(root, table_index, row_index, cell_index, value)
+
+    _docx_set_cell_signature_image(root, contents, 6, 2, 0, payload, "supervisor_signature_name")
+    _docx_set_cell_signature_image(root, contents, 6, 4, 0, payload, "hod_signature_name")
+    if not _docx_set_cell_signature_image(root, contents, 6, 6, 0, payload, "chair_fhdc_signature_name"):
+        if not _docx_set_cell_signature_image(root, contents, 6, 6, 0, payload, "hdc_signature_name"):
+            _docx_set_cell_signature_image(root, contents, 6, 6, 0, payload, "executive_dean_signature_name")
+
+    for offset, module_code in enumerate(SUMMARY_COURSEWORK_MODULES, start=2):
+        _docx_set_cell_text_preserving_style(root, 3, offset, 1, _docx_first_value(payload, f"module_{module_code}_result"))
+        _docx_set_cell_text_preserving_style(root, 3, offset, 2, _docx_first_value(payload, f"module_{module_code}_credit"))
+
+    _docx_fill_character_cells(root, 0, 2, 1, 9, _docx_first_value(payload, "student_number"))
+
+    recommendation_rows = {
+        "assessor_1": 2,
+        "assessor_2": 3,
+        "assessor_3": 4,
+    }
+    for slot, row_index in recommendation_rows.items():
+        selected_column = _assessment_summary_recommendation_column(_docx_first_value(payload, f"{slot}_recommendation"))
+        for column_index in (1, 2, 3, 4):
+            _docx_set_mark_cell(root, 2, row_index, column_index, selected_column == column_index)
+
+    corrections_complete = _docx_is_yes(_docx_first_value(payload, "corrections_complete", default="Yes"))
+    _docx_set_mark_cell(root, 5, 1, 2, corrections_complete)
+    _docx_set_mark_cell(root, 5, 1, 4, not corrections_complete)
+
+    final_grade = _assessment_summary_int_grade(_docx_first_value(payload, "final_mark"))
+    _docx_set_mark_cell(root, 4, 0, 3, bool(final_grade is not None and final_grade >= 75))
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_assessor_temp_appointment_template_word_bytes(project, payload):
+    template_path = _assessor_temp_appointment_word_template_path()
+    if not template_path.exists():
+        return None
+
+    entries, contents, root = _docx_read_template(template_path)
+    _docx_yes_no_marks(root, 0, 0, 2, 4, _docx_first_value(payload, "new_employee"))
+    _docx_set_cell_text_preserving_style(root, 0, 0, 6, _docx_first_value(payload, "employee_number"))
+    _docx_yes_no_marks(root, 0, 1, 2, 4, _docx_first_value(payload, "employed_at_uj"))
+    _docx_set_cell_text_preserving_style(root, 0, 1, 6, _docx_first_value(payload, "uj_department_division"))
+    _docx_set_cell_text_preserving_style(root, 0, 2, 1, _docx_first_value(payload, "appointed_as", default="External Assessor"))
+    _docx_set_cell_text_preserving_style(root, 0, 4, 1, _docx_first_value(payload, "assessor_surname"))
+    _docx_set_cell_text_preserving_style(root, 0, 4, 3, _docx_first_value(payload, "assessor_title"))
+    _docx_set_cell_text_preserving_style(root, 0, 5, 1, _docx_first_value(payload, "assessor_first_names"))
+    _docx_fill_character_cells(root, 0, 6, 1, 13, _docx_first_value(payload, "identity_passport_number"))
+    _docx_set_cell_text_preserving_style(root, 0, 7, 1, _docx_format_date_numeric(_docx_first_value(payload, "date_of_birth")))
+    _docx_set_cell_text_preserving_style(root, 0, 7, 3, _docx_first_value(payload, "work_visa_number"))
+    _docx_mark_matching_option(root, 0, [("Male", 8, 2), ("Female", 8, 4)], _docx_first_value(payload, "gender"))
+    _docx_mark_matching_option(
+        root,
+        0,
+        [("Single", 8, 7), ("Married", 8, 9), ("Divorced", 8, 11), ("Widowed", 8, 13)],
+        _docx_first_value(payload, "marital_status"),
+    )
+    _docx_yes_no_marks(root, 0, 9, 2, 4, _docx_first_value(payload, "sa_citizen"))
+    _docx_set_cell_text_preserving_style(root, 0, 9, 6, _docx_first_value(payload, "nationality"))
+    _docx_yes_no_marks(root, 0, 10, 2, 4, _docx_first_value(payload, "employed_outside_uj"))
+    _docx_set_cell_text_preserving_style(root, 0, 10, 6, _docx_first_value(payload, "home_language"))
+    _docx_set_cell_text_preserving_style(root, 0, 11, 1, _docx_first_value(payload, "income_tax_number"))
+    care_of = _docx_first_value(payload, "care_of_intermediary")
+    _docx_set_mark_cell(root, 0, 12, 2, bool(care_of and _docx_normalized(care_of) != "none"))
+    _docx_set_cell_text_preserving_style(root, 0, 12, 4, care_of or "NONE")
+    _docx_set_cell_text_preserving_style(root, 0, 13, 1, _docx_first_value(payload, "home_address"))
+    _docx_set_cell_text_preserving_style(root, 0, 13, 3, _docx_first_value(payload, "postal_address"))
+    _docx_set_cell_text_preserving_style(root, 0, 14, 2, _docx_first_value(payload, "home_postal_code"))
+    _docx_set_cell_text_preserving_style(root, 0, 14, 4, _docx_first_value(payload, "postal_code"))
+    _docx_set_cell_text_preserving_style(root, 0, 15, 2, _docx_first_value(payload, "home_tel"))
+    _docx_set_cell_text_preserving_style(root, 0, 15, 4, _docx_first_value(payload, "assessor_contact"))
+    _docx_set_cell_text_preserving_style(root, 0, 16, 1, _docx_first_value(payload, "assessor_email"))
+    _docx_set_cell_text_preserving_style(root, 0, 16, 3, _docx_first_value(payload, "work_tel"))
+    _docx_yes_no_marks(root, 0, 17, 2, 4, _docx_first_value(payload, "disability_status"))
+    _docx_set_cell_text_preserving_style(root, 0, 17, 6, _docx_first_value(payload, "disability_nature"))
+    _docx_mark_matching_option(
+        root,
+        0,
+        [("African", 19, 2), ("Coloured", 19, 4), ("Indian", 19, 6), ("White", 19, 8), ("Chinese", 19, 10)],
+        _docx_first_value(payload, "race"),
+    )
+
+    _docx_set_cell_text_preserving_style(root, 1, 1, 1, _docx_first_value(payload, "qualification_institution"))
+    _docx_set_cell_text_preserving_style(root, 1, 1, 3, _docx_first_value(payload, "highest_qualification"))
+    _docx_set_cell_text_preserving_style(root, 1, 2, 1, _docx_format_date_numeric(_docx_first_value(payload, "qualification_awarded_date")))
+    _docx_mark_matching_option(root, 1, [("Passed", 2, 4), ("Completed", 2, 6)], _docx_first_value(payload, "qualification_status"))
+    _docx_yes_no_marks(root, 1, 4, 5, 3, _docx_first_value(payload, "bank_changed"))
+    _docx_set_cell_text_preserving_style(root, 1, 5, 1, _docx_first_value(payload, "bank_account_holder"))
+    _docx_set_cell_text_preserving_style(root, 1, 6, 1, _docx_first_value(payload, "bank_name"))
+    _docx_set_cell_text_preserving_style(root, 1, 7, 1, _docx_first_value(payload, "bank_branch_name"))
+    _docx_set_cell_text_preserving_style(root, 1, 7, 3, _docx_first_value(payload, "bank_branch_code"))
+    _docx_set_cell_text_preserving_style(root, 1, 8, 1, _docx_first_value(payload, "bank_account_number"))
+    _docx_set_cell_text_preserving_style(root, 1, 12, 1, _docx_first_value(payload, "appointed_as", default="External Assessor"))
+    _docx_set_cell_text_preserving_style(root, 1, 13, 1, _docx_first_value(payload, "appointment_category"))
+    _docx_set_cell_text_preserving_style(root, 1, 14, 1, _docx_format_date_numeric(_docx_first_value(payload, "appointment_start_date")))
+    _docx_set_cell_text_preserving_style(root, 1, 14, 3, _docx_format_date_numeric(_docx_first_value(payload, "appointment_end_date")))
+    _docx_mark_matching_option(
+        root,
+        1,
+        [
+            ("Temporary increase in volume of work, less than 12 months", 18, 0),
+            ("Seasonal increase in volume of work, less than 12 months", 19, 0),
+            ("Position funded by external (non UJ) funds for limited time", 21, 0),
+            ("Services will not exceed 3 months", 24, 0),
+            ("Specific project for limited time and clear deliverable", 25, 0),
+            ("Other", 26, 0),
+        ],
+        _docx_first_value(payload, "temporary_employment_reason"),
+    )
+    _docx_set_cell_text_preserving_style(root, 1, 26, 2, _docx_first_value(payload, "appointment_reason_other"))
+    _docx_set_cell_text_preserving_style(root, 1, 27, 1, _docx_first_value(payload, "appointment_motivation"))
+
+    cost_parts = _docx_cost_centre_parts(_docx_first_value(payload, "full_cost_centre_string"))
+    _docx_set_cell_text_preserving_style(root, 2, 0, 2, _docx_first_value(payload, "rate_per_month", default="N/A"))
+    _docx_set_cell_text_preserving_style(root, 2, 0, 4, _docx_first_value(payload, "rate_per_hour"))
+    _docx_set_cell_text_preserving_style(root, 2, 2, 0, _docx_first_value(payload, "other_rate_basis"))
+    _docx_set_cell_text_preserving_style(root, 2, 3, 1, _docx_first_value(payload, "total_units"))
+    _docx_set_cell_text_preserving_style(root, 2, 3, 3, _docx_first_value(payload, "actual_hours"))
+    for index, part in enumerate(cost_parts, start=1):
+        _docx_set_cell_text_preserving_style(root, 2, 4, index, part)
+    _docx_set_cell_text_preserving_style(root, 2, 4, 7, _docx_first_value(payload, "permanent_post_number", default="N/A"))
+    budget = _docx_first_value(payload, "total_budget_for_appointment")
+    _docx_set_cell_text_preserving_style(root, 2, 5, 1, f"R{budget}" if budget and not str(budget).startswith("R") else budget)
+    _docx_set_cell_text_preserving_style(root, 2, 7, 0, _docx_first_value(payload, "conflict_of_interest_details", default="NONE"))
+
+    signature_name = _docx_first_value(payload, "employee_signature_name", "assessor_name")
+    _docx_set_cell_text_preserving_style(root, 3, 1, 0, signature_name)
+    _docx_set_cell_text_preserving_style(root, 3, 1, 1, signature_name)
+    _docx_set_cell_text_preserving_style(root, 3, 1, 2, _docx_format_date_numeric(_docx_first_value(payload, "employee_signature_date")))
+    _docx_set_cell_signature_image(root, contents, 3, 1, 0, payload, "employee_signature_name")
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_assessor_temp_claim_template_word_bytes(project, payload):
+    template_path = _assessor_temp_claim_word_template_path()
+    if not template_path.exists():
+        return None
+
+    entries, contents, root = _docx_read_template(template_path)
+    _docx_set_cell_text_preserving_style(root, 0, 3, 1, _docx_first_value(payload, "faculty_division"))
+    _docx_set_cell_text_preserving_style(root, 0, 3, 3, _docx_first_value(payload, "department_unit_centre"))
+    _docx_set_cell_text_preserving_style(root, 0, 4, 1, _docx_first_value(payload, "employee_number"))
+    _docx_set_cell_text_preserving_style(root, 0, 4, 3, _docx_first_value(payload, "month_of_claim"))
+    _docx_set_cell_text_preserving_style(root, 0, 5, 1, _docx_first_value(payload, "assessor_surname"))
+    _docx_set_cell_text_preserving_style(root, 0, 5, 3, _docx_first_value(payload, "assessor_title"))
+    _docx_set_cell_text_preserving_style(root, 0, 6, 1, _docx_first_value(payload, "assessor_first_names"))
+    _docx_set_cell_text_preserving_style(root, 0, 7, 1, _docx_first_value(payload, "assessor_contact"))
+    _docx_set_cell_text_preserving_style(root, 0, 7, 3, _docx_first_value(payload, "assessor_email"))
+    _docx_set_cell_text_preserving_style(root, 0, 8, 1, _docx_first_value(payload, "alternate_contact_number"))
+    _docx_set_cell_text_preserving_style(root, 0, 8, 3, _docx_first_value(payload, "alternate_email_address"))
+    _docx_set_cell_text_preserving_style(root, 0, 10, 1, _docx_first_value(payload, "requestor_extension"))
+    _docx_set_cell_text_preserving_style(root, 0, 10, 3, _docx_first_value(payload, "requestor_email", default="vukonac@uj.ac.za"))
+    _docx_set_cell_text_preserving_style(root, 0, 12, 1, "START DATE: " + _docx_format_date_numeric(_docx_first_value(payload, "appointment_start_date")))
+    _docx_set_cell_text_preserving_style(root, 0, 12, 2, "END DATE: " + _docx_format_date_numeric(_docx_first_value(payload, "appointment_end_date")))
+    _docx_set_cell_text_preserving_style(root, 0, 13, 1, _docx_first_value(payload, "appointed_as", default="External Assessor"))
+    _docx_set_cell_text_preserving_style(root, 0, 14, 2, _docx_first_value(payload, "claim_total_units", "total_units"))
+    _docx_set_cell_text_preserving_style(root, 0, 14, 4, _docx_first_value(payload, "other_rate_basis"))
+    _docx_set_cell_text_preserving_style(root, 0, 15, 1, "ZAR " + _docx_first_value(payload, "claim_rate", "rate_per_hour"))
+    _docx_set_cell_text_preserving_style(root, 0, 15, 3, _docx_first_value(payload, "actual_hours"))
+    cost_parts = _docx_cost_centre_parts(_docx_first_value(payload, "claim_cost_centre_number", "full_cost_centre_string"))
+    for index, part in enumerate(cost_parts, start=1):
+        _docx_set_cell_text_preserving_style(root, 0, 16, index, part)
+    _docx_set_cell_text_preserving_style(root, 0, 17, 4, _docx_first_value(payload, "position_number"))
+    budget = _docx_first_value(payload, "total_budget_for_appointment")
+    _docx_set_cell_text_preserving_style(root, 0, 18, 1, f"R{budget}" if budget and not str(budget).startswith("R") else budget)
+    _docx_set_cell_text_preserving_style(root, 0, 21, 0, _docx_first_value(payload, "contract_eit_number"))
+    _docx_set_cell_text_preserving_style(root, 0, 21, 1, _docx_first_value(payload, "claim_total_units"))
+    _docx_set_cell_text_preserving_style(root, 0, 21, 2, _docx_first_value(payload, "claim_rate"))
+    _docx_set_cell_text_preserving_style(root, 0, 21, 3, _docx_first_value(payload, "claim_currency", default="ZAR"))
+    _docx_set_cell_text_preserving_style(root, 0, 21, 4, _docx_first_value(payload, "amount_claimed"))
+    _docx_set_cell_text_preserving_style(root, 0, 21, 5, _docx_first_value(payload, "claim_cost_centre_number"))
+    _docx_set_cell_text_preserving_style(root, 0, 24, 4, _docx_first_value(payload, "total_claimed"))
+    _docx_yes_no_marks(root, 1, 0, 5, 3, _docx_first_value(payload, "bank_changed"))
+    _docx_set_cell_text_preserving_style(root, 2, 0, 1, _docx_first_value(payload, "bank_account_holder"))
+    _docx_set_cell_text_preserving_style(root, 2, 1, 1, _docx_first_value(payload, "bank_name"))
+    _docx_set_cell_text_preserving_style(root, 2, 2, 1, _docx_first_value(payload, "bank_branch_name"))
+    _docx_set_cell_text_preserving_style(root, 2, 2, 3, _docx_first_value(payload, "bank_branch_code"))
+    _docx_set_cell_text_preserving_style(root, 2, 3, 1, _docx_first_value(payload, "bank_account_number"))
+    signature_name = _docx_first_value(payload, "claim_signature_name", "assessor_name")
+    _docx_set_cell_text_preserving_style(root, 3, 3, 0, signature_name)
+    _docx_set_cell_text_preserving_style(root, 3, 3, 1, signature_name)
+    _docx_set_cell_text_preserving_style(root, 3, 3, 2, _docx_format_date_numeric(_docx_first_value(payload, "claim_signature_date")))
+    _docx_set_cell_signature_image(root, contents, 3, 3, 0, payload, "claim_signature_name")
+    _docx_set_cell_text_preserving_style(root, 6, 0, 0, _docx_first_value(payload, "conflict_of_interest_details", default="NONE"))
+    return _docx_write_template(entries, contents, root)
+
+
+def _generate_external_examiner_nomination_template_word_bytes(project, payload):
+    template_path = _external_examiner_nomination_word_template_path()
+    if not template_path.exists():
+        return None
+
+    source_payload = dict(payload or {})
+    try:
+        if (
+            source_payload.get("_nomination_context") == "additional_assessment"
+            or source_payload.get("_additional_external_examiner_nomination_render_version")
+        ):
+            refreshed_payload = build_additional_external_examiner_nomination_payload(project, source_payload)
+        else:
+            refreshed_payload = build_external_examiner_nomination_payload(project, source_payload)
+        for key, existing_value in source_payload.items():
+            if str(existing_value or "").strip() and not str(refreshed_payload.get(key) or "").strip():
+                refreshed_payload[key] = existing_value
+        payload = refreshed_payload
+    except Exception:
+        current_app.logger.exception("Unable to refresh external examiner nomination payload before Word render")
+        payload = source_payload
+
+    entries, contents, root = _docx_read_template(template_path)
+
+    def value(*keys, default=""):
+        return _docx_single_line(_docx_first_value(payload, *keys, default=default))
+
+    def text_part(text):
+        return ("text", str(text or ""))
+
+    def tab_part():
+        return ("tab", "")
+
+    def field_text(field_value, prefix=" "):
+        field_value = str(field_value or "").strip()
+        return f"{prefix}{field_value}" if field_value else prefix
+
+    def set_parts(paragraph_index, run_index, parts):
+        _docx_set_indexed_run_parts(root, paragraph_index, run_index, parts)
+
+    def paragraph_at(paragraph_index):
+        paragraphs = root.findall(".//w:p", _DOCX_NS)
+        if 0 <= paragraph_index < len(paragraphs):
+            return paragraphs[paragraph_index]
+        return None
+
+    def set_paragraph_tab_stop(paragraph_index, position):
+        paragraph = paragraph_at(paragraph_index)
+        if paragraph is None:
+            return
+        paragraph_props = paragraph.find("w:pPr", _DOCX_NS)
+        if paragraph_props is None:
+            paragraph_props = ET.Element(_docx_tag("pPr"))
+            paragraph.insert(0, paragraph_props)
+        tabs = paragraph_props.find("w:tabs", _DOCX_NS)
+        if tabs is None:
+            tabs = ET.SubElement(paragraph_props, _docx_tag("tabs"))
+        for tab in list(tabs):
+            tabs.remove(tab)
+        tab = ET.SubElement(tabs, _docx_tag("tab"))
+        tab.set(_docx_tag("val"), "left")
+        tab.set(_docx_tag("pos"), str(position))
+
+    def set_text(paragraph_index, run_index, text):
+        set_parts(paragraph_index, run_index, [text_part(text)])
+
+    def set_text_then_tab(paragraph_index, run_index, text):
+        set_parts(paragraph_index, run_index, [text_part(text), tab_part()])
+
+    def set_field_text(paragraph_index, run_index, field_value):
+        if str(field_value or "").strip():
+            set_text(paragraph_index, run_index, field_text(field_value))
+
+    def set_field_text_then_tab(paragraph_index, run_index, field_value):
+        if str(field_value or "").strip():
+            set_text_then_tab(paragraph_index, run_index, field_text(field_value))
+
+    def set_tab_then_text(paragraph_index, run_index, text):
+        parts = [tab_part()]
+        if str(text or "").strip():
+            parts.append(text_part(text))
+        set_parts(paragraph_index, run_index, parts)
+
+    def aligned_value(value):
+        value = str(value or "").strip()
+        return f" {value}" if value else ""
+
+    def set_aligned_two_field_row(paragraph_index, left_label, left_value, right_label, right_value):
+        set_paragraph_tab_stop(paragraph_index, 4320)
+        _docx_set_indexed_paragraph_layout_runs(
+            root,
+            paragraph_index,
+            [
+                ("text", left_label, "normal"),
+                ("text", aligned_value(left_value), "normal"),
+                ("tab", "", "normal"),
+                ("text", right_label, "normal"),
+                ("text", aligned_value(right_value), "normal"),
+            ],
+        )
+
+    def run_text(run):
+        return "".join(node.text or "" for node in run.findall("w:t", _DOCX_NS))
+
+    def run_has_tab(run):
+        return run.find("w:tab", _DOCX_NS) is not None
+
+    def fill_after_label(paragraph_index, field_value):
+        field_value = str(field_value or "").strip()
+        if not field_value:
+            return
+        _, runs = _docx_paragraph_runs_at(root, paragraph_index)
+        target_index = None
+        target_is_tab = False
+        for index, run in enumerate(runs[1:], start=1):
+            text = run_text(run)
+            if run_has_tab(run):
+                target_index = index
+                target_is_tab = True
+                break
+            if text and not text.strip():
+                target_index = index
+                break
+        if target_index is None:
+            _docx_append_run_after(root, paragraph_index, len(runs) - 1, [text_part(field_text(field_value))])
+            return
+        parts = [text_part(field_text(field_value))]
+        if target_is_tab:
+            parts = [tab_part(), text_part(field_text(field_value))]
+        set_parts(paragraph_index, target_index, parts)
+
+    degree_registered = value("current_degree_registered", default="MBA Master of Business Administration")
+    qualification_description = value("qualification_description")
+    study_type = value("study_type") or qualification_description or "Minor dissertation"
+
+    set_field_text_then_tab(10, 4, value("student_initials_surname"))
+    set_field_text(10, 6, value("student_number"))
+    set_text(12, 6, degree_registered)
+    for paragraph_run in (7, 8, 9):
+        set_text(12, paragraph_run, "")
+    set_field_text(13, 1, qualification_description)
+    set_text(15, 0, study_type)
+    set_field_text(16, 4, value("project_title"))
+    set_aligned_two_field_row(
+        17,
+        "SUPERVISOR:",
+        value("supervisor_name"),
+        "DEPARTMENT:",
+        value("supervisor_department", default="Johannesburg Business School"),
+    )
+    set_aligned_two_field_row(
+        18,
+        "PHONE/CELL PHONE:",
+        value("supervisor_phone"),
+        "EMAIL ADDRESS:",
+        value("supervisor_email"),
+    )
+    set_aligned_two_field_row(
+        20,
+        "CO-SUPERVISOR:",
+        value("co_supervisor_name"),
+        "DEPARTMENT:",
+        value("co_supervisor_department"),
+    )
+    set_aligned_two_field_row(
+        21,
+        "PHONE/CELL PHONE:",
+        value("co_supervisor_phone"),
+        "EMAIL ADDRESS:",
+        value("co_supervisor_email"),
+    )
+
+    assessor_field_rows = {
+        "assessor_1": (25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36),
+        "assessor_2": (38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48),
+        "standby": (52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62),
+    }
+    field_names = (
+        "name",
+        "qualification",
+        "affiliation",
+        "address",
+        "telephone",
+        "cell",
+        "email",
+        "students_supervised",
+        "current_university_affiliation",
+        "publication_count",
+        "international",
+    )
+    for prefix, rows in assessor_field_rows.items():
+        if prefix == "standby" and not value("standby_assessor_name", "standby_name"):
+            continue
+        key_prefix = "standby" if prefix == "standby" else prefix
+        for paragraph_index, field_name in zip(rows, field_names):
+            field_value = value(f"{key_prefix}_{field_name}")
+            if prefix == "standby" and not field_value:
+                field_value = value(f"standby_assessor_{field_name}")
+            fill_after_label(paragraph_index, field_value)
+
+    set_tab_then_text(64, 1, field_text(value("supervisor_signature_name")))
+    set_parts(64, 7, [tab_part(), text_part(f"DATE: {_docx_format_date(value('supervisor_signature_date'))}".rstrip())])
+    set_tab_then_text(67, 1, field_text(value("hod_signature_name")))
+    set_parts(67, 5, [tab_part(), text_part(f"DATE: {_docx_format_date(value('hod_signature_date'))}".rstrip())])
+    set_tab_then_text(70, 1, field_text(value("executive_dean_signature_name")))
+    set_parts(70, 6, [tab_part(), text_part(f"DATE: {_docx_format_date(value('executive_dean_signature_date'))}".rstrip())])
+    _docx_append_paragraph_signature_image(root, contents, 64, payload, "supervisor_signature_name")
+    _docx_append_paragraph_signature_image(root, contents, 67, payload, "hod_signature_name")
+    _docx_append_paragraph_signature_image(root, contents, 70, payload, "executive_dean_signature_name")
+    return _docx_write_template(entries, contents, root)
+
+
 def generate_form_submission_word_bytes(project, form_type, payload):
     if str(form_type or "") == "jbs5":
         template_bytes = _generate_jbs5_template_word_bytes(project, payload)
         if template_bytes:
             return template_bytes
+    if str(form_type or "") == "supervisor_agreement":
+        template_bytes = _generate_supervisor_agreement_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
     if str(form_type or "") == "jbs10":
         template_bytes = _generate_jbs10_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == "intent_to_submit":
+        template_bytes = _generate_intent_to_submit_template_word_bytes(project, payload)
         if template_bytes:
             return template_bytes
     if str(form_type or "") == "corrections_response":
@@ -2473,8 +4267,28 @@ def generate_form_submission_word_bytes(project, form_type, payload):
         template_bytes = _generate_tii_ai_template_word_bytes(project, payload)
         if template_bytes:
             return template_bytes
+    if str(form_type or "") in {"external_examiner_nomination", "additional_external_examiner_nomination"}:
+        template_bytes = _generate_external_examiner_nomination_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "") == assessment_summary_doc_type():
+        template_bytes = _generate_assessment_summary_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "").startswith("assessor_temp_appointment_"):
+        template_bytes = _generate_assessor_temp_appointment_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "").startswith("assessor_temp_claim_"):
+        template_bytes = _generate_assessor_temp_claim_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
     if str(form_type or "").startswith("assessment_result_"):
         template_bytes = _generate_capstone_evaluation_template_word_bytes(project, payload)
+        if template_bytes:
+            return template_bytes
+    if str(form_type or "").startswith("assessor_report_"):
+        template_bytes = _generate_capstone_assessor_report_form_1_template_word_bytes(project, payload)
         if template_bytes:
             return template_bytes
     html = build_form_display_html(project, form_type, payload)
@@ -2773,19 +4587,24 @@ FORM_PDF_DEFINITIONS = {
             {
                 "title": "Section D: Nomination / Amendment of assessors",
                 "fields": [
+                    ("internal_assessor_name", "Internal assessor", "text"),
                     ("assessor_1_name", "Assessor 1", "text"),
+                    ("assessor_1_staff_number", "Assessor 1 staff number", "text"),
                     ("assessor_1_qualification", "Assessor 1 highest academic qualification", "text"),
                     ("assessor_1_email", "Assessor 1 e-mail address", "text"),
                     ("assessor_2_name", "Assessor 2", "text"),
+                    ("assessor_2_staff_number", "Assessor 2 staff number", "text"),
                     ("assessor_2_qualification", "Assessor 2 highest academic qualification", "text"),
                     ("assessor_2_email", "Assessor 2 e-mail address", "text"),
+                    ("assessor_3_name", "Assessor 3", "text"),
+                    ("assessor_3_staff_number", "Assessor 3 staff number", "text"),
+                    ("assessor_3_qualification", "Assessor 3 highest academic qualification", "text"),
+                    ("assessor_3_email", "Assessor 3 e-mail address", "text"),
+                    ("assessor_4_name", "Assessor 4", "text"),
+                    ("assessor_4_staff_number", "Assessor 4 staff number", "text"),
+                    ("assessor_4_qualification", "Assessor 4 highest academic qualification", "text"),
+                    ("assessor_4_email", "Assessor 4 e-mail address", "text"),
                 ],
-            },
-            {
-                "title": "Declaration",
-                "paragraph": "I confirm the title, supervisor, and assessor registration details supplied in this submission.",
-                "checkbox_position": "right",
-                "checkboxes": [("declaration", "I confirm the above declaration and agree to the terms of submission.")],
             },
         ],
     },
@@ -2886,9 +4705,12 @@ FORM_PDF_DEFINITIONS = {
                     ("student_number", "Student Number", "text"),
                     ("email", "UJ Email", "text"),
                     ("programme", "Programme / Module", "text"),
+                    ("course_name", "Course", "text"),
+                    ("module_title", "Module", "text"),
                     ("assessment_title", "Capstone Project Title", "textarea"),
                     ("module_lead", "Supervisor / Module Lead", "text"),
                     ("submission_date", "Submission Date", "date"),
+                    ("due_date", "Due Date", "date"),
                 ],
             },
             {
@@ -2910,12 +4732,13 @@ FORM_PDF_DEFINITIONS = {
                 "checkboxes": [("plagiarism_consent", "I confirm the combined plagiarism, Turnitin and AI declaration above.")],
             },
             {
-                "title": "Supervisor Declaration",
+                "title": "AI Declaration",
                 "fields": [
-                    ("supervisor_signature_name", "Supervisor Full Name / Electronic Signature", "text"),
-                    ("supervisor_signature_date", "Supervisor Signature Date", "date"),
+                    ("ai_tools_used", "Generative AI Tool(s) Used", "textarea"),
+                    ("ai_use_purpose", "Purpose", "textarea"),
+                    ("ai_use_motivation", "Motivation", "textarea"),
                 ],
-                "paragraph": "The supervisor confirms that the combined Turnitin-AI report and declaration are ready to accompany the Capstone Project upload.",
+                "paragraph": "Acknowledge any generative AI tools used as required by the JBS declaration template.",
             },
         ],
     },
@@ -3045,7 +4868,7 @@ FORM_PDF_DEFINITIONS = {
 ASSESSOR_FORM_DEFINITION = {
     "title": "Capstone Assessment Result Summary",
     "action": "Assessor Action",
-    "intro": "Record the capstone examination outcome, final mark, and declaration below. The full assessor narrative is filed separately in the assessor report forms.",
+    "intro": "Record the capstone examination outcome and final mark. The full assessor narrative is filed separately in the assessor report forms.",
     "sections": [
         {
             "title": "Assessor Details",
@@ -3073,14 +4896,11 @@ ASSESSOR_FORM_DEFINITION = {
             ],
         },
         {
-            "title": "Declaration",
+            "title": "Assessor Signature",
             "fields": [
                 ("assessor_signature_name", "External Assessor Signature / Full Name", "text"),
                 ("certification_date", "Date", "date"),
             ],
-            "paragraph": "I confirm that this assessment represents my independent and impartial evaluation of the submitted capstone research report, and that I have no undisclosed conflict of interest.",
-            "checkbox_position": "right",
-            "checkboxes": [("declaration", "I confirm the above declaration.")],
         },
     ],
 }
@@ -3135,8 +4955,6 @@ ASSESSOR_REPORT_FORM_DEFINITION = {
             "fields": [
                 ("written_assessment", "Detailed Report", "textarea"),
             ],
-            "checkbox_position": "right",
-            "checkboxes": [("declaration", "I confirm this capstone assessment report.")],
         },
     ],
 }
@@ -3166,14 +4984,11 @@ ASSESSOR_NARRATIVE_FORM_DEFINITION = {
             ],
         },
         {
-            "title": "Declaration",
+            "title": "Assessor Signature",
             "fields": [
                 ("assessor_signature_name", "External Assessor Signature / Full Name", "text"),
                 ("certification_date", "Date", "date"),
             ],
-            "paragraph": "I confirm that this narrative report represents my independent and impartial evaluation of the submitted capstone research report.",
-            "checkbox_position": "right",
-            "checkboxes": [("declaration", "I confirm this capstone narrative report.")],
         },
     ],
 }
@@ -3181,7 +4996,7 @@ ASSESSOR_NARRATIVE_FORM_DEFINITION = {
 ASSESSOR_PROFILE_FORM_DEFINITION = {
     "title": "External Examiner Nomination Form",
     "action": "Assessor Action",
-    "intro": "External Examiner Nomination Form completed during invitation acceptance for HDC nomination review.",
+    "intro": "Legacy per-assessor nomination record retained for previously submitted documents.",
     "sections": [
         {
             "title": "Project and Assessor Details",
@@ -3467,12 +5282,13 @@ FORM_REQUIRED_FIELDS = {
         "full_name",
         "student_number",
         "programme",
+        "course_name",
+        "module_title",
         "assessment_title",
         "submission_date",
+        "due_date",
         "signature_name",
         "signature_date",
-        "supervisor_signature_name",
-        "supervisor_signature_date",
         "plagiarism_consent",
     },
     "ai_declaration_form": {
@@ -3572,7 +5388,7 @@ def _form_definition_for(form_type, payload=None):
     if str(form_type or "").startswith("assessor_report_"):
         return {
             **ASSESSOR_REPORT_FORM_DEFINITION,
-            "title": f"Capstone Assessors Report Form 1 - {form_type.replace('assessor_report_', '').replace('_', ' ').title()}",
+            "title": f"Capstone Assessor Report - {form_type.replace('assessor_report_', '').replace('_', ' ').title()}",
         }
     if str(form_type or "").startswith("assessor_narrative_"):
         return {
@@ -3652,7 +5468,6 @@ class _FormPdfRenderer:
                 "grade",
                 "assessor_signature_name",
                 "certification_date",
-                "declaration",
             }
         elif str(form_type or "").startswith("assessor_report_"):
             self.required_fields = {
@@ -3666,10 +5481,8 @@ class _FormPdfRenderer:
                 "recommendation",
                 "grade",
                 "consent_name_disclosure",
-                "written_assessment",
                 "assessor_signature_name",
                 "certification_date",
-                "declaration",
             }
         elif str(form_type or "").startswith("assessor_narrative_"):
             self.required_fields = {
@@ -3680,10 +5493,8 @@ class _FormPdfRenderer:
                 "affiliation",
                 "assessor_email",
                 "assessor_contact",
-                "written_assessment",
                 "assessor_signature_name",
                 "certification_date",
-                "declaration",
             }
         elif str(form_type or "").startswith("assessor_banking_"):
             self.required_fields = {
@@ -4101,15 +5912,20 @@ def _project_has_document(project_id, doc_key):
 def document_label(doc_key):
     if doc_key in MBA_DOCUMENT_LABELS:
         return MBA_DOCUMENT_LABELS[doc_key]
+    if doc_key == assessment_summary_doc_type():
+        return "Summary Assessment Report - Capstone Project"
     if doc_key.startswith("assessment_result_"):
         suffix = doc_key.replace("assessment_result_", "").replace("_", " ").title()
         return f"Capstone Assessment Result Summary - {suffix}"
     if doc_key.startswith("assessor_report_"):
         suffix = doc_key.replace("assessor_report_", "").replace("_", " ").title()
-        return f"Capstone Assessors Report Form 1 - {suffix}"
+        return f"Capstone Assessor Report - {suffix}"
     if doc_key.startswith("assessor_narrative_"):
         suffix = doc_key.replace("assessor_narrative_", "").replace("_", " ").title()
         return f"Capstone Assessors Report Form 2 - {suffix}"
+    if doc_key.startswith("assessor_detailed_report_"):
+        suffix = doc_key.replace("assessor_detailed_report_", "").replace("_", " ").title()
+        return f"Separate Detailed Assessor Report - {suffix}"
     if doc_key.startswith("assessor_banking_"):
         suffix = doc_key.replace("assessor_banking_", "").replace("_", " ").title()
         return f"Assessor Banking Details - {suffix}"
@@ -4145,6 +5961,14 @@ def assessor_narrative_doc_type(slot):
     return f"assessor_narrative_{slot}"
 
 
+def assessor_detailed_report_doc_type(slot):
+    return f"assessor_detailed_report_{slot}"
+
+
+def assessment_summary_doc_type():
+    return "assessment_summary"
+
+
 def assessor_temp_appointment_doc_type(slot):
     return f"assessor_temp_appointment_{slot}"
 
@@ -4165,8 +5989,16 @@ def assessor_highest_qualification_doc_type(slot):
     return f"assessor_highest_qualification_{slot}"
 
 
+def external_examiner_nomination_doc_type():
+    return "external_examiner_nomination"
+
+
+def additional_external_examiner_nomination_doc_type():
+    return "additional_external_examiner_nomination"
+
+
 def assessor_slot_document_types(slot):
-    return (
+    doc_types = (
         assessor_temp_appointment_doc_type(slot),
         assessor_temp_claim_doc_type(slot),
         assessor_profile_doc_type(slot),
@@ -4175,7 +6007,433 @@ def assessor_slot_document_types(slot):
         assessment_doc_type(slot),
         assessor_report_doc_type(slot),
         assessor_narrative_doc_type(slot),
+        assessor_detailed_report_doc_type(slot),
     )
+    if slot == ADDITIONAL_ASSESSOR_SLOT:
+        doc_types = doc_types + (additional_external_examiner_nomination_doc_type(),)
+    return doc_types
+
+
+def _assessor_display_name(user):
+    if not user:
+        return ""
+    profile = getattr(user, "scholar_profile", None)
+    if profile:
+        name = " ".join(part for part in [profile.title, profile.name, profile.surname] if part).strip()
+        if name:
+            return name
+    return " ".join(part for part in [getattr(user, "first_name", ""), getattr(user, "last_name", "")] if part).strip() or user.email or ""
+
+
+def _initials_from_name_parts(*parts):
+    letters = []
+    for part in parts:
+        for token in str(part or "").replace(".", " ").split():
+            if token:
+                letters.append(token[0].upper())
+    return "".join(letters)
+
+
+def _yes_no_from_bool(value):
+    return "Yes" if value else "No"
+
+
+def _assessor_nomination_payload_for_slot(project, slot):
+    assessor = getattr(project, slot, None)
+    profile = getattr(assessor, "scholar_profile", None) if assessor else None
+    appointment_form = MbaForm.query.filter_by(project_id=project.id, form_type=assessor_temp_appointment_doc_type(slot)).first()
+    claim_form = MbaForm.query.filter_by(project_id=project.id, form_type=assessor_temp_claim_doc_type(slot)).first()
+    appointment_payload = appointment_form.payload if appointment_form and isinstance(appointment_form.payload, dict) else {}
+    claim_payload = claim_form.payload if claim_form and isinstance(claim_form.payload, dict) else {}
+    payload = {**claim_payload, **appointment_payload}
+
+    def first(*keys, default=""):
+        for key in keys:
+            value = payload.get(key)
+            if value not in (None, ""):
+                return str(value)
+        return str(default or "")
+
+    return {
+        "name": first("assessor_name", default=_assessor_display_name(assessor)),
+        "qualification": first("highest_qualification", default=getattr(profile, "qualification", "") if profile else ""),
+        "affiliation": first(
+            "assessor_affiliation",
+            "current_university_affiliation",
+            "qualification_institution",
+            default=getattr(profile, "affiliation", "") if profile else "",
+        ),
+        "address": first("assessor_address", "home_address", "postal_address", default=getattr(profile, "address", "") if profile else ""),
+        "telephone": first("assessor_telephone_number", "work_tel", "home_tel"),
+        "cell": first("assessor_contact", "alternate_contact_number", default=getattr(profile, "contact", "") if profile else ""),
+        "email": first("assessor_email", "alternate_email_address", default=getattr(assessor, "email", "") if assessor else ""),
+        "students_supervised": first("students_supervised_total", default=getattr(profile, "students_supervised_total", "") if profile else ""),
+        "current_university_affiliation": first(
+            "current_university_affiliation",
+            "assessor_affiliation",
+            default=getattr(profile, "affiliation", "") if profile else "",
+        ),
+        "publication_count": first("publication_count", default=getattr(profile, "publication_count", "") if profile else ""),
+        "international": first(
+            "international_assessor",
+            default=_yes_no_from_bool(getattr(profile, "international_assessor", False)) if profile else "",
+        ),
+    }
+
+
+def build_external_examiner_nomination_payload(project, existing_payload=None):
+    existing_payload = existing_payload if isinstance(existing_payload, dict) else {}
+    student_profile = getattr(project.student, "student_profile", None) if project and project.student else None
+    supervisor = getattr(project, "primary_supervisor", None)
+    supervisor_profile = getattr(supervisor, "scholar_profile", None) if supervisor else None
+    student_initials = _initials_from_name_parts(
+        student_profile.name if student_profile else "",
+        student_profile.surname if student_profile else "",
+    )
+    supervisor_name = _assessor_display_name(supervisor)
+    supervisor_department = getattr(supervisor_profile, "department", "") if supervisor_profile else "Johannesburg Business School"
+    payload = {
+        "_external_examiner_nomination_render_version": EXTERNAL_EXAMINER_NOMINATION_RENDER_VERSION,
+        "student_initials_surname": " ".join(
+            part for part in [student_initials, getattr(student_profile, "surname", "") if student_profile else ""] if part
+        ).strip(),
+        "student_number": getattr(student_profile, "student_number", "") if student_profile else "",
+        "current_degree_registered": "MBA Master of Business Administration",
+        "qualification_description": getattr(project, "qualification", "") or "Minor dissertation",
+        "study_type": existing_payload.get("study_type") or "Minor dissertation",
+        "project_title": getattr(project, "project_title", "") or "",
+        "supervisor_name": supervisor_name,
+        "supervisor_department": supervisor_department,
+        "supervisor_phone": getattr(supervisor_profile, "contact", "") if supervisor_profile else "",
+        "supervisor_email": getattr(supervisor, "email", "") if supervisor else "",
+        "co_supervisor_name": existing_payload.get("co_supervisor_name", ""),
+        "co_supervisor_department": existing_payload.get("co_supervisor_department", ""),
+        "co_supervisor_phone": existing_payload.get("co_supervisor_phone", ""),
+        "co_supervisor_email": existing_payload.get("co_supervisor_email", ""),
+    }
+    for slot in PRIMARY_ASSESSOR_SLOTS:
+        assessor_payload = _assessor_nomination_payload_for_slot(project, slot)
+        for key, value in assessor_payload.items():
+            payload[f"{slot}_{key}"] = value
+        payload[f"_{slot}_id"] = str(getattr(project, f"{slot}_id", "") or "")
+    for field in (
+        "supervisor_signature_name",
+        "supervisor_signature_date",
+        "hod_signature_name",
+        "hod_signature_date",
+        "executive_dean_signature_name",
+        "executive_dean_signature_date",
+        "nomination_forwarded_to_supervisor_at",
+        "nomination_forwarded_to_supervisor_by",
+        "assessor_hr_documents_sent_at",
+        "assessor_hr_documents_sent_to",
+        "assessor_hr_documents_sent_by",
+        "assessor_hr_documents_sent_count",
+    ):
+        if existing_payload.get(field):
+            payload[field] = existing_payload[field]
+    copy_signature_snapshots(
+        payload,
+        existing_payload,
+        ("supervisor_signature_name", "hod_signature_name", "executive_dean_signature_name"),
+    )
+    return payload
+
+
+def build_additional_external_examiner_nomination_payload(project, existing_payload=None):
+    existing_payload = existing_payload if isinstance(existing_payload, dict) else {}
+    payload = build_external_examiner_nomination_payload(project, existing_payload)
+    payload["_additional_external_examiner_nomination_render_version"] = ADDITIONAL_EXTERNAL_EXAMINER_NOMINATION_RENDER_VERSION
+    payload["_nomination_context"] = "additional_assessment"
+    payload["_assessor_3_id"] = str(getattr(project, "assessor_3_id", "") or "")
+
+    additional_assessor_payload = _assessor_nomination_payload_for_slot(project, ADDITIONAL_ASSESSOR_SLOT)
+    assessor_field_names = (
+        "name",
+        "qualification",
+        "affiliation",
+        "address",
+        "telephone",
+        "cell",
+        "email",
+        "students_supervised",
+        "current_university_affiliation",
+        "publication_count",
+        "international",
+    )
+    for field_name in assessor_field_names:
+        payload[f"assessor_1_{field_name}"] = additional_assessor_payload.get(field_name, "")
+        payload[f"assessor_2_{field_name}"] = ""
+        payload[f"standby_{field_name}"] = ""
+    payload["_assessor_1_id"] = str(getattr(project, "assessor_3_id", "") or "")
+    payload["_assessor_2_id"] = ""
+    payload["study_type"] = existing_payload.get("study_type") or payload.get("study_type") or "Additional assessment"
+    payload["additional_assessor_name"] = additional_assessor_payload.get("name", "")
+
+    for field in (
+        "supervisor_signature_name",
+        "supervisor_signature_date",
+        "hod_signature_name",
+        "hod_signature_date",
+        "executive_dean_signature_name",
+        "executive_dean_signature_date",
+        "nomination_forwarded_to_supervisor_at",
+        "nomination_forwarded_to_supervisor_by",
+    ):
+        if existing_payload.get(field):
+            payload[field] = existing_payload[field]
+    copy_signature_snapshots(
+        payload,
+        existing_payload,
+        ("supervisor_signature_name", "hod_signature_name", "executive_dean_signature_name"),
+    )
+    return payload
+
+
+def _summary_person_identity(user, fallback_name=""):
+    profile = getattr(user, "scholar_profile", None) if user else None
+    fallback_tokens = str(fallback_name or "").split()
+    fallback_title = fallback_tokens[0] if fallback_tokens and fallback_tokens[0].rstrip(".").lower() in {"dr", "prof", "mr", "mrs", "ms"} else ""
+    fallback_without_title = fallback_tokens[1:] if fallback_title else fallback_tokens
+    fallback_surname = fallback_without_title[-1] if fallback_without_title else ""
+    fallback_first_names = " ".join(fallback_without_title[:-1]) if len(fallback_without_title) > 1 else ""
+    first_names = (
+        getattr(profile, "name", None)
+        or getattr(user, "first_name", None)
+        or fallback_first_names
+        or str(fallback_name or "")
+    )
+    surname = getattr(profile, "surname", None) or getattr(user, "last_name", None) or fallback_surname
+    title = getattr(profile, "title", None) or fallback_title
+    return {
+        "title": title or "",
+        "initials": _initials_from_name_parts(first_names),
+        "surname": surname or "",
+        "full_name": _assessor_display_name(user) or fallback_name or "",
+    }
+
+
+def _assessment_summary_result_form(project, slot, forms_by_project=None):
+    form_type = assessment_doc_type(slot)
+    if forms_by_project is not None:
+        return forms_by_project.get(getattr(project, "id", None), {}).get(form_type)
+    return MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
+
+
+def _assessment_summary_slot_payload(project, slot, forms_by_project=None):
+    form = _assessment_summary_result_form(project, slot, forms_by_project=forms_by_project)
+    result_payload = form.payload if form and isinstance(form.payload, dict) else {}
+    submitted_at = getattr(form, "submitted_at", None)
+    assessor = getattr(project, slot, None)
+    nomination_payload = _assessor_nomination_payload_for_slot(project, slot)
+    identity = _summary_person_identity(assessor, result_payload.get("assessor_name") or nomination_payload.get("name", ""))
+    profile = getattr(assessor, "scholar_profile", None) if assessor else None
+    affiliation = (
+        result_payload.get("affiliation")
+        or nomination_payload.get("affiliation")
+        or getattr(profile, "affiliation", "")
+        or getattr(profile, "department", "")
+        or ""
+    )
+    qualification = (
+        nomination_payload.get("qualification")
+        or getattr(profile, "qualification", "")
+        or ""
+    )
+    return {
+        "id": str(getattr(project, f"{slot}_id", "") or ""),
+        "title": identity["title"],
+        "initials": identity["initials"],
+        "surname": identity["surname"],
+        "name": result_payload.get("assessor_name") or nomination_payload.get("name") or identity["full_name"],
+        "affiliation": affiliation,
+        "qualification": qualification,
+        "grade": str(result_payload.get("grade") or "").strip(),
+        "recommendation": str(result_payload.get("recommendation") or "").strip(),
+        "submitted_at": submitted_at.isoformat() if submitted_at else "",
+    }
+
+
+def _assessment_summary_int_grade(value):
+    try:
+        grade = float(str(value or "").strip())
+    except (TypeError, ValueError):
+        return None
+    return grade if 0 <= grade <= 100 else None
+
+
+def _assessment_summary_recommendation_column(recommendation):
+    normalized = _docx_normalized(recommendation)
+    if not normalized:
+        return None
+    if "outright" in normalized or "rejection" in normalized or "rejected" in normalized:
+        return 4
+    if "re-examination" in normalized or "re examination" in normalized or "major revisions" in normalized:
+        return 3
+    if "minor revisions" in normalized or "minor corrections" in normalized:
+        return 2
+    if "accept as" in normalized or "research stands" in normalized:
+        return 1
+    return None
+
+
+def _assessment_summary_grade_totals(slot_payloads):
+    grades = [
+        _assessment_summary_int_grade(slot_payload.get("grade"))
+        for slot_payload in slot_payloads
+        if slot_payload.get("grade") not in (None, "")
+    ]
+    grades = [grade for grade in grades if grade is not None]
+    if not grades:
+        return "", ""
+    total = sum(grades)
+    average = total / len(grades)
+    average_text = f"{average:.1f}".rstrip("0").rstrip(".")
+    return str(total), average_text
+
+
+def build_assessment_summary_payload(project, existing_payload=None, forms_by_project=None):
+    existing_payload = existing_payload if isinstance(existing_payload, dict) else {}
+    student = getattr(project, "student", None)
+    student_profile = getattr(student, "student_profile", None) if student else None
+    student_identity = _summary_person_identity(student, "")
+    jbs5_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs5").first()
+    jbs5_payload = jbs5_form.payload if jbs5_form and isinstance(jbs5_form.payload, dict) else {}
+
+    supervisor = getattr(project, "primary_supervisor", None)
+    supervisor_profile = getattr(supervisor, "scholar_profile", None) if supervisor else None
+    supervisor_identity = _summary_person_identity(supervisor, "")
+
+    slot_payloads = {
+        slot: _assessment_summary_slot_payload(project, slot, forms_by_project=forms_by_project)
+        for slot in ALL_ASSESSOR_SLOTS
+    }
+    active_slots = [
+        slot
+        for slot in ALL_ASSESSOR_SLOTS
+        if slot in PRIMARY_ASSESSOR_SLOTS
+        or (slot == ADDITIONAL_ASSESSOR_SLOT and getattr(project, f"{slot}_id", None))
+    ]
+    active_slot_payloads = [
+        slot_payloads[slot]
+        for slot in active_slots
+        if slot_payloads.get(slot) and slot_payloads[slot].get("grade")
+    ]
+    grade_total, grade_average = _assessment_summary_grade_totals(active_slot_payloads)
+    corrections_required = project_has_active_corrections(project, forms_by_project=forms_by_project) or bool(
+        getattr(project, "corrections_requested_at", None)
+    )
+    corrections_complete = not corrections_required or project_corrections_status(project, forms_by_project=forms_by_project) == "ready_for_admin"
+
+    payload = {
+        "_assessment_summary_render_version": ASSESSMENT_SUMMARY_RENDER_VERSION,
+        "student_surname": getattr(student_profile, "surname", "") if student_profile else student_identity["surname"],
+        "student_initials": _initials_from_name_parts(getattr(student_profile, "name", "")) if student_profile else student_identity["initials"],
+        "student_title": getattr(student_profile, "title", "") if student_profile else student_identity["title"],
+        "student_number": getattr(student_profile, "student_number", "") if student_profile else "",
+        "qualification": "Masters",
+        "discipline": "Master of Business Administration",
+        "research_title": jbs5_payload.get("research_title") or getattr(project, "project_title", "") or "",
+        "date_of_first_registration": jbs5_payload.get("date_of_first_registration") or "",
+        "supervisor_surname": supervisor_identity["surname"],
+        "supervisor_initials": supervisor_identity["initials"],
+        "supervisor_title": supervisor_identity["title"],
+        "supervisor_affiliation": (getattr(supervisor_profile, "affiliation", "") if supervisor_profile else "") or "Johannesburg Business School",
+        "supervisor_qualification": getattr(supervisor_profile, "qualification", "") if supervisor_profile else "",
+        "co_supervisor_surname": existing_payload.get("co_supervisor_surname", ""),
+        "co_supervisor_initials": existing_payload.get("co_supervisor_initials", ""),
+        "co_supervisor_title": existing_payload.get("co_supervisor_title", ""),
+        "co_supervisor_affiliation": existing_payload.get("co_supervisor_affiliation", ""),
+        "co_supervisor_qualification": existing_payload.get("co_supervisor_qualification", ""),
+        "coursework_total": existing_payload.get("coursework_total", ""),
+        "coursework_average": existing_payload.get("coursework_average", ""),
+        "coursework_credit_total": existing_payload.get("coursework_credit_total", ""),
+        "coursework_credit_average": existing_payload.get("coursework_credit_average", ""),
+        "capstone_total": grade_total,
+        "capstone_average": grade_average,
+        "capstone_weighted_result": existing_payload.get("capstone_weighted_result", ""),
+        "coursework_weighted_result": existing_payload.get("coursework_weighted_result", ""),
+        "final_mark": existing_payload.get("final_mark") or grade_average,
+        "corrections_complete": "Yes" if corrections_complete else "No",
+        "corrections_required": "Yes" if corrections_required else "No",
+    }
+    for slot, slot_payload in slot_payloads.items():
+        for key, value in slot_payload.items():
+            payload[f"{slot}_{key}"] = value
+
+    for module_code in SUMMARY_COURSEWORK_MODULES:
+        for suffix in ("result", "credit"):
+            field = f"module_{module_code}_{suffix}"
+            if existing_payload.get(field):
+                payload[field] = existing_payload[field]
+
+    for field in (
+        "supervisor_signature_name",
+        "supervisor_signature_date",
+        "hod_signature_name",
+        "hod_signature_date",
+        "chair_fhdc_signature_name",
+        "chair_fhdc_signature_date",
+        "hdc_signature_name",
+        "hdc_signature_date",
+        "executive_dean_signature_name",
+        "executive_dean_signature_date",
+    ):
+        if existing_payload.get(field):
+            payload[field] = existing_payload[field]
+    copy_signature_snapshots(
+        payload,
+        existing_payload,
+        (
+            "supervisor_signature_name",
+            "hod_signature_name",
+            "chair_fhdc_signature_name",
+            "hdc_signature_name",
+            "executive_dean_signature_name",
+        ),
+    )
+    return payload
+
+
+def additional_external_examiner_nomination_ready(project):
+    if not additional_assessment_required(project):
+        return False
+    if not getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None):
+        return False
+    if getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_invitation_status", None) != INVITATION_ACCEPTED:
+        return False
+    return assessor_acceptance_pack_complete(project, ADDITIONAL_ASSESSOR_SLOT)
+
+
+def external_examiner_nomination_form(project):
+    if not project:
+        return None
+    return MbaForm.query.filter_by(project_id=project.id, form_type=external_examiner_nomination_doc_type()).first()
+
+
+def external_examiner_nomination_supervisor_signed(project):
+    form = external_examiner_nomination_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, external_examiner_nomination_doc_type())
+        and form
+        and (
+            form.supervisor_signed
+            or (payload.get("supervisor_signature_name") and payload.get("supervisor_signature_date"))
+        )
+    )
+
+
+def assessor_hr_documents_sent(project):
+    form = external_examiner_nomination_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(payload.get("assessor_hr_documents_sent_at") and payload.get("assessor_hr_documents_sent_to"))
+
+
+def assessor_hr_documents_sent_to(project):
+    form = external_examiner_nomination_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return payload.get("assessor_hr_documents_sent_to") or ""
 
 
 def reset_assessor_slot_artifacts(project, slot):
@@ -4244,6 +6502,8 @@ def project_correction_requests(project, forms_by_project=None):
                 "assessor_name": assessor_name or slot.replace("_", " ").title(),
                 "recommendation": (payload.get("recommendation") or "").strip(),
                 "written_assessment": (payload.get("written_assessment") or "").strip(),
+                "detailed_report_doc": uploaded_doc_for(project, assessor_detailed_report_doc_type(slot)),
+                "detailed_report_filename": (payload.get("detailed_report_filename") or "").strip(),
                 "grade": (payload.get("grade") or "").strip(),
                 "submitted_at": getattr(form, "submitted_at", None),
             }
@@ -4259,6 +6519,43 @@ def project_has_active_corrections(project, forms_by_project=None):
 
 def assessment_results_forwarded_to_supervisor(project):
     return bool(getattr(project, "assessment_results_forwarded_to_supervisor_at", None))
+
+
+def assessment_summary_form(project):
+    if not project:
+        return None
+    return MbaForm.query.filter_by(project_id=project.id, form_type=assessment_summary_doc_type()).first()
+
+
+def assessment_summary_supervisor_signed(project):
+    form = assessment_summary_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, assessment_summary_doc_type())
+        and form
+        and (
+            form.supervisor_signed
+            or (payload.get("supervisor_signature_name") and payload.get("supervisor_signature_date"))
+        )
+    )
+
+
+def assessment_summary_supervisor_signing_block_reason(project, forms_by_project=None):
+    if not project:
+        return "Assessment summary is not available."
+    if additional_assessment_blocks_hdc_submission(project, forms_by_project=forms_by_project):
+        return "Additional assessment must be completed before the assessment summary can be signed."
+    if not all_assessment_results_received(project):
+        return "All required assessor reports must be received before the assessment summary can be signed."
+    if project_has_active_corrections(project, forms_by_project=forms_by_project):
+        correction_status = project_corrections_status(project, forms_by_project=forms_by_project)
+        if correction_status != "ready_for_admin":
+            return "The supervisor must approve the student's Response to Assessors' Comments before signing the assessment summary."
+    if not assessment_results_forwarded_to_supervisor(project):
+        return "MBA Admin must forward the assessment summary to the supervisor before it can be signed."
+    if not uploaded_doc_for(project, assessment_summary_doc_type()):
+        return "The assessment summary document is not ready yet."
+    return ""
 
 
 def hdc_results_approved(project):
@@ -4381,7 +6678,15 @@ def module_completion_allows_hdc_submission(project):
 
 
 def required_hdc_results_documents_missing(project):
-    required = ["jbs10", "global_document", "combined_turnitin_ai_report"]
+    required = [
+        "jbs10",
+        assessment_summary_doc_type(),
+        "jbs1_declaration",
+        "plagiarism_declaration",
+        "affidavit_stamped",
+        "global_document",
+        "combined_turnitin_ai_report",
+    ]
     if project_has_active_corrections(project) or getattr(project, "corrections_requested_at", None):
         required.extend(["corrected_dissertation", "corrections_response", "corrections_turnitin_report"])
     return [
@@ -4434,16 +6739,30 @@ def assessment_result_pack_complete(project, slot):
     assessor_id = getattr(project, f"{slot}_id", None)
     if not assessor_id or getattr(project, f"{slot}_invitation_status", None) != INVITATION_ACCEPTED:
         return False
-    required_doc_types = (
-        assessment_doc_type(slot),
-        assessor_report_doc_type(slot),
-        assessor_narrative_doc_type(slot),
-    )
-    for doc_type in required_doc_types:
-        doc = uploaded_doc_for(project, doc_type)
-        if not doc or doc.uploaded_by_id != assessor_id:
-            return False
-    return True
+    assessment_form = _slot_assessor_result_form(project, slot)
+    payload = assessment_form.payload if assessment_form and isinstance(assessment_form.payload, dict) else {}
+    if not (payload.get("grade") and payload.get("recommendation")):
+        return False
+    report_doc = uploaded_doc_for(project, assessor_report_doc_type(slot))
+    return bool(report_doc and report_doc.uploaded_by_id == assessor_id)
+
+
+def assessment_result_submitted(project, slot, forms_by_project=None):
+    assessor_id = getattr(project, f"{slot}_id", None)
+    if not assessor_id:
+        return False
+    assessment_form = _slot_assessor_result_form(project, slot, forms_by_project=forms_by_project)
+    if forms_by_project is not None:
+        form_lookup = forms_by_project.get(project.id, {})
+        report_form = form_lookup.get(assessor_report_doc_type(slot))
+    else:
+        report_form = MbaForm.query.filter_by(project_id=project.id, form_type=assessor_report_doc_type(slot)).first()
+    for form in (assessment_form, report_form):
+        payload = form.payload if form and isinstance(form.payload, dict) else {}
+        if form and (payload.get("grade") or payload.get("recommendation")):
+            return True
+    report_doc = uploaded_doc_for(project, assessor_report_doc_type(slot))
+    return bool(report_doc and report_doc.uploaded_by_id == assessor_id)
 
 
 def primary_assessment_conflict_detected(project, forms_by_project=None):
@@ -4550,17 +6869,23 @@ def hdc_can_access_document(project, doc_type):
     if doc_type == "jbs10":
         return project.project_status in nomination_stage_statuses or project.project_status in results_stage_statuses
 
+    if doc_type in {external_examiner_nomination_doc_type(), additional_external_examiner_nomination_doc_type()}:
+        return project.project_status in nomination_stage_statuses or project.project_status in results_stage_statuses
+
     if doc_type == "jbs5":
         return project.project_status in jbs5_stage_statuses or project.project_status in nomination_stage_statuses
 
     if doc_type.startswith(HDC_ASSESSOR_NOMINATION_DOCUMENT_PREFIXES):
-        return project.project_status in nomination_stage_statuses
+        return project.project_status in nomination_stage_statuses or project.project_status in results_stage_statuses
 
     if project.project_status in results_stage_statuses and doc_type in {
         "global_document",
         "combined_turnitin_ai_report",
         "dissertation",
         "manuscript",
+        "jbs1_declaration",
+        "plagiarism_declaration",
+        "affidavit_stamped",
         "corrected_dissertation",
         "corrections_response",
         "corrections_turnitin_report",
@@ -4602,6 +6927,7 @@ def can_request_moodle_manuscript_submission(project):
         and project.student
         and project.student.email
         and student_submitted_assessor_prerequisite_docs(project)
+        and assessor_hr_documents_sent(project)
         and not uploaded_doc_for(project, "dissertation")
     )
 
@@ -4613,7 +6939,6 @@ def assessor_acceptance_pack_complete(project, slot):
     required_doc_types = (
         assessor_temp_appointment_doc_type(slot),
         assessor_temp_claim_doc_type(slot),
-        assessor_profile_doc_type(slot),
         assessor_cv_doc_type(slot),
         assessor_highest_qualification_doc_type(slot),
     )
@@ -4715,22 +7040,10 @@ def hdc_assessor_nomination_admin_email_messages(project, decided_by_email=None)
 
     if project.project_status == ProjectStatus.HDC_VERIFIED.value:
         outcome = "approved"
-        action_text = "The assessor nominations have been approved. Please continue with the next MBA Admin workflow step."
+        action_text = "The assessor nominations have been approved. Please send the approved temporary appointment and claim forms to HR before continuing."
     elif project.project_status == ProjectStatus.HDC_DECLINED.value:
         outcome = "rejected"
         action_text = "One or more assessor nominations were rejected. Please replace the rejected assessor before forwarding nominations to HDC again."
-    elif (
-        hdc_assessor_nomination_review_complete(project)
-        and any(
-            decision == HDC_ASSESSOR_DECLINED
-            for decision in hdc_assessor_nomination_decisions(project).values()
-        )
-    ):
-        outcome = "updated"
-        action_text = "One or more assessor nominations were rejected by HDC, but JBS10 still needs the HDC signature before MBA Admin can replace rejected assessor(s)."
-    elif hdc_assessor_nomination_review_complete(project) and not hdc_jbs10_signature_complete(project):
-        outcome = "updated"
-        action_text = "Both assessor nominations have been approved by HDC, but JBS10 still needs the HDC signature before the nomination approval is complete."
     else:
         outcome = "updated"
         action_text = "One assessor nomination has been reviewed. No admin action is required until HDC completes the remaining nomination review."
@@ -4805,10 +7118,13 @@ def project_supervisor_notification_emails(project):
 
 def corrections_requested_email_messages(project, correction_request):
     recommendation = correction_request.get("recommendation") or "Corrections requested"
+    detailed_report_filename = correction_request.get("detailed_report_filename") or ""
+    detailed_report_line = f"\nDetailed report attachment: {detailed_report_filename}\n" if detailed_report_filename else "\n"
     body = (
         f"An assessor requested corrections or raised comments for the MBA Capstone Project '{project.project_title}'.\n\n"
         f"Student: {project.student.email if project.student else 'Unknown'}\n"
-        f"Recommendation: {recommendation}\n\n"
+        f"Recommendation: {recommendation}\n"
+        f"{detailed_report_line}"
         "Only MBA Admin can access the assessor result pack at this stage. "
         "Forward the assessment summary to the supervisor when it is ready for supervisor review."
     )
@@ -5324,10 +7640,14 @@ def reset_jbs5_review_state(project, *, clear_supervisor_signature=True, clear_h
                 "supervisor_signature_email",
             ):
                 payload.pop(field, None)
+            clear_signature_snapshots(payload, ("supervisor_signature",))
             jbs5_form.supervisor_signed = False
         if clear_hdc_signature:
             payload.pop("jbs_hdc_signature", None)
             payload.pop("jbs_hdc_signature_date", None)
+            payload.pop("head_of_department_signature", None)
+            payload.pop("head_of_department_signature_date", None)
+            clear_signature_snapshots(payload, ("jbs_hdc_signature", "head_of_department_signature"))
         jbs5_form.payload = payload
     elif jbs5_form and clear_supervisor_signature:
         jbs5_form.supervisor_signed = False
@@ -5338,6 +7658,9 @@ def reset_jbs5_review_state(project, *, clear_supervisor_signature=True, clear_h
             payload = dict(jbs10_form.payload or {})
             payload.pop("jbs_hdc_signature", None)
             payload.pop("jbs_hdc_signature_date", None)
+            payload.pop("head_of_department_signature", None)
+            payload.pop("head_of_department_signature_date", None)
+            clear_signature_snapshots(payload, ("jbs_hdc_signature", "head_of_department_signature"))
             jbs10_form.payload = payload
             _refresh_existing_form_document(
                 project,
@@ -5448,8 +7771,16 @@ def sign_student_jbs5_as_supervisor(project, supervisor_name, signature_date=Non
     if supervisor_user is not None:
         payload["supervisor_signature_user_id"] = str(getattr(supervisor_user, "id", "") or "")
         payload["supervisor_signature_email"] = getattr(supervisor_user, "email", "") or ""
+        refresh_saved_signature_snapshot(payload, ("supervisor_signature",), supervisor_user)
     jbs5_form.payload = payload
     jbs5_form.supervisor_signed = True
+    _refresh_existing_form_document(
+        project,
+        "jbs5",
+        "jbs5",
+        payload,
+        uploaded_by_id=getattr(project, "student_id", None),
+    )
     project.comments = append_comment(
         project.comments,
         f"Supervisor signed the student-submitted JBS5 form ({supervisor_name})",

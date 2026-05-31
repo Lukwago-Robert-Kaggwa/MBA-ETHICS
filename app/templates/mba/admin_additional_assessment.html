@@ -51,9 +51,10 @@
         {% set student_number_value = project.student.student_profile.student_number if project.student and project.student.student_profile and project.student.student_profile.student_number else 'Not captured' %}
         {% set assessor_1_grade = assessor_grade_for_slot(project, 'assessor_1', forms_by_project=forms_by_project) %}
         {% set assessor_2_grade = assessor_grade_for_slot(project, 'assessor_2', forms_by_project=forms_by_project) %}
-        {% set assessor_3_result = uploaded_doc_for(project, assessment_doc_type('assessor_3')) %}
         {% set assessor_3_report = uploaded_doc_for(project, assessor_report_doc_type('assessor_3')) %}
-        {% set assessor_3_narrative = uploaded_doc_for(project, assessor_narrative_doc_type('assessor_3')) %}
+        {% set assessor_3_detailed_report = uploaded_doc_for(project, 'assessor_detailed_report_assessor_3') %}
+        {% set additional_nomination_doc = uploaded_doc_for(project, additional_external_examiner_nomination_doc_type()) %}
+        {% set additional_acceptance_complete = assessor_acceptance_pack_complete(project, 'assessor_3') %}
         {% call project_disclosure(project, 'project-disclosure--admin') %}
         <article class="record-card admin-project-card">
           <div class="record-card__top">
@@ -145,40 +146,48 @@
                 </div>
                 <div class="invite-row">
                   <div>
-                    <strong>Assessment Result Summary</strong>
-                    <small>{% if assessor_3_result %}Submitted{% else %}Pending{% endif %}</small>
+                    <strong>Additional Assessor Nomination Form</strong>
+                    <small>
+                      {% if additional_nomination_doc %}
+                        Generated from the accepted third assessor details
+                      {% elif additional_acceptance_complete %}
+                        Pending automatic generation
+                      {% else %}
+                        Generated after the third assessor submits acceptance documents, CV, and highest qualification
+                      {% endif %}
+                    </small>
                   </div>
-                  {% if assessor_3_result %}
+                  {% if additional_nomination_doc %}
                     <div class="inline-action" style="gap:0.5rem;">
-                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_result.id) }}" class="secondary-button small-button">View</a>
-                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_result.id) }}" class="secondary-button small-button">Download</a>
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=additional_nomination_doc.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=additional_nomination_doc.id) }}" class="secondary-button small-button">Download Word</a>
                     </div>
                   {% endif %}
                 </div>
                 <div class="invite-row">
                   <div>
-                    <strong>Assessor Report Form 1</strong>
+                    <strong>Assessor Report Form</strong>
                     <small>{% if assessor_3_report %}Submitted{% else %}Pending{% endif %}</small>
                   </div>
                   {% if assessor_3_report %}
                     <div class="inline-action" style="gap:0.5rem;">
                       <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_report.id) }}" class="secondary-button small-button">View</a>
-                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_report.id) }}" class="secondary-button small-button">Download</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_report.id) }}" class="secondary-button small-button">Download Word</a>
                     </div>
                   {% endif %}
                 </div>
-                <div class="invite-row">
-                  <div>
-                    <strong>Assessor Report Form 2</strong>
-                    <small>{% if assessor_3_narrative %}Submitted{% else %}Pending{% endif %}</small>
-                  </div>
-                  {% if assessor_3_narrative %}
+                {% if assessor_3_detailed_report %}
+                  <div class="invite-row">
+                    <div>
+                      <strong>{{ document_label(assessor_3_detailed_report.doc_type) }}</strong>
+                      <small>{{ assessor_3_detailed_report.original_name }}</small>
+                    </div>
                     <div class="inline-action" style="gap:0.5rem;">
-                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_narrative.id) }}" class="secondary-button small-button">View</a>
-                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_narrative.id) }}" class="secondary-button small-button">Download</a>
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_detailed_report.id) }}" class="secondary-button small-button">View</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_detailed_report.id) }}" class="secondary-button small-button">Download</a>
                     </div>
-                  {% endif %}
-                </div>
+                  </div>
+                {% endif %}
               </div>
             </section>
           {% endif %}

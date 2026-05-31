@@ -5,87 +5,115 @@
 {% block page_subheading %}{{ project.project_title }}{% endblock %}
 
 {% block body %}
-{% set current_work_type = prefill.get('work_type','Capstone Project') %}
+{% set current_work_type = prefill.get('work_type', 'capstone consultancy project') or 'capstone consultancy project' %}
+<!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
-  <section class="ethics-panel">
-    <div class="mba-doc-paper">
-      <div class="mba-doc-header">
-        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
-        <div class="mba-doc-title-stack">
-          <div class="mba-doc-kicker">Johannesburg Business School</div>
-          <h2 class="mba-doc-title">JBS 2 Sep 2022<br>Affidavit: Master’s and Doctoral Students</h2>
-        </div>
-      </div>
+  <section class="ethics-panel jbs-template-panel">
+    <div class="mba-doc-paper mba-doc-paper--affidavit jbs-template-doc affidavit-doc">
+      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='affidavit') }}" method="post" class="mba-doc-form jbs-template-form">
+        <table class="mba-doc-table jbs-template-table jbs-template-header-table">
+          <colgroup>
+            <col style="width:18%;">
+            <col style="width:82%;">
+          </colgroup>
+          <tr>
+            <td class="jbs-template-logo-cell">
+              <img class="jbs-template-logo" src="{{ url_for('static', filename='img/supervisor_agreement_logo.png') }}" alt="Johannesburg Business School and University of Johannesburg logo">
+            </td>
+            <td class="jbs-template-title-cell">
+              <div class="jbs-template-school">JOHANNESBURG BUSINESS SCHOOL</div>
+              <div class="jbs-template-form-number">JBS 2</div>
+              <div class="jbs-template-date">Sep 2022</div>
+              <div class="jbs-template-title">AFFIDAVIT: MASTER’S AND DOCTORAL STUDENTS</div>
+            </td>
+          </tr>
+        </table>
 
-      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='affidavit') }}" method="post" class="mba-doc-form">
-        <p class="mba-doc-paragraph" style="font-weight:700;">TO WHOM IT MAY CONCERN</p>
+        <div class="affidavit-title">TO WHOM IT MAY CONCERN</div>
 
-        <div class="mba-doc-inline-sentence">
+        <p class="affidavit-line">
           <span>This serves to confirm that I</span>
-          <input class="mba-doc-line" name="full_name" value="{{ prefill.get('full_name','') }}" required>
-        </div>
-        <p class="mba-doc-note">(Full Name(s) and Surname)</p>
+          <input class="jbs-doc-line-fill affidavit-name-fill" name="full_name" value="{{ prefill.get('full_name','') }}" required>
+        </p>
+        <div class="affidavit-helper">(Full Name(s) and Surname)</div>
 
-        <div class="mba-doc-inline-sentence">
+        <p class="affidavit-line">
           <span>ID Number</span>
-          <input class="mba-doc-line" name="student_id_number" value="{{ prefill.get('student_id_number','') }}" required>
-          <span>Student number</span>
-          <input class="mba-doc-line" name="student_number" value="{{ prefill.get('student_number','') }}" required>
-          <span>enrolled for the Qualification</span>
-          <input class="mba-doc-line" name="qualification" value="{{ prefill.get('qualification','') }}" required>
-          <span>in the Johannesburg Business School.</span>
-        </div>
+          <input class="jbs-doc-line-fill affidavit-id-fill" name="student_id_number" value="{{ prefill.get('student_id_number','') }}" required>
+        </p>
 
-        <p class="mba-doc-paragraph">
+        <p class="affidavit-line">
+          <span>Student number</span>
+          <input class="jbs-doc-line-fill affidavit-student-number-fill" name="student_number" value="{{ prefill.get('student_number','') }}" required>
+          <span>enrolled for the</span>
+        </p>
+
+        <p class="affidavit-line">
+          <span>Qualification</span>
+          <input class="jbs-doc-line-fill affidavit-qualification-fill" name="qualification" value="{{ prefill.get('qualification','') }}" required>
+          <span>in the</span>
+        </p>
+
+        <p class="jbs-template-paragraph">Johannesburg Business School.</p>
+
+        <p class="jbs-template-paragraph">
           I herewith declare that my academic work is in line with the Plagiarism Policy of the University of Johannesburg which I am familiar with.
         </p>
 
-        <div class="mba-doc-inline-sentence">
-          <span>I further declare that the work presented in the</span>
-          <select class="mba-doc-select" name="work_type" required style="display:inline-block;width:auto;min-width:220px;">
-            <option value="">Select output type</option>
-            {% for option in ['Capstone Project', 'Research Essay', 'Thesis'] %}
-              <option value="{{ option }}" {% if current_work_type == option %}selected{% endif %}>{{ option }}</option>
-            {% endfor %}
-          </select>
-          <span>is authentic and original unless clearly indicated otherwise and in such instances fully referenced.</span>
-        </div>
-
-        <div>
-          <div class="mba-doc-label" style="margin-bottom:6px;">Approved Capstone Project title</div>
-          <textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="3" readonly required>{{ prefill.get('research_title','') }}</textarea>
-        </div>
-
-        <p class="mba-doc-paragraph">
-          I understand that plagiarism is a serious offence and that should I contravene the Plagiarism Policy notwithstanding signing this affidavit, I may be found guilty of a serious criminal offence.
+        <p class="jbs-template-paragraph">
+          I further declare that the work presented in the (capstone consultancy project/thesis) * is authentic and original unless clearly indicated otherwise and in such instances full reference to the source is acknowledged.&nbsp; I do not pretend to receive any credit for such acknowledged quotations, and that there is no copyright infringement in my work.
         </p>
-        <p class="mba-doc-note">* Delete which is not applicable</p>
 
-        <div class="mba-doc-inline-sentence">
+        <p class="jbs-template-paragraph">
+          I understand that plagiarism is a serious offence and that should I contravene the Plagiarism Policy notwithstanding signing this affidavit, I may be found guilty of a serious criminal offence (perjury) that would amongst other consequences compel the UJ to inform all other tertiary institutions of the offence and to issue a corresponding certificate of reprehensible academic conduct to whomever request such a certificate from the institution.
+        </p>
+
+        <p class="jbs-template-paragraph">* Delete which is not applicable</p>
+
+        <p class="affidavit-line affidavit-signing-line">
           <span>Signed at</span>
-          <input class="mba-doc-line" name="signing_location" value="{{ prefill.get('signing_location','') }}" required>
+          <input class="jbs-doc-line-fill affidavit-location-fill" name="signing_location" value="{{ prefill.get('signing_location','') }}" required>
           <span>on this</span>
-          <input class="mba-doc-line" name="affidavit_date" type="date" value="{{ prefill.get('affidavit_date','') }}" required style="flex:0 1 220px;">
-        </div>
+          <input class="jbs-doc-line-fill affidavit-day-fill" name="affidavit_day" value="{{ prefill.get('affidavit_day','') }}" required>
+          <span>day of</span>
+          <input class="jbs-doc-line-fill affidavit-month-fill" name="affidavit_month" value="{{ prefill.get('affidavit_month','') }}" required>
+          <span>20</span>
+          <input class="jbs-doc-line-fill affidavit-year-fill" name="affidavit_year" value="{{ prefill.get('affidavit_year','') }}" required>
+          <span>.</span>
+        </p>
 
-        <div class="mba-doc-inline-sentence">
+        <p class="affidavit-line affidavit-signature-line">
           <span>Signature</span>
-          <input class="mba-doc-line" name="signature_name" value="{{ prefill.get('signature_name','') }}" required>
+          <span class="mba-doc-signature-field">
+            {% if prefill.get('signature_name_image') %}
+              <img class="mba-doc-signature-image" src="{{ prefill.get('signature_name_image') }}" alt="Saved signature">
+            {% endif %}
+            <input class="jbs-doc-line-fill affidavit-signature-fill" name="signature_name" value="{{ prefill.get('signature_name','') }}" required>
+          </span>
           <span>Print name</span>
-          <input class="mba-doc-line" value="{{ prefill.get('full_name','') }}" readonly>
-        </div>
+          <input class="jbs-doc-line-fill affidavit-print-name-fill" value="{{ prefill.get('full_name','') }}" readonly>
+        </p>
 
-        <label class="mba-doc-checkline">
-          <span>I confirm the affidavit above. <span style="color:red;">*</span></span>
-          <input class="mba-doc-checkbox" type="checkbox" name="affidavit_consent" value="1" required {% if prefill.get('affidavit_consent') %}checked{% endif %}>
-        </label>
+        <div class="affidavit-commissioner-space"></div>
 
-        <div class="mba-doc-actions">
-          <button class="primary-button" type="submit">Submit Affidavit</button>
+        <div class="affidavit-stamp-box">STAMP COMMISSIONER OF OATHS</div>
+        <div class="affidavit-certified-title">Affidavit certified by a Commissioner of Oaths</div>
+        <p class="affidavit-commissioner-text">
+          This affidavit conforms with the requirements of the JUSTICES OF THE PEACE AND COMMISSIONERS OF OATHS ACT 16 OF 1963 and the applicable Regulations published in the GG GNR 1258 of 21 July 1972; GN 903 of 10 July 1998; GN 109 of 2 February 2001 as amended.
+        </p>
+
+        <input type="hidden" name="research_title" value="{{ prefill.get('research_title','') }}">
+        <input type="hidden" name="work_type" value="{{ current_work_type }}">
+        <input type="hidden" name="affidavit_date" value="{{ prefill.get('affidavit_date','') }}">
+        <input type="hidden" name="affidavit_consent" value="1">
+
+        <div class="mba-doc-actions jbs-template-submit-controls">
+          <button class="primary-button" type="submit">Complete Affidavit Form</button>
           <a href="{{ url_for('mba.student_dashboard') }}" class="secondary-button">Cancel</a>
         </div>
       </form>
     </div>
   </section>
 </div>
+<!-- MBA_FORM_END -->
 {% endblock %}

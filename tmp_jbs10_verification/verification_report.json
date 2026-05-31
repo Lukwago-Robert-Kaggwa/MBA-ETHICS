@@ -1,0 +1,26 @@
+{
+  "fill_controls_total": 68,
+  "normal_fill_unexpected_readonly": [],
+  "normal_fill_unexpected_disabled": [],
+  "view_body_has_form_controls": false,
+  "view_line_textareas_preserved": true,
+  "docx_table_shapes_match_reference": true,
+  "docx_table_grids_match_reference": true,
+  "docx_page_setup_matches_reference": true,
+  "docx_media_matches_reference": {
+    "word/media/image1.png": true,
+    "word/media/image2.png": true,
+    "word/media/image3.svg": true
+  },
+  "docx_text_samples": {
+    "surname": "Kabugo",
+    "student_number": "1234567890",
+    "study_type_mark": "X",
+    "research_title": "Digital Transformation Adoption In Small Businesses",
+    "four_ir_yes_mark": "X",
+    "four_ir_no_mark": "",
+    "assessor_1_name": "Prof Ada Lovelace, University of Johannesburg",
+    "assessor_2_email": "grace@example.com",
+    "hdc_signature": "HDC Chair"
+  }
+}

@@ -10,7 +10,20 @@
             {{ item.recommendation }}
             {% if item.submitted_at %}&mdash; {{ item.submitted_at.strftime('%d %b %Y %H:%M') }}{% endif %}
           </small>
-          <p style="margin:0.5rem 0 0;white-space:pre-wrap;">{{ item.written_assessment or 'No detailed correction notes were entered.' }}</p>
+          {% if item.written_assessment %}
+            <p style="margin:0.5rem 0 0;white-space:pre-wrap;">{{ item.written_assessment }}</p>
+          {% elif item.detailed_report_doc %}
+            <p class="muted" style="margin:0.5rem 0 0;">Detailed report attached separately.</p>
+          {% else %}
+            <p style="margin:0.5rem 0 0;white-space:pre-wrap;">No detailed correction notes were entered.</p>
+          {% endif %}
+          {% if item.detailed_report_doc %}
+            <div class="document-action-row" style="margin-top:0.5rem;">
+              <strong>{{ item.detailed_report_doc.original_name }}</strong>
+              <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=item.detailed_report_doc.id) }}" class="secondary-button small-button">View</a>
+              <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=item.detailed_report_doc.id) }}" class="secondary-button small-button">Download</a>
+            </div>
+          {% endif %}
         </div>
       </div>
     {% endfor %}

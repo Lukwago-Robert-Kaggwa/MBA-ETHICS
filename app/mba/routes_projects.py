@@ -261,6 +261,9 @@ def invitation_response(project_id):
                     submitted_at=datetime.utcnow(),
                 )
                 db.session.add(supervisor_agreement_form)
+            agreement_payload = dict(supervisor_agreement_form.payload or {})
+            refresh_saved_signature_snapshot(agreement_payload, ("supervisor_signature",), current_user)
+            supervisor_agreement_form.payload = agreement_payload
             supervisor_agreement_form.supervisor_signed = True
             project.primary_supervisor_id = current_user.id
             project.primary_supervisor_invitation_status = INVITATION_ACCEPTED
@@ -327,7 +330,7 @@ def invitation_response(project_id):
     if decision == INVITATION_ACCEPTED and slot in ALL_ASSESSOR_SLOTS:
         if not assessor_acceptance_pack_complete(project, slot):
             flash(
-                "Complete the assessor acceptance pack, external examiner nomination form, and CV before accepting the assessor invitation.",
+                "Complete the assessor acceptance documents, CV, and highest qualification document before accepting the assessor invitation.",
                 "error",
             )
             return redirect(url_for("mba.assessor_acceptance_form", project_id=project.id, slot=slot))

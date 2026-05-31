@@ -7,234 +7,337 @@
 {% block body %}
 {% set supervisor_signature_mode = supervisor_signature_mode|default(false) %}
 {% set hdc_signature_mode = hdc_signature_mode|default(false) %}
+{% set content_locked = supervisor_signature_mode or hdc_signature_mode %}
+
+{% macro signature_field(name, value, editable=false, required=false) -%}
+  <div class="mba-doc-signature-field">
+    {% if prefill.get(name ~ '_image') %}
+      <img class="mba-doc-signature-image" src="{{ prefill.get(name ~ '_image') }}" alt="Saved signature">
+    {% endif %}
+    <input class="mba-doc-input" name="{{ name }}" value="{{ value or '' }}" {% if not editable %}readonly{% endif %} {% if required %}required{% endif %}>
+  </div>
+{%- endmacro %}
 {% set form_selection_saved = 'register_title_supervisors' in prefill or 'amend_title' in prefill or 'amend_supervisors' in prefill %}
-{% set current_study_type = prefill.get('study_type', 'Capstone Project') %}
+{% set current_study_type = prefill.get('study_type', 'Capstone Consultancy Project') %}
+{% set current_study_type_key = current_study_type|lower %}
+{% set capstone_checked = current_study_type_key in ['capstone project', 'capstone consultancy project', 'capstone'] %}
 {% set current_4ir = prefill.get('is_4ir_research', 'No') %}
 {% set current_secondary_focus = prefill.get('has_secondary_focus', 'No') %}
+{% set current_discipline_specific = prefill.get('discipline_specific', 'YES') %}
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel">
-    <div class="mba-doc-paper">
-      <div class="mba-doc-header">
-        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
-        <div class="mba-doc-title-stack">
-          <div class="mba-doc-kicker">Johannesburg Business School</div>
-          <h2 class="mba-doc-title">Form JBS5<br>Registration of Title / Amendment of Title / Amendment of Supervisor(s)</h2>
-          <div class="mba-doc-subtitle">The report is to be included in an agenda and must be typed.</div>
-        </div>
-      </div>
+    <div class="mba-doc-paper mba-doc-paper--jbs5 jbs5-doc">
+      <form action="{% if hdc_signature_mode %}{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs5') }}{% elif supervisor_signature_mode %}{{ url_for('mba.supervisor_sign_jbs5', project_id=project.id) }}{% else %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}{% endif %}" method="post" class="mba-doc-form jbs5-doc-form">
+        {% if not supervisor_signature_mode and not hdc_signature_mode %}
+          <input type="hidden" name="student_signature" value="{{ prefill.get('student_signature') or prefill.get('full_name', '') }}">
+          <input type="hidden" name="student_signature_date" value="{{ prefill.get('student_signature_date', '') }}">
+        {% endif %}
 
-      <form action="{% if hdc_signature_mode %}{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs5') }}{% elif supervisor_signature_mode %}{{ url_for('mba.supervisor_sign_jbs5', project_id=project.id) }}{% else %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}{% endif %}" method="post" class="mba-doc-form">
-        <table class="mba-doc-table">
+        <table class="mba-doc-table jbs5-doc-table jbs5-doc-header-table">
           <colgroup>
-            <col style="width:28%;">
-            <col style="width:28%;">
-            <col style="width:24%;">
-            <col style="width:20%;">
+            <col style="width:6%;">
+            <col style="width:12%;">
+            <col style="width:55%;">
+            <col style="width:3%;">
+            <col style="width:12%;">
+            <col style="width:12%;">
           </colgroup>
           <tr>
-            <td>
-              <label style="display:flex;align-items:center;gap:10px;font-weight:700;">
-                <input type="checkbox" name="register_title_supervisors" value="1" style="width:auto;margin:0;" {% if prefill.get('register_title_supervisors') or (not form_selection_saved and not prefill.get('amend_title') and not prefill.get('amend_supervisors')) %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
-                <span>Registration of Title / Supervisor/s (Section B)</span>
-              </label>
+            <td class="jbs5-doc-logo-cell" colspan="2">
+              <img class="mba-doc-logo jbs5-doc-logo" src="{{ url_for('static', filename='img/jbs5_logo.jpeg') }}" alt="University of Johannesburg logo">
             </td>
-            <td>
-              <label style="display:flex;align-items:center;gap:10px;font-weight:700;">
-                <input type="checkbox" name="amend_title" value="1" style="width:auto;margin:0;" {% if prefill.get('amend_title') %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
-                <span>Amendment of Title (Section C)</span>
-              </label>
+            <td class="jbs5-doc-title-cell" colspan="4">
+              <div class="jbs5-doc-school">JOHANNESBURG BUSINESS SCHOOL</div>
+              <div class="jbs5-doc-form-number">Form JBS5</div>
+              <div class="jbs5-doc-title">REGISTRATION OF TITLE / AMENDMENT OF TITLE /<br>AMENDMENT OF SUPERVISOR(S)</div>
+              <div class="jbs5-doc-subtitle">The report is to be included in an Agenda and must be typed.</div>
             </td>
-            <td>
-              <label style="display:flex;align-items:center;gap:10px;font-weight:700;">
-                <input type="checkbox" name="amend_supervisors" value="1" style="width:auto;margin:0;" {% if prefill.get('amend_supervisors') %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
-                <span>Amendment of Supervisor(s) (Section D)</span>
-              </label>
+          </tr>
+          <tr>
+            <td class="jbs5-doc-check-cell">
+              <input class="mba-doc-checkbox" type="checkbox" name="register_title_supervisors" value="1" {% if prefill.get('register_title_supervisors') or (not form_selection_saved and not prefill.get('amend_title') and not prefill.get('amend_supervisors')) %}checked{% endif %} {% if content_locked %}disabled{% endif %}>
             </td>
-            <td style="background:#e5e7eb;">
-              <div class="mba-doc-label">OFFICE USE ONLY</div>
-              <div class="mba-doc-note">Faculty Officer:</div>
-              <div class="mba-doc-note">Date:</div>
+            <td class="jbs5-doc-option-cell" colspan="2">REGISTRATION OF TITLE / SUPERVISOR/S (SECTION B)</td>
+            <td></td>
+            <td class="jbs5-doc-office-cell" colspan="2">
+              <div class="jbs5-doc-office-title">OFFICE USE ONLY</div>
+              <div>Faculty Officer: <span class="jbs5-doc-dots"></span></div>
+              <div>Date: <span class="jbs5-doc-dots"></span></div>
             </td>
+          </tr>
+          <tr>
+            <td class="jbs5-doc-check-cell"></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="jbs5-doc-check-cell">
+              <input class="mba-doc-checkbox" type="checkbox" name="amend_title" value="1" {% if prefill.get('amend_title') %}checked{% endif %} {% if content_locked %}disabled{% endif %}>
+            </td>
+            <td class="jbs5-doc-option-cell" colspan="2">AMENDMENT OF TITLE (SECTION C)</td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="jbs5-doc-check-cell"></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="jbs5-doc-check-cell">
+              <input class="mba-doc-checkbox" type="checkbox" name="amend_supervisors" value="1" {% if prefill.get('amend_supervisors') %}checked{% endif %} {% if content_locked %}disabled{% endif %}>
+            </td>
+            <td class="jbs5-doc-option-cell" colspan="2">AMENDMENT OF SUPERVISOR(S) (SECTION D)</td>
+            <td></td>
+            <td></td>
           </tr>
         </table>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table jbs5-doc-table jbs5-doc-section-a">
           <colgroup>
-            <col style="width:18%;">
-            <col style="width:32%;">
-            <col style="width:18%;">
-            <col style="width:32%;">
+            <col style="width:13%;">
+            <col style="width:13%;">
+            <col style="width:6%;">
+            <col style="width:13%;">
+            <col style="width:6%;">
+            <col style="width:13%;">
+            <col style="width:6%;">
+            <col style="width:9%;">
+            <col style="width:6%;">
+            <col style="width:7%;">
+            <col style="width:5%;">
+            <col style="width:3%;">
           </colgroup>
           <tr>
-            <th class="mba-doc-section-title" colspan="4">Section A: Information about the student</th>
+            <th class="mba-doc-section-title" colspan="12">SECTION A: Information about the student</th>
           </tr>
           <tr>
             <td class="mba-doc-label">Surname</td>
-            <td><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td colspan="2"><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname', '') }}" {% if content_locked %}readonly{% endif %}></td>
             <td class="mba-doc-label">Title (e.g. Mr / Mrs)</td>
-            <td><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td colspan="8"><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Initials(s)</td>
-            <td><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
-            <td class="mba-doc-label">Date of first registration</td>
-            <td><input class="mba-doc-input" type="date" name="date_of_first_registration" value="{{ prefill.get('date_of_first_registration', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td colspan="2"><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label">Date of first registration (e.g. Feb 2021)</td>
+            <td colspan="8"><input class="mba-doc-input" name="date_of_first_registration" value="{{ prefill.get('date_of_first_registration', '') }}" placeholder="Feb 2021" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Student number</td>
-            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number', '') }}" {% if not supervisor_signature_mode %}required{% endif %} {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td colspan="2"><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number', '') }}" {% if not content_locked %}required{% endif %} {% if content_locked %}readonly{% endif %}></td>
             <td class="mba-doc-label">Qualification (e.g. MBA)</td>
-            <td><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td colspan="8"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Discipline / Qualifier</td>
-            <td colspan="3"><input class="mba-doc-input" name="discipline" value="{{ prefill.get('discipline', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="2">Discipline/Qualifier (e.g. Digital transformation, etc.)</td>
+            <td colspan="10"><input class="mba-doc-input" name="discipline" value="{{ prefill.get('discipline', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Study type</td>
-            <td colspan="3">
-              <div style="display:flex;flex-wrap:wrap;gap:16px;">
-                {% for option in ['Capstone Project', 'Research Essay', 'Thesis'] %}
-                  <label style="display:flex;align-items:center;gap:6px;">
-                    <input type="radio" name="study_type" value="{{ option }}" style="width:auto;margin:0;" {% if current_study_type == option %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
-                    <span>{{ option }}</span>
-                  </label>
-                {% endfor %}
-              </div>
-            </td>
+            <td>Capstone Consultancy Project</td>
+            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Capstone Consultancy Project" {% if capstone_checked %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td>Research essay</td>
+            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Research essay" {% if current_study_type_key == 'research essay' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td>Minor dissertation</td>
+            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Minor dissertation" {% if current_study_type_key == 'minor dissertation' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td>Dissertation</td>
+            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Dissertation" {% if current_study_type_key == 'dissertation' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td>Thesis</td>
+            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Thesis" {% if current_study_type_key == 'thesis' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Sustainable Development Goals (SDGs)</td>
-            <td><input class="mba-doc-input" name="sdg_focus" value="{{ prefill.get('sdg_focus', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
-            <td class="mba-doc-label">Is this a 4IR research?</td>
-            <td>
-              <div style="display:flex;gap:16px;align-items:center;">
-                {% for option in ['Yes', 'No'] %}
-                  <label style="display:flex;align-items:center;gap:6px;">
-                    <input type="radio" name="is_4ir_research" value="{{ option }}" style="width:auto;margin:0;" {% if current_4ir == option %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
-                    <span>{{ option }}</span>
-                  </label>
-                {% endfor %}
-              </div>
-            </td>
+            <td class="mba-doc-label" colspan="2">Sustainable Developmental Goals (SDGs)<br><span class="jbs5-doc-small">See list at end of document</span></td>
+            <td colspan="4"><input class="mba-doc-input" name="sdg_focus" value="{{ prefill.get('sdg_focus', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="6">Is this a 4IR research?</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td class="jbs5-doc-center">YES</td>
+            <td class="jbs5-doc-center"><input type="radio" name="is_4ir_research" value="Yes" {% if current_4ir|lower == 'yes' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td class="jbs5-doc-center">NO</td>
+            <td class="jbs5-doc-center"><input type="radio" name="is_4ir_research" value="No" {% if current_4ir|lower == 'no' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
           </tr>
         </table>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table jbs5-doc-table">
+          <colgroup>
+            <col style="width:39%;">
+            <col style="width:12%;">
+            <col style="width:12%;">
+            <col style="width:12%;">
+            <col style="width:8%;">
+            <col style="width:17%;">
+          </colgroup>
           <tr>
-            <th class="mba-doc-section-title" colspan="2">Section B: Registration title</th>
+            <th class="mba-doc-section-title">SECTION B: Registration title</th>
+            <th class="mba-doc-section-title"></th>
+            <th class="mba-doc-section-title"></th>
+            <th class="mba-doc-section-title"></th>
+            <th class="jbs5-doc-section-number">(4)</th>
+            <th></th>
           </tr>
           <tr>
-            <td class="mba-doc-label" style="width:34%;">Proposed Capstone Project title</td>
-            <td><textarea class="mba-doc-textarea" name="research_title" rows="4" {% if not supervisor_signature_mode %}required{% endif %} data-project-title-input {% if supervisor_signature_mode %}readonly{% endif %}>{{ prefill.get('research_title', '') }}</textarea></td>
+            <td class="mba-doc-label">Proposed title (4) of thesis / dissertation / minor dissertation / research essay / research article/ Capstone Consultancy Project</td>
+            <td colspan="5"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="research_title" rows="3" {% if not content_locked %}required{% endif %} data-project-title-input {% if content_locked %}readonly{% endif %}>{{ prefill.get('research_title', '') }}</textarea></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Proposed supervisor (A)</td>
-            <td><input class="mba-doc-input" name="proposed_supervisor" value="{{ prefill.get('proposed_supervisor', prefill.get('supervisor_name', '')) }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td colspan="5"><input class="mba-doc-input" name="proposed_supervisor" value="{{ prefill.get('proposed_supervisor', prefill.get('supervisor_name', '')) }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Proposed co-supervisor(s) (D)</td>
-            <td><input class="mba-doc-input" name="proposed_co_supervisors" value="{{ prefill.get('proposed_co_supervisors', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td colspan="5"><input class="mba-doc-input" name="proposed_co_supervisors" value="{{ prefill.get('proposed_co_supervisors', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
         </table>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table jbs5-doc-table">
+          <colgroup>
+            <col style="width:39%;">
+            <col style="width:12%;">
+            <col style="width:12%;">
+            <col style="width:12%;">
+            <col style="width:8%;">
+            <col style="width:17%;">
+          </colgroup>
           <tr>
-            <th class="mba-doc-section-title" colspan="2">Section C: Amendment of title</th>
+            <th class="mba-doc-section-title">SECTION C: Amendment of title</th>
+            <th class="mba-doc-section-title"></th>
+            <th class="mba-doc-section-title"></th>
+            <th class="mba-doc-section-title"></th>
+            <th class="jbs5-doc-section-number">(6)</th>
+            <th></th>
           </tr>
           <tr>
-            <td class="mba-doc-label" style="width:34%;">Previously approved title</td>
-            <td><textarea class="mba-doc-textarea" name="previous_title" rows="3" {% if supervisor_signature_mode %}readonly{% endif %}>{{ prefill.get('previous_title', '') }}</textarea></td>
+            <td class="mba-doc-label">Previously approved title (5) of thesis / dissertation / minor dissertation / research essay / Capstone Consultancy Project</td>
+            <td colspan="5"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="previous_title" rows="2" {% if content_locked %}readonly{% endif %}>{{ prefill.get('previous_title', '') }}</textarea></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Proposed amendment to title</td>
-            <td><textarea class="mba-doc-textarea" name="amended_title" rows="3" {% if supervisor_signature_mode %}readonly{% endif %}>{{ prefill.get('amended_title', '') }}</textarea></td>
+            <td class="mba-doc-label">Proposed amendment to title (6) of thesis / dissertation / minor dissertation / research essay / Capstone Consultancy Project</td>
+            <td colspan="5"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="amended_title" rows="2" {% if content_locked %}readonly{% endif %}>{{ prefill.get('amended_title', '') }}</textarea></td>
           </tr>
         </table>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table jbs5-doc-table">
           <tr>
-            <th class="mba-doc-section-title" colspan="2">Section D: Amendment of supervisor(s)</th>
+            <th class="mba-doc-section-title" colspan="2">SECTION D: Amendment of supervisor(s)</th>
           </tr>
           <tr>
-            <td class="mba-doc-label" style="width:34%;">Previously approved supervisor (B)</td>
-            <td><input class="mba-doc-input" name="previous_supervisor" value="{{ prefill.get('previous_supervisor', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td class="mba-doc-label" style="width:39%;">Previously approved supervisor (B)</td>
+            <td><input class="mba-doc-input" name="previous_supervisor" value="{{ prefill.get('previous_supervisor', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Previously approved co-supervisor(s) (E)</td>
-            <td><input class="mba-doc-input" name="previous_co_supervisors" value="{{ prefill.get('previous_co_supervisors', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" name="previous_co_supervisors" value="{{ prefill.get('previous_co_supervisors', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Amended supervisor (C)</td>
-            <td><input class="mba-doc-input" name="amended_supervisor" value="{{ prefill.get('amended_supervisor', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" name="amended_supervisor" value="{{ prefill.get('amended_supervisor', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Amended co-supervisor(s) (F)</td>
-            <td><input class="mba-doc-input" name="amended_co_supervisors" value="{{ prefill.get('amended_co_supervisors', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" name="amended_co_supervisors" value="{{ prefill.get('amended_co_supervisors', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
         </table>
 
-        <table class="mba-doc-table">
-          <tr>
-            <th class="mba-doc-section-title" colspan="2">Section E: Declaration of research focus</th>
-          </tr>
-          <tr>
-            <td colspan="2">
-              <p class="mba-doc-paragraph">1. The proposed study field/title and/or amendment to study field/title is discipline specific in that it falls within the discipline/qualifier indicated above.</p>
-            </td>
-          </tr>
-          <tr>
-            <td class="mba-doc-label" style="width:34%;">2. Is there a secondary focus in the proposed study field/title and/or amendment to study field/title?</td>
-            <td>
-              <div style="display:flex;gap:16px;align-items:center;">
-                {% for option in ['Yes', 'No'] %}
-                  <label style="display:flex;align-items:center;gap:6px;">
-                    <input type="radio" name="has_secondary_focus" value="{{ option }}" style="width:auto;margin:0;" {% if current_secondary_focus == option %}checked{% endif %} {% if supervisor_signature_mode %}disabled{% endif %}>
-                    <span>{{ option }}</span>
-                  </label>
-                {% endfor %}
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td class="mba-doc-label">If yes, please indicate the secondary focus</td>
-            <td><input class="mba-doc-input" name="secondary_focus" value="{{ prefill.get('secondary_focus', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
-          </tr>
-        </table>
-
-        <table class="mba-doc-table mba-doc-table--tight">
+        <table class="mba-doc-table jbs5-doc-table">
           <colgroup>
-            <col style="width:28%;">
-            <col style="width:22%;">
-            <col style="width:12%;">
-            <col style="width:38%;">
+            <col style="width:67%;">
+            <col style="width:33%;">
           </colgroup>
           <tr>
-            <td class="mba-doc-label">Signature: Student</td>
-            <td><input class="mba-doc-input" name="student_signature" value="{{ prefill.get('student_signature', '') }}" {% if not supervisor_signature_mode %}required{% endif %} {% if supervisor_signature_mode %}readonly{% endif %}></td>
-            <td class="mba-doc-label">Date</td>
-            <td><input class="mba-doc-input" type="date" name="student_signature_date" value="{{ prefill.get('student_signature_date', '') }}" {% if not supervisor_signature_mode %}required{% endif %} {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <th class="mba-doc-section-title" colspan="2">SECTION E: Declaration of research focus</th>
           </tr>
           <tr>
+            <td class="mba-doc-label">1. The proposed study field/title and/or amendment to study field/title is discipline specific in that it falls within the primary research field of the qualification. (Please indicate YES / NO)</td>
+            <td class="jbs5-doc-inline-options">
+              <label><span>YES</span><input type="radio" name="discipline_specific" value="YES" {% if current_discipline_specific|upper == 'YES' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
+              <label><span>NO</span><input type="radio" name="discipline_specific" value="NO" {% if current_discipline_specific|upper == 'NO' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">2. Is there a secondary focus in the proposed study field/title and/or amendment to study field/title? (Please indicate YES / NO)</td>
+            <td class="jbs5-doc-inline-options">
+              <label><span>YES</span><input type="radio" name="has_secondary_focus" value="Yes" {% if current_secondary_focus|lower == 'yes' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
+              <label><span>NO</span><input type="radio" name="has_secondary_focus" value="No" {% if current_secondary_focus|lower == 'no' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
+            </td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">If you have answered 'YES' to the second question, please indicate the secondary focus:</td>
+            <td><input class="mba-doc-input" name="secondary_focus" value="{{ prefill.get('secondary_focus', '') }}" {% if content_locked %}readonly{% endif %}></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight jbs5-doc-table jbs5-doc-signatures">
+          <colgroup>
+            <col style="width:31%;">
+            <col style="width:31%;">
+            <col style="width:12%;">
+            <col style="width:26%;">
+          </colgroup>
+          <tr>
             <td class="mba-doc-label">Signature: Supervisor</td>
-            <td><input class="mba-doc-input" name="supervisor_signature" value="{{ prefill.get('supervisor_signature', '') }}" {% if not supervisor_signature_mode %}readonly{% endif %} {% if supervisor_signature_mode %}required{% endif %}></td>
+            <td>{{ signature_field('supervisor_signature', prefill.get('supervisor_signature', ''), supervisor_signature_mode, supervisor_signature_mode) }}</td>
             <td class="mba-doc-label">Date</td>
             <td><input class="mba-doc-input" type="date" name="supervisor_signature_date" value="{{ prefill.get('supervisor_signature_date', '') }}" {% if not supervisor_signature_mode %}readonly{% endif %} {% if supervisor_signature_mode %}required{% endif %}></td>
           </tr>
           <tr>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
+          </tr>
+          <tr>
             <td class="mba-doc-label">Signature: Head of Department</td>
-            <td><input class="mba-doc-input" name="head_of_department_signature" value="{{ prefill.get('head_of_department_signature', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td>{{ signature_field('head_of_department_signature', prefill.get('head_of_department_signature', ''), (not content_locked) or hdc_signature_mode, hdc_signature_mode) }}</td>
             <td class="mba-doc-label">Date</td>
-            <td><input class="mba-doc-input" type="date" name="head_of_department_signature_date" value="{{ prefill.get('head_of_department_signature_date', '') }}" {% if supervisor_signature_mode %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" type="date" name="head_of_department_signature_date" value="{{ prefill.get('head_of_department_signature_date', '') }}" {% if content_locked and not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>
+          </tr>
+          <tr>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Signature: JBS HDC</td>
-            <td><input class="mba-doc-input" name="jbs_hdc_signature" value="{{ prefill.get('jbs_hdc_signature', '') }}" {% if supervisor_signature_mode or not hdc_signature_mode %}readonly{% endif %}></td>
+            <td>{{ signature_field('jbs_hdc_signature', prefill.get('jbs_hdc_signature', ''), hdc_signature_mode, hdc_signature_mode) }}</td>
             <td class="mba-doc-label">Date</td>
-            <td><input class="mba-doc-input" type="date" name="jbs_hdc_signature_date" value="{{ prefill.get('jbs_hdc_signature_date', '') }}" {% if supervisor_signature_mode or not hdc_signature_mode %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" type="date" name="jbs_hdc_signature_date" value="{{ prefill.get('jbs_hdc_signature_date', '') }}" {% if supervisor_signature_mode or not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>
+          </tr>
+          <tr>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
+            <td class="jbs5-doc-blank-row"></td>
           </tr>
         </table>
+
+        <div class="jbs5-doc-sdgs">
+          <p class="jbs5-doc-sdgs-title">Sustainable Developmental Goals:</p>
+          <p>01_No Poverty</p>
+          <p>02_Zero Hunger</p>
+          <p>03_Good health and well-being</p>
+          <p>04_Quality Education</p>
+          <p>05_Gender Equality</p>
+          <p>06_Clean Water and Sanitation</p>
+          <p>07_Affordable and Clean Energy</p>
+          <p>08_Decent Work and Economic Growth</p>
+          <p>09_Industry, Innovation and Infrastructure</p>
+          <p>10_Reduced Inequality</p>
+          <p>11_Sustainable Cities and Communities</p>
+          <p>12_Responsible Consumption and Protection</p>
+          <p>13_Climate Action</p>
+          <p>14_Live Below Water</p>
+          <p>15_Live on Land</p>
+          <p>16_Peace and Justice Strong Institutions</p>
+          <p>17_Partnerships to Achieve the Goal</p>
+        </div>
 
         {% if supervisor_signature_mode %}
           <div class="mba-doc-muted-box" style="border:1.5px solid #b45309;background:#fff7ed;margin-top:1rem;">
@@ -243,28 +346,19 @@
               Signing JBS5 confirms that no title changes are required. Once signed, the student can no longer edit JBS5, and MBA Admin will be notified that JBS5 is ready to be forwarded to HDC.
             </p>
           </div>
-          <label class="mba-doc-checkline">
-            <span>I have reviewed the student-submitted JBS5, confirm no title changes are required, and understand that signing will lock JBS5 for the student. <span style="color:red;">*</span></span>
-            <input class="mba-doc-checkbox" type="checkbox" name="jbs5_supervisor_declaration" value="1" required>
-          </label>
         {% endif %}
 
         {% if hdc_signature_mode %}
           <div class="mba-doc-muted-box" style="border:1.5px solid #92400e;background:#fffbeb;margin-top:1rem;">
             <p class="mba-doc-note" style="font-weight:700;color:#78350f;margin-bottom:8px;">HDC review</p>
             <p class="mba-doc-note" style="color:#78350f;">
-              Review the opened JBS5 form. If approved, complete the JBS HDC signature and date in the signature section before submitting the approval.
+              Review the opened JBS5 form. If approved, complete the Head of Department and JBS HDC signature fields before submitting the approval.
             </p>
           </div>
           <label>HDC feedback
             <textarea class="mba-doc-textarea" name="comment" rows="3" placeholder="Required when returning JBS5; optional when approving"></textarea>
           </label>
         {% endif %}
-
-        <div class="mba-doc-muted-box">
-          <p class="mba-doc-note" style="font-weight:700;color:#111827;margin-bottom:8px;">Sustainable Development Goals</p>
-          <p class="mba-doc-note">01 No Poverty, 02 Zero Hunger, 03 Good Health and Well-being, 04 Quality Education, 05 Gender Equality, 06 Clean Water and Sanitation, 07 Affordable and Clean Energy, 08 Decent Work and Economic Growth, 09 Industry Innovation and Infrastructure, 10 Reduced Inequality, 11 Sustainable Cities and Communities, 12 Responsible Consumption and Production, 13 Climate Action, 14 Life Below Water, 15 Life on Land, 16 Peace and Justice Strong Institutions, 17 Partnerships to Achieve the Goal.</p>
-        </div>
 
         <div class="mba-doc-actions">
           {% if hdc_signature_mode %}
@@ -296,7 +390,7 @@
 {% if hdc_signature_mode %}
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      const editable = new Set(['jbs_hdc_signature', 'jbs_hdc_signature_date', 'comment', 'decision']);
+      const editable = new Set(['head_of_department_signature', 'head_of_department_signature_date', 'jbs_hdc_signature', 'jbs_hdc_signature_date', 'comment', 'decision']);
       document.querySelectorAll('.mba-doc-form input, .mba-doc-form textarea, .mba-doc-form select').forEach(function (field) {
         if (editable.has(field.name) || field.type === 'hidden' || field.type === 'submit') {
           return;

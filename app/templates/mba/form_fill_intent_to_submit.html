@@ -5,18 +5,20 @@
 {% block page_subheading %}{{ project.project_title }}{% endblock %}
 
 {% block body %}
+{% set intent_qualification = prefill.get('qualification', 'MBA (Online Mode)') or 'MBA (Online Mode)' %}
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
-  <section class="ethics-panel">
-    <div class="mba-doc-paper">
-      <div class="mba-doc-header mba-doc-header--centered">
-        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+  <section class="ethics-panel intent-doc-panel">
+    <div class="mba-doc-paper mba-doc-paper--intent">
+      <div class="mba-doc-header mba-doc-header--intent">
+        <img class="mba-doc-logo intent-doc-logo" src="{{ url_for('static', filename='img/intent_to_submit_logo.jpeg') }}" alt="Johannesburg Business School and University of Johannesburg logo">
         <div class="mba-doc-title-stack">
           <h2 class="mba-doc-title">NOTICE OF INTENTION TO SUBMIT DISSERTATION OR THESIS FOR EXAMINATION</h2>
+          <p class="intent-doc-adapted">Adapted from CBE</p>
         </div>
       </div>
 
-      <p class="mba-doc-paragraph" style="font-weight:700;margin-bottom:1rem;">
+      <p class="mba-doc-paragraph intent-doc-instruction">
         This notice should be submitted to
         <span style="color:#ef6436;">program manager</span>
         via email to
@@ -25,16 +27,16 @@
         <span style="color:#ef6436;">(staff member's physical office details).</span>
       </p>
 
-      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='intent_to_submit') }}" method="post" class="mba-doc-form">
-        <table class="mba-doc-table">
+      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='intent_to_submit') }}" method="post" class="mba-doc-form intent-doc-form">
+        <table class="mba-doc-table intent-doc-table">
           <colgroup>
-            <col style="width:34%;">
-            <col style="width:21%;">
-            <col style="width:18%;">
+            <col style="width:32%;">
+            <col style="width:20%;">
+            <col style="width:16%;">
             <col style="width:2%;">
-            <col style="width:7%;">
             <col style="width:8%;">
-            <col style="width:10%;">
+            <col style="width:8%;">
+            <col style="width:14%;">
           </colgroup>
           <tr>
             <td class="mba-doc-label">Title, initials and surname</td>
@@ -52,11 +54,16 @@
           </tr>
           <tr>
             <td class="mba-doc-label">Qualification</td>
-            <td colspan="6"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification','') }}" required></td>
+            <td colspan="6" class="intent-doc-fixed-value">
+              MBA (Online Mode)
+              <input type="hidden" name="qualification" value="{{ intent_qualification }}" required>
+            </td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Final title of the Capstone Consultancy Project / thesis approved by JBS Higher Degree Committee</td>
-            <td colspan="6">
+            <td class="mba-doc-label intent-doc-full-label" colspan="7">Final title of the Capstone Consultancy Project / thesis approved by JBS Higher Degree Committee</td>
+          </tr>
+          <tr>
+            <td colspan="7">
               <textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="3" readonly required>{{ prefill.get('research_title','') }}</textarea>
             </td>
           </tr>
@@ -93,7 +100,14 @@
           </tr>
           <tr>
             <td class="mba-doc-label">Signature of student</td>
-            <td colspan="4"><input class="mba-doc-input" name="signature_name" value="{{ prefill.get('signature_name','') }}" required></td>
+            <td colspan="4">
+              <div class="mba-doc-signature-field">
+                {% if prefill.get('signature_name_image') %}
+                  <img class="mba-doc-signature-image" src="{{ prefill.get('signature_name_image') }}" alt="Saved signature">
+                {% endif %}
+                <input class="mba-doc-input" name="signature_name" value="{{ prefill.get('signature_name','') }}" required>
+              </div>
+            </td>
             <td class="mba-doc-label">Date</td>
             <td><input class="mba-doc-input" type="date" name="signature_date" value="{{ prefill.get('signature_date','') }}" required></td>
           </tr>
@@ -110,16 +124,10 @@
               </p>
             </td>
             <td colspan="3">
-              <div class="mba-doc-inline-field-group">
-                <label class="mba-doc-inline-field">
-                  <span>Signature</span>
-                  <input class="mba-doc-input" name="supervisor_agree_signature" value="{{ prefill.get('supervisor_agree_signature','') }}">
-                </label>
-                <label class="mba-doc-inline-field mba-doc-inline-field--date">
-                  <span>Date</span>
-                  <input class="mba-doc-input" type="date" name="supervisor_agree_date" value="{{ prefill.get('supervisor_agree_date','') }}">
-                </label>
-              </div>
+              <label class="mba-doc-inline-field intent-doc-signature-only">
+                <span>Signature</span>
+                <input class="mba-doc-input" name="supervisor_agree_signature" value="{{ prefill.get('supervisor_agree_signature','') }}">
+              </label>
             </td>
           </tr>
           <tr>
@@ -130,16 +138,10 @@
               </p>
             </td>
             <td colspan="3">
-              <div class="mba-doc-inline-field-group">
-                <label class="mba-doc-inline-field">
-                  <span>Signature</span>
-                  <input class="mba-doc-input" name="co_supervisor_agree_signature" value="{{ prefill.get('co_supervisor_agree_signature','') }}">
-                </label>
-                <label class="mba-doc-inline-field mba-doc-inline-field--date">
-                  <span>Date</span>
-                  <input class="mba-doc-input" type="date" name="co_supervisor_agree_date" value="{{ prefill.get('co_supervisor_agree_date','') }}">
-                </label>
-              </div>
+              <label class="mba-doc-inline-field intent-doc-signature-only">
+                <span>Signature</span>
+                <input class="mba-doc-input" name="co_supervisor_agree_signature" value="{{ prefill.get('co_supervisor_agree_signature','') }}">
+              </label>
             </td>
           </tr>
           <tr>
@@ -150,16 +152,10 @@
               </p>
             </td>
             <td colspan="3">
-              <div class="mba-doc-inline-field-group">
-                <label class="mba-doc-inline-field">
-                  <span>Signature</span>
-                  <input class="mba-doc-input" name="supervisor_disagree_signature" value="{{ prefill.get('supervisor_disagree_signature','') }}">
-                </label>
-                <label class="mba-doc-inline-field mba-doc-inline-field--date">
-                  <span>Date</span>
-                  <input class="mba-doc-input" type="date" name="supervisor_disagree_signature_date" value="{{ prefill.get('supervisor_disagree_signature_date','') }}">
-                </label>
-              </div>
+              <label class="mba-doc-inline-field intent-doc-signature-only">
+                <span>Signature</span>
+                <input class="mba-doc-input" name="supervisor_disagree_signature" value="{{ prefill.get('supervisor_disagree_signature','') }}">
+              </label>
             </td>
           </tr>
           <tr>
@@ -170,16 +166,10 @@
               </p>
             </td>
             <td colspan="3">
-              <div class="mba-doc-inline-field-group">
-                <label class="mba-doc-inline-field">
-                  <span>Signature</span>
-                  <input class="mba-doc-input" name="co_supervisor_disagree_signature" value="{{ prefill.get('co_supervisor_disagree_signature','') }}">
-                </label>
-                <label class="mba-doc-inline-field mba-doc-inline-field--date">
-                  <span>Date</span>
-                  <input class="mba-doc-input" type="date" name="co_supervisor_disagree_signature_date" value="{{ prefill.get('co_supervisor_disagree_signature_date','') }}">
-                </label>
-              </div>
+              <label class="mba-doc-inline-field intent-doc-signature-only">
+                <span>Signature</span>
+                <input class="mba-doc-input" name="co_supervisor_disagree_signature" value="{{ prefill.get('co_supervisor_disagree_signature','') }}">
+              </label>
             </td>
           </tr>
           <tr>
@@ -248,7 +238,7 @@
           </tr>
         </table>
 
-        <table class="mba-doc-table mba-doc-table--tight" style="margin-top:1rem;">
+        <table class="mba-doc-table mba-doc-table--tight intent-doc-table intent-doc-approval-table">
           <colgroup>
             <col style="width:34%;">
             <col style="width:16%;">

@@ -202,7 +202,28 @@ def _render_branded_email(subject, content_html, logo_src=None):
 </html>"""
 
 
-def build_email_message(recipient, subject, body):
+def _add_attachments(message, attachments):
+    for attachment in attachments or []:
+        filename = attachment.get("filename") or "attachment"
+        content = attachment.get("content", attachment.get("data"))
+        if content is None:
+            continue
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        mime_type = attachment.get("mime_type") or "application/octet-stream"
+        if "/" in mime_type:
+            maintype, subtype = mime_type.split("/", 1)
+        else:
+            maintype, subtype = "application", "octet-stream"
+        message.add_attachment(
+            content,
+            maintype=maintype,
+            subtype=subtype,
+            filename=filename,
+        )
+
+
+def build_email_message(recipient, subject, body, attachments=None):
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = current_app.config["MAIL_DEFAULT_SENDER"]
@@ -230,6 +251,7 @@ def build_email_message(recipient, subject, body):
             filename=logo_path.name,
         )
 
+    _add_attachments(message, attachments)
     return message
 
 
@@ -263,11 +285,11 @@ def _open_smtp_server():
         raise MailDeliveryError(str(exc)) from exc
 
 
-def send_email(recipient, subject, body):
+def send_email(recipient, subject, body, attachments=None):
     if not mail_is_configured():
         return False
 
-    message = build_email_message(recipient, subject, body)
+    message = build_email_message(recipient, subject, body, attachments=attachments)
 
     try:
         with _open_smtp_server() as server:
@@ -302,7 +324,12 @@ def send_bulk_emails(messages):
 
     for message in messages:
         try:
-            email_message = build_email_message(message["recipient"], message["subject"], message["body"])
+            email_message = build_email_message(
+                message["recipient"],
+                message["subject"],
+                message["body"],
+                attachments=message.get("attachments"),
+            )
             pending.append((message, email_message))
         except Exception as exc:
             current_app.logger.exception("Failed to build email to %s", message["recipient"])

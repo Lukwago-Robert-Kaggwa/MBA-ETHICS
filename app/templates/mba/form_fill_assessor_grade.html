@@ -11,17 +11,17 @@
   {% set doc_subtitle = 'Submitted assessor outcome summary for HDC review' %}
   {% set doc_note = 'This summary reflects the submitted examination outcome, final mark, and supporting report entered by the assessor.' %}
 {% elif doc_variant == 'assessor_report' %}
-  {% set doc_title = 'Capstone Assessors Report Form 1' %}
-  {% set doc_subtitle = 'Submitted assessor report for HDC review' %}
-  {% set doc_note = 'This report reflects the submitted examination outcome and detailed report entered by the assessor.' %}
+  {% set doc_title = "EXAMINER&rsquo;S REPORT ON A CAPSTONE RESEARCH REPORT SUBMITTED FOR THE DEGREE OF MASTER OF BUSINESS ADMINISTRATION (MBA)" %}
+  {% set doc_subtitle = '(By capstone and coursework)' %}
+  {% set doc_note = "Examiners should consider the following in assessing and reporting on the research report, bearing in mind with respect to all criteria that the report constitutes 26% of the MBA and is not a full master&rsquo;s dissertation. The purpose of the capstone research report is for the student to demonstrate the ability to carry out structured, independent research into a theoretical or practical business-societal related problem. While the research should be more than a rudimentary application of theory, it is not required to make a unique contribution to the body of academic knowledge (NQF9). Integration and synthesis to the existing academic knowledge in the form of a literature review is required. Sources referenced should preferably be recent scholarly peer-reviewed academic articles. Typically a total of 30+ academic references are adequate. Quantitative, qualitative, mixed-method and theory extension literature based studies are all acceptable." %}
 {% elif doc_variant == 'assessor_narrative' %}
   {% set doc_title = 'Capstone Assessors Report Form 2' %}
   {% set doc_subtitle = 'Submitted companion assessor report for HDC review' %}
   {% set doc_note = 'This companion report reflects the submitted examination outcome and detailed report entered by the assessor.' %}
 {% else %}
-  {% set doc_title = "Examiner's Report on a Capstone Research Report Submitted for the Degree of Master of Business Administration (MBA)" %}
+  {% set doc_title = "EXAMINER&rsquo;S REPORT ON A CAPSTONE RESEARCH REPORT SUBMITTED FOR THE DEGREE OF MASTER OF BUSINESS ADMINISTRATION (MBA)" %}
   {% set doc_subtitle = '(By capstone and coursework)' %}
-  {% set doc_note = 'Examiners should consider the following in assessing and reporting on the research report, bearing in mind with respect to all criteria that the report constitutes 26% of the MBA assessment.' %}
+  {% set doc_note = "Examiners should consider the following in assessing and reporting on the research report, bearing in mind with respect to all criteria that the report constitutes 26% of the MBA and is not a full master&rsquo;s dissertation. The purpose of the capstone research report is for the student to demonstrate the ability to carry out structured, independent research into a theoretical or practical business-societal related problem. While the research should be more than a rudimentary application of theory, it is not required to make a unique contribution to the body of academic knowledge (NQF9). Integration and synthesis to the existing academic knowledge in the form of a literature review is required. Sources referenced should preferably be recent scholarly peer-reviewed academic articles. Typically a total of 30+ academic references are adequate. Quantitative, qualitative, mixed-method and theory extension literature based studies are all acceptable." %}
 {% endif %}
 {% set show_outcome_summary = doc_variant in ['assessment_submission', 'assessment_result', 'assessor_report'] %}
 {% set show_grading = doc_variant in ['assessment_submission', 'assessment_result', 'assessor_report'] %}
@@ -30,96 +30,164 @@
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel">
-    <div class="mba-doc-paper">
-      <div class="mba-doc-header mba-doc-header--centered">
-        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
+    <div class="mba-doc-paper mba-doc-paper--assessor">
+      <div class="mba-doc-header mba-doc-header--centered assessor-doc-header">
+        <img class="mba-doc-logo" src="{{ url_for('static', filename='img/jbs5_logo.jpeg') }}" alt="University of Johannesburg and Johannesburg Business School logo">
         <div class="mba-doc-title-stack">
-          <h2 class="mba-doc-title">{{ doc_title }}</h2>
+          <h2 class="mba-doc-title">{{ doc_title|safe }}</h2>
           <div class="mba-doc-subtitle">{{ doc_subtitle }}</div>
-          <p class="mba-doc-note" style="margin-top:8px;">
-            {{ doc_note }}
+          <p class="mba-doc-note assessor-doc-intro">
+            {{ doc_note|safe }}
           </p>
         </div>
       </div>
 
-      <form action="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot) }}" method="post" class="mba-doc-form">
-        <table class="mba-doc-table">
+      <form action="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot) }}" method="post" enctype="multipart/form-data" class="mba-doc-form assessor-doc-form" data-assessor-report-form>
+        <table class="mba-doc-table assessor-doc-table">
           <colgroup>
-            <col style="width:34%;">
-            <col style="width:66%;">
+            <col style="width:23.3%;">
+            <col style="width:47%;">
+            <col style="width:7.7%;">
+            <col style="width:22%;">
           </colgroup>
           <tr>
             <td class="mba-doc-label">Name of Candidate:</td>
-            <td><input class="mba-doc-input" name="student_name" value="{{ prefill.get('student_name','') }}" readonly required></td>
+            <td colspan="3"><input class="mba-doc-input" name="student_name" value="{{ prefill.get('student_name','') }}" readonly required></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Student No.:</td>
-            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" readonly required></td>
+            <td colspan="3"><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" readonly required></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Title of Research:</td>
-            <td><textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="3" readonly required>{{ prefill.get('research_title','') }}</textarea></td>
+            <td colspan="3"><textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="3" readonly required>{{ prefill.get('research_title','') }}</textarea></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Name of External Assessor (in full):</td>
-            <td><input class="mba-doc-input" name="assessor_name" value="{{ prefill.get('assessor_name','') }}" required></td>
+            <td colspan="3"><input class="mba-doc-input" name="assessor_name" value="{{ prefill.get('assessor_name','') }}" required></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Institutional affiliation:</td>
-            <td><input class="mba-doc-input" name="affiliation" value="{{ prefill.get('affiliation','') }}" required></td>
+            <td colspan="3"><input class="mba-doc-input" name="affiliation" value="{{ prefill.get('affiliation','') }}" required></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Email Address:</td>
-            <td><input class="mba-doc-input" name="assessor_email" type="email" value="{{ prefill.get('assessor_email','') }}" required></td>
+            <td class="mba-doc-label assessor-doc-stacked-label">
+              <div>Email Address:</div>
+              <div>Contact Number(s):</div>
+            </td>
+            <td colspan="3" class="assessor-doc-stacked-value">
+              <input class="mba-doc-input" name="assessor_email" type="email" value="{{ prefill.get('assessor_email','') }}" required>
+              <input class="mba-doc-input" name="assessor_contact" value="{{ prefill.get('assessor_contact','') }}" required>
+            </td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Contact Number(s):</td>
-            <td><input class="mba-doc-input" name="assessor_contact" value="{{ prefill.get('assessor_contact','') }}" required></td>
-          </tr>
-          <tr>
-            <td class="mba-doc-label">External Assessor's Signature:</td>
-            <td><input class="mba-doc-input" name="assessor_signature_name" value="{{ prefill.get('assessor_signature_name','') }}" required></td>
-          </tr>
-          <tr>
+            <td class="mba-doc-label">External AssessorsSignature:</td>
+            <td>
+              <div class="mba-doc-signature-field">
+                {% if prefill.get('assessor_signature_name_image') %}
+                  <img class="mba-doc-signature-image" src="{{ prefill.get('assessor_signature_name_image') }}" alt="Saved signature">
+                {% endif %}
+                <input class="mba-doc-input" name="assessor_signature_name" value="{{ prefill.get('assessor_signature_name','') }}" required>
+              </div>
+            </td>
             <td class="mba-doc-label">Date:</td>
             <td><input class="mba-doc-input" type="date" name="certification_date" value="{{ prefill.get('certification_date','') }}" required></td>
           </tr>
         </table>
 
         {% if show_outcome_summary %}
-        <table class="mba-doc-table">
+        {% set current_recommendation = prefill.get('recommendation') %}
+        {% set recommendation_accept_as_stands = 'Accept as the research stands' %}
+        {% set recommendation_minor_revisions = 'Accept subject to minor revisions to the satisfaction of the Supervisor / Head of School' %}
+        {% set recommendation_major_revisions = 'Accept subject to major revisions to the satisfaction of the Supervisor / Head of School' %}
+        {% set recommendation_reexamination = 'Major revisions and re-examination by the same assessor' %}
+        {% set recommendation_rejection = 'Outright rejection' %}
+        {% set accept_as_stands_answer = prefill.get('recommendation_accept_as_stands') %}
+        {% set minor_revisions_answer = prefill.get('recommendation_minor_revisions') %}
+        {% set major_revisions_answer = prefill.get('recommendation_major_revisions') %}
+        {% set reexamination_answer = prefill.get('recommendation_reexamination') %}
+        {% set rejection_answer = prefill.get('recommendation_outright_rejection') %}
+        <input type="hidden" name="recommendation" value="{{ current_recommendation }}">
+        <table class="mba-doc-table assessor-doc-table">
           <colgroup>
-            <col style="width:8%;">
-            <col style="width:74%;">
-            <col style="width:18%;">
+            <col style="width:4.8%;">
+            <col style="width:82.5%;">
+            <col style="width:6.5%;">
+            <col style="width:6.2%;">
           </colgroup>
           <tr>
-            <th colspan="3">EXAMINER'S RECOMMENDATION(S)</th>
+            <th colspan="2">EXAMINER&rsquo;S RECOMMENDATION(S) &ndash; Please answer all questions by ticking the appropriate box:</th>
+            <th class="mba-doc-center">YES</th>
+            <th class="mba-doc-center">NO</th>
           </tr>
           <tr>
             <td class="mba-doc-center">1.</td>
-            <td>Kindly indicate below, your recommendation of this examination outcome</td>
-            <td class="mba-doc-center">Select</td>
+            <td colspan="3">Kindly indicate below, your recommendation of this examination outcome:</td>
           </tr>
-          {% for option in recommendation_options %}
           <tr>
             <td></td>
-            <td>{{ option }}</td>
-            <td class="mba-doc-center">
-              <input type="radio" name="recommendation" value="{{ option }}" required style="width:auto;margin:0;" {% if prefill.get('recommendation') == option %}checked{% endif %}>
+            <td>Do you recommend acceptance of the research as it stands?</td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_accept_as_stands" value="yes" required data-recommendation-value="{{ recommendation_accept_as_stands }}" {% if accept_as_stands_answer == 'yes' or current_recommendation == recommendation_accept_as_stands %}checked{% endif %}>
+            </td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_accept_as_stands" value="no" required data-recommendation-no="1" {% if accept_as_stands_answer == 'no' or (not accept_as_stands_answer and current_recommendation and current_recommendation != recommendation_accept_as_stands) %}checked{% endif %}>
             </td>
           </tr>
-          {% endfor %}
+          <tr>
+            <td></td>
+            <td colspan="3">Do you recommend acceptance of the research subject to:</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td rowspan="2" class="assessor-doc-dual-cell">
+              <div class="assessor-doc-dual-line">Minor Revisions to the satisfaction of the Supervisor/Head of School?</div>
+              <div class="assessor-doc-dual-line">Major Revisions to the satisfaction of the Supervisor/Head of School?</div>
+            </td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_minor_revisions" value="yes" required data-recommendation-value="{{ recommendation_minor_revisions }}" {% if minor_revisions_answer == 'yes' or current_recommendation == recommendation_minor_revisions %}checked{% endif %}>
+            </td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_minor_revisions" value="no" required data-recommendation-no="1" {% if minor_revisions_answer == 'no' or (not minor_revisions_answer and current_recommendation and current_recommendation != recommendation_minor_revisions) %}checked{% endif %}>
+            </td>
+          </tr>
+          <tr>
+            <td></td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_major_revisions" value="yes" required data-recommendation-value="{{ recommendation_major_revisions }}" {% if major_revisions_answer == 'yes' or current_recommendation == recommendation_major_revisions %}checked{% endif %}>
+            </td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_major_revisions" value="no" required data-recommendation-no="1" {% if major_revisions_answer == 'no' or (not major_revisions_answer and current_recommendation and current_recommendation != recommendation_major_revisions) %}checked{% endif %}>
+            </td>
+          </tr>
+          <tr>
+            <td></td>
+            <td>Do you recommend Major Revisions and Re-Examination &ndash; revised version to be re-examined by yourself.</td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_reexamination" value="yes" required data-recommendation-value="{{ recommendation_reexamination }}" {% if reexamination_answer == 'yes' or current_recommendation == recommendation_reexamination %}checked{% endif %}>
+            </td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_reexamination" value="no" required data-recommendation-no="1" {% if reexamination_answer == 'no' or (not reexamination_answer and current_recommendation and current_recommendation != recommendation_reexamination) %}checked{% endif %}>
+            </td>
+          </tr>
+          <tr>
+            <td></td>
+            <td>Do you recommend Outright Rejection?</td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_outright_rejection" value="yes" required data-recommendation-value="{{ recommendation_rejection }}" {% if rejection_answer == 'yes' or current_recommendation == recommendation_rejection %}checked{% endif %}>
+            </td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="recommendation_outright_rejection" value="no" required data-recommendation-no="1" {% if rejection_answer == 'no' or (not rejection_answer and current_recommendation and current_recommendation != recommendation_rejection) %}checked{% endif %}>
+            </td>
+          </tr>
           <tr>
             <td class="mba-doc-center">2.</td>
-            <td>Would you agree to your name being divulged to a successful candidate?</td>
-            <td class="mba-doc-center">
-              {% for option in yes_no_options %}
-                <label style="display:inline-flex;align-items:center;gap:4px;margin:0 6px;">
-                  <input type="radio" name="consent_name_disclosure" value="{{ option }}" required style="width:auto;margin:0;" {% if prefill.get('consent_name_disclosure') == option %}checked{% endif %}>
-                  <span>{{ option }}</span>
-                </label>
-              {% endfor %}
+            <td>The names of examiners are confidential, but successful candidates may be told the names of their examiners with their consent. Would you agree to your name being divulged in this case?</td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="consent_name_disclosure" value="Yes" required {% if prefill.get('consent_name_disclosure') == 'Yes' %}checked{% endif %}>
+            </td>
+            <td class="assessor-doc-mark-cell">
+              <input class="assessor-doc-mark" type="radio" name="consent_name_disclosure" value="No" required {% if prefill.get('consent_name_disclosure') == 'No' %}checked{% endif %}>
             </td>
           </tr>
         </table>
@@ -130,9 +198,17 @@
         {% endif %}
 
         {% if show_grading %}
-        <table class="mba-doc-table mba-doc-table--tight">
+        <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+          <colgroup>
+            <col style="width:9.1%;">
+            <col style="width:4.5%;">
+            <col style="width:86.4%;">
+          </colgroup>
           <tr>
             <th colspan="3">GRADING</th>
+          </tr>
+          <tr>
+            <td colspan="3">Marks should be awarded in terms of the scale below. Examiners are requested to indicate explicitly how the assessment falls into the category selected. In other words, defects and errors should be noted as such.</td>
           </tr>
           <tr>
             <td><strong>75+</strong></td>
@@ -161,9 +237,13 @@
           </tr>
         </table>
 
-        <table class="mba-doc-table mba-doc-table--tight">
+        <table class="mba-doc-table mba-doc-table--tight assessor-doc-table assessor-doc-final-mark">
+          <colgroup>
+            <col style="width:37.8%;">
+            <col style="width:62.2%;">
+          </colgroup>
           <tr>
-            <td class="mba-doc-label" style="width:24%;">FINAL MARK</td>
+            <td class="mba-doc-label">FINAL MARK</td>
             <td><input class="mba-doc-input" name="grade" type="number" min="0" max="100" step="1" value="{{ prefill.get('grade','') }}" required></td>
           </tr>
         </table>
@@ -180,14 +260,14 @@
           <p class="mba-doc-paragraph">Please provide a detailed report which gives attention to the issues outlined below and any other points you would like to highlight:</p>
           <ul class="mba-doc-bullets">
             <li>Is the research topic appropriate?</li>
-            <li>Does it address a management, business, organisational, societal, relevant, and/or professional area?</li>
+            <li>Does it address a management, business, organizational, societal, relevant, and/or professional area?</li>
             <li>Is the scope of research sufficiently deep and broad?</li>
-            <li>Are the statements of research problem, objective, research questions, propositions, or hypotheses clear and unambiguous?</li>
-            <li>Does the report indicate awareness of, familiarity with, and capability to integrate the appropriate literature into informing and directing the research?</li>
-            <li>Is there evidence of familiarity with appropriate elements of research methodology and correct application?</li>
-            <li>Has the appropriate quantitative and/or qualitative analysis been used objectively?</li>
-            <li>What is the quality and validity of the discussion and interpretation of the research results?</li>
-            <li>Does the overall structure of the report conform to the format of a master's research report?</li>
+            <li>Are the statements of research problem/ objective/ research questions/ propositions/ hypotheses clear and unambiguous? Where used, are propositions or hypotheses well-constructed and based on clear definitions of concepts and measurable variables used in the testing?</li>
+            <li>Does the report indicate awareness of familiarity with and capability to integrate the appropriate literature into informing and directing the research?</li>
+            <li>Is there evidence of familiarity with appropriate elements of research methodology and correct application? In other words, is the research methodology acceptable in terms of design, sampling, and construction of instruments (e.g. questionnaires)? Is there evidence of rigor in design in terms of validity and reliability?</li>
+            <li>Has the appropriate quantitative (statistical or mathematical) and/or qualitative analysis been used? Is the analysis of results objective?</li>
+            <li>What is the quality and validity of the discussion/interpretation of the research results? Is the interpretation rigorous?</li>
+            <li>Does the overall structure of the report conform to the format of masters research report? If not, is the structure appropriate to the research?</li>
             <li>Is the document appropriately referenced?</li>
             <li>Does the literary style conform to correct English usage and academic writing?</li>
           </ul>
@@ -195,16 +275,30 @@
         {% endif %}
 
         {% if show_written_assessment %}
-        <div>
-          <div class="mba-doc-label" style="margin-bottom:6px;">{{ "Assessor's Narrative Report" if doc_variant == 'assessor_narrative' else "Examiner's Detailed Report" }}</div>
-          <textarea class="mba-doc-textarea" name="written_assessment" rows="16" required>{{ prefill.get('written_assessment','') }}</textarea>
-        </div>
+        <table class="mba-doc-table assessor-doc-table">
+          <tr>
+            <th>{{ "Assessor's Narrative Report" if doc_variant == 'assessor_narrative' else "EXAMINER&rsquo;S DETAILED REPORT: (You are welcome to write a report in this box or provide a separate document with your detailed report)"|safe }}</th>
+          </tr>
+          <tr>
+            <td>
+              <textarea class="mba-doc-textarea" name="written_assessment" rows="16">{{ prefill.get('written_assessment','') }}</textarea>
+              {% if doc_variant != 'assessor_narrative' %}
+                <section class="assessor-doc-upload-row mba-print-hide">
+                  <label class="assessor-doc-upload-label">
+                    <span>Separate detailed report (optional)</span>
+                    <input type="file" name="detailed_report_file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                  </label>
+                  {% if detailed_report_doc %}
+                    <p class="assessor-doc-upload-existing">
+                      <strong>Attached:</strong> {{ detailed_report_doc.original_name }}
+                    </p>
+                  {% endif %}
+                </section>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
         {% endif %}
-
-        <label class="mba-doc-checkline">
-          <span>I confirm that this assessment represents my independent and impartial evaluation of the submitted capstone research report, and that I have no undisclosed conflict of interest. <span style="color:red;">*</span></span>
-          <input class="mba-doc-checkbox" type="checkbox" name="declaration" value="1" required {% if prefill.get('declaration') %}checked{% endif %}>
-        </label>
 
         <div class="mba-doc-actions">
           <button class="primary-button" type="submit">Submit Results</button>
@@ -215,4 +309,43 @@
   </section>
 </div>
 <!-- MBA_FORM_END -->
+<script>
+  (function () {
+    const form = document.querySelector('[data-assessor-report-form]');
+    if (!form) return;
+
+    const recommendationField = form.querySelector('input[name="recommendation"]');
+    const yesInputs = Array.from(form.querySelectorAll('input[data-recommendation-value]'));
+    const noInputs = Array.from(form.querySelectorAll('input[data-recommendation-no]'));
+
+    function noInputFor(fieldName) {
+      return noInputs.find((input) => input.name === fieldName);
+    }
+
+    function syncRecommendationFromCheckedYes() {
+      const selected = yesInputs.find((input) => input.checked);
+      recommendationField.value = selected ? selected.dataset.recommendationValue : '';
+    }
+
+    form.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!target || !target.classList || !target.classList.contains('assessor-doc-mark')) return;
+
+      if (target.dataset.recommendationValue && target.checked) {
+        yesInputs.forEach((input) => {
+          if (input !== target) {
+            const noInput = noInputFor(input.name);
+            if (noInput) noInput.checked = true;
+          }
+        });
+        recommendationField.value = target.dataset.recommendationValue;
+        return;
+      }
+
+      if (target.dataset.recommendationNo && target.checked) {
+        syncRecommendationFromCheckedYes();
+      }
+    });
+  })();
+</script>
 {% endblock %}
