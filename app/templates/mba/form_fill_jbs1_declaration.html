@@ -5,12 +5,27 @@
 {% block page_subheading %}{{ project.project_title }}{% endblock %}
 
 {% block body %}
+{% set student_fill_mode = student_fill_mode|default(false) %}
+{% set supervisor_signature_mode = supervisor_signature_mode|default(false) %}
+{% set admin_signature_mode = admin_signature_mode|default(false) %}
+{% set student_editable = student_fill_mode and not supervisor_signature_mode and not admin_signature_mode %}
+{% set supervisor_editable = supervisor_signature_mode %}
+{% set admin_editable = admin_signature_mode %}
+{% set view_only_mode = not student_fill_mode and not supervisor_signature_mode and not admin_signature_mode %}
 {% set current_work_type = prefill.get('work_type', 'capstone consultancy project') or 'capstone consultancy project' %}
+{% macro signature_field(name, value, editable=false, required=false) -%}
+  <div class="mba-doc-signature-field">
+    {% if prefill.get(name ~ '_image') %}
+      <img class="mba-doc-signature-image" src="{{ prefill.get(name ~ '_image') }}" alt="Saved signature">
+    {% endif %}
+    <input class="mba-doc-input" name="{{ name }}" value="{{ value or '' }}" {% if not editable %}readonly{% endif %} {% if required %}required{% endif %}>
+  </div>
+{%- endmacro %}
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel jbs-template-panel">
     <div class="mba-doc-paper mba-doc-paper--jbs-declaration jbs-template-doc">
-      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs1_declaration') }}" method="post" class="mba-doc-form jbs-template-form">
+      <form action="{% if supervisor_signature_mode %}{{ url_for('mba.supervisor_sign_jbs1_declaration', project_id=project.id) }}{% elif admin_signature_mode %}{{ url_for('mba.admin_sign_jbs1_declaration', project_id=project.id) }}{% else %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs1_declaration') }}{% endif %}" method="post" class="mba-doc-form jbs-template-form">
         <table class="mba-doc-table jbs-template-table jbs-template-header-table">
           <colgroup>
             <col style="width:18%;">
@@ -41,31 +56,31 @@
           </tr>
           <tr>
             <td class="jbs-template-label">Surname</td>
-            <td><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname','') }}" required></td>
+            <td><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
             <td class="jbs-template-label">Title</td>
-            <td><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title','') }}" required></td>
+            <td><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Initials</td>
-            <td><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials','') }}" required></td>
+            <td><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
             <td class="jbs-template-label">ID number</td>
-            <td><input class="mba-doc-input" name="student_id_number" value="{{ prefill.get('student_id_number','') }}" required></td>
+            <td><input class="mba-doc-input" name="student_id_number" value="{{ prefill.get('student_id_number','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Student number</td>
-            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" required></td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
             <td class="jbs-template-label">Ethical Clearance number</td>
-            <td><input class="mba-doc-input" name="ethical_clearance_number" value="{{ prefill.get('ethical_clearance_number','') }}"></td>
+            <td><input class="mba-doc-input" name="ethical_clearance_number" value="{{ prefill.get('ethical_clearance_number','') }}" {% if not student_editable %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Qualification (e.g. MBA)</td>
-            <td colspan="3"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification','') }}" required></td>
+            <td colspan="3"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Email Address</td>
-            <td><input class="mba-doc-input" name="email" type="email" value="{{ prefill.get('email','') }}" required></td>
+            <td><input class="mba-doc-input" name="email" type="email" value="{{ prefill.get('email','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
             <td class="jbs-template-label">Cell number</td>
-            <td><input class="mba-doc-input" name="contact" value="{{ prefill.get('contact','') }}" required></td>
+            <td><input class="mba-doc-input" name="contact" value="{{ prefill.get('contact','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
           </tr>
         </table>
 
@@ -106,15 +121,10 @@
           <tr>
             <td class="jbs-template-label">Signature of Student</td>
             <td>
-              <div class="mba-doc-signature-field">
-                {% if prefill.get('signature_name_image') %}
-                  <img class="mba-doc-signature-image" src="{{ prefill.get('signature_name_image') }}" alt="Saved signature">
-                {% endif %}
-                <input class="mba-doc-input" name="signature_name" value="{{ prefill.get('signature_name','') }}" required>
-              </div>
+              {{ signature_field('signature_name', prefill.get('signature_name',''), student_editable, student_editable) }}
             </td>
             <td class="jbs-template-label">Date</td>
-            <td><input class="mba-doc-input" name="signature_date" type="date" value="{{ prefill.get('signature_date','') }}" required></td>
+            <td><input class="mba-doc-input" name="signature_date" type="date" value="{{ prefill.get('signature_date','') }}" {% if not student_editable %}readonly{% endif %} {% if student_editable %}required{% endif %}></td>
           </tr>
         </table>
 
@@ -132,15 +142,15 @@
           </colgroup>
           <tr>
             <td class="jbs-template-label">Signature of Supervisor</td>
-            <td><input class="mba-doc-input" name="supervisor_signature" value="{{ prefill.get('supervisor_signature','') }}"></td>
+            <td>{{ signature_field('supervisor_signature', prefill.get('supervisor_signature',''), supervisor_editable, supervisor_editable) }}</td>
             <td class="jbs-template-label">Date</td>
-            <td><input class="mba-doc-input" name="supervisor_signature_date" type="date" value="{{ prefill.get('supervisor_signature_date','') }}"></td>
+            <td><input class="mba-doc-input" name="supervisor_signature_date" type="date" value="{{ prefill.get('supervisor_signature_date','') }}" {% if not supervisor_editable %}readonly{% endif %} {% if supervisor_editable %}required{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Signature of Co-Supervisor</td>
-            <td><input class="mba-doc-input" name="co_supervisor_signature" value="{{ prefill.get('co_supervisor_signature','') }}"></td>
+            <td>{{ signature_field('co_supervisor_signature', prefill.get('co_supervisor_signature',''), false, false) }}</td>
             <td class="jbs-template-label">Date</td>
-            <td><input class="mba-doc-input" name="co_supervisor_signature_date" type="date" value="{{ prefill.get('co_supervisor_signature_date','') }}"></td>
+            <td><input class="mba-doc-input" name="co_supervisor_signature_date" type="date" value="{{ prefill.get('co_supervisor_signature_date','') }}" readonly></td>
           </tr>
         </table>
 
@@ -148,23 +158,23 @@
         <table class="mba-doc-table jbs-template-table jbs1-office-table">
           <tr>
             <td class="jbs-template-label">Registration</td>
-            <td><input class="mba-doc-input" name="office_registration" value="{{ prefill.get('office_registration','') }}"></td>
+            <td><input class="mba-doc-input" name="office_registration" value="{{ prefill.get('office_registration','') }}" {% if not admin_editable %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Approved title</td>
-            <td><input class="mba-doc-input" name="office_approved_title" value="{{ prefill.get('office_approved_title','') }}"></td>
+            <td><input class="mba-doc-input" name="office_approved_title" value="{{ prefill.get('office_approved_title','') }}" {% if not admin_editable %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Affidavit</td>
-            <td><input class="mba-doc-input" name="office_affidavit" value="{{ prefill.get('office_affidavit','') }}"></td>
+            <td><input class="mba-doc-input" name="office_affidavit" value="{{ prefill.get('office_affidavit','') }}" {% if not admin_editable %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Language Edited</td>
-            <td><input class="mba-doc-input" name="office_language_edited" value="{{ prefill.get('office_language_edited','') }}"></td>
+            <td><input class="mba-doc-input" name="office_language_edited" value="{{ prefill.get('office_language_edited','') }}" {% if not admin_editable %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="jbs-template-label">Turnitin report</td>
-            <td><input class="mba-doc-input" name="office_turnitin_report" value="{{ prefill.get('office_turnitin_report','') }}"></td>
+            <td><input class="mba-doc-input" name="office_turnitin_report" value="{{ prefill.get('office_turnitin_report','') }}" {% if not admin_editable %}readonly{% endif %}></td>
           </tr>
         </table>
 
@@ -177,9 +187,9 @@
           </colgroup>
           <tr>
             <td class="jbs-template-label">Program Manager</td>
-            <td><input class="mba-doc-input" name="office_program_manager" value="{{ prefill.get('office_program_manager','') }}"></td>
+            <td>{{ signature_field('office_program_manager', prefill.get('office_program_manager',''), admin_editable, admin_editable) }}</td>
             <td class="jbs-template-label">Date</td>
-            <td><input class="mba-doc-input" name="office_program_manager_date" type="date" value="{{ prefill.get('office_program_manager_date','') }}"></td>
+            <td><input class="mba-doc-input" name="office_program_manager_date" type="date" value="{{ prefill.get('office_program_manager_date','') }}" {% if not admin_editable %}readonly{% endif %} {% if admin_editable %}required{% endif %}></td>
           </tr>
         </table>
 
@@ -187,8 +197,17 @@
         <input type="hidden" name="work_type" value="{{ current_work_type }}">
 
         <div class="mba-doc-actions jbs-template-submit-controls">
-          <button class="primary-button" type="submit">Submit JBS 1 Declaration</button>
-          <a href="{{ url_for('mba.student_dashboard') }}" class="secondary-button">Cancel</a>
+          {% if supervisor_signature_mode %}
+            <button class="primary-button" type="submit">Sign JBS 1 Declaration</button>
+            <a href="{{ url_for('mba.scholar_dashboard') }}" class="secondary-button">Cancel</a>
+          {% elif admin_signature_mode %}
+            <button class="primary-button" type="submit">Sign as Program Manager</button>
+            <a href="{{ url_for('mba.admin_dashboard', panel='projects') }}" class="secondary-button">Cancel</a>
+          {% elif view_only_mode %}
+          {% else %}
+            <button class="primary-button" type="submit">Submit JBS 1 for Supervisor Review</button>
+            <a href="{{ url_for('mba.student_dashboard') }}" class="secondary-button">Cancel</a>
+          {% endif %}
         </div>
       </form>
     </div>

@@ -9,6 +9,7 @@ from .entities import (
     EthicsSubmissionFile,
     EthicsUser,
     MbaDiscipline,
+    MbaDocumentTemplate,
     MbaBookingDay,
     MbaBookingPanel,
     MbaBookingSettings,
@@ -24,6 +25,7 @@ from .entities import (
     MbaScholarProfile,
     MbaStudentProfile,
     MbaUser,
+    MbaUserSignature,
     UserAuthMixin,
 )
 from .enums import (
@@ -50,6 +52,7 @@ __all__ = [
     "EthicsSubmissionFile",
     "EthicsUser",
     "MbaDiscipline",
+    "MbaDocumentTemplate",
     "MbaBookingDay",
     "MbaBookingPanel",
     "MbaBookingSettings",
@@ -67,6 +70,7 @@ __all__ = [
     "MbaScholarRole",
     "MbaStudentProfile",
     "MbaUser",
+    "MbaUserSignature",
     "ProjectStatus",
     "UJ_STUDENT_EMAIL_RE",
     "UserAuthMixin",

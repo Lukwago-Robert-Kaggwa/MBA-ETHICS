@@ -3,9 +3,17 @@
 {% set jbs5_supervisor_signed = jbs5_form and jbs5_form.supervisor_signed %}
 {% set supervisor_docs = project.documents | selectattr('doc_type', 'equalto', 'supervisor_agreement') | list %}
 {% set student_supervisor_docs = supervisor_docs | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
+{% set jbs10_form = project.forms | selectattr('form_type', 'equalto', 'jbs10') | list | first %}
+{% set jbs10_signed_by_supervisor = jbs10_supervisor_signed(project) if jbs10_supervisor_signed is defined else (jbs10_form and jbs10_form.supervisor_signed) %}
+{% set jbs10_return_pending = jbs10_supervisor_return_pending(project) if jbs10_supervisor_return_pending is defined else false %}
 {% set jbs10_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs10') | list %}
+{% set intent_form = project.forms | selectattr('form_type', 'equalto', 'intent_to_submit') | list | first %}
 {% set intent_docs = project.documents | selectattr('doc_type', 'equalto', 'intent_to_submit') | list %}
+{% set intent_signed_by_supervisor = intent_to_submit_supervisor_signed(project) if intent_to_submit_supervisor_signed is defined else (intent_form and intent_form.supervisor_signed) %}
+{% set jbs1_form = project.forms | selectattr('form_type', 'equalto', 'jbs1_declaration') | list | first %}
 {% set jbs1_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
+{% set jbs1_supervisor_signed_value = jbs1_supervisor_signed(project) if jbs1_supervisor_signed is defined else (jbs1_form and jbs1_form.supervisor_signed) %}
+{% set jbs1_program_manager_signed_value = jbs1_program_manager_signed(project) if jbs1_program_manager_signed is defined else (jbs1_form and jbs1_form.payload and jbs1_form.payload.get('office_program_manager') and jbs1_form.payload.get('office_program_manager_date')) %}
 {% set plagiarism_docs = project.documents | selectattr('doc_type', 'equalto', 'plagiarism_declaration') | list %}
 {% set affidavit_form = project.forms | selectattr('form_type', 'equalto', 'affidavit') | list | first %}
 {% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit_stamped') | list %}
@@ -15,7 +23,7 @@
 {% set ethics_certificate_docs = project.documents | selectattr('doc_type', 'equalto', 'ethics_certificate') | list %}
 {% set ethics_exemption_docs = project.documents | selectattr('doc_type', 'equalto', 'ethics_exemption_form') | list %}
 {% set jbs5_hdc_approved = project.jbs5_hdc_approved_at %}
-{% set support_forms_complete = jbs1_docs and plagiarism_docs and affidavit_docs %}
+{% set support_forms_complete = jbs1_program_manager_signed_value and plagiarism_docs and affidavit_docs %}
 {% set student_support_docs_complete = global_document_docs and combined_turnitin_ai_report_docs %}
 {% set admin_capstone_upload_complete = dissertation_docs %}
 {% set assigned_assessor_count = (1 if project.assessor_1_id else 0) + (1 if project.assessor_2_id else 0) %}
@@ -72,7 +80,7 @@
       {% elif not project.supervisor_accepted_at %}
         Wait for a supervisor to accept the invitation.
       {% elif not student_supervisor_docs %}
-        Upload the signed supervisor agreement form.
+        Complete the Supervisor Agreement form.
       {% elif not jbs5_supervisor_signed %}
         Wait for your supervisor to complete title review and sign JBS5.
       {% elif not (ethics_certificate_docs or ethics_exemption_docs) %}
@@ -80,12 +88,22 @@
       {% elif not jbs5_hdc_approved %}
         Wait for HDC to approve JBS5 before JBS10 and Intent to Submit are released.
       {% elif not jbs10_docs %}
-        Upload the completed JBS10 form.
+        Complete JBS10 and submit it for supervisor review.
+      {% elif jbs10_return_pending %}
+        Your supervisor returned JBS10 for amendment. Edit and resubmit the form.
+      {% elif not jbs10_signed_by_supervisor %}
+        Wait for your supervisor to review and sign JBS10.
       {% elif not intent_docs %}
-        Upload the Intent to Submit form.
+        Complete the Intent to Submit form.
+      {% elif not intent_signed_by_supervisor %}
+        Wait for your supervisor to sign Intent to Submit.
       {% elif not support_forms_complete %}
         {% if not jbs1_docs %}
           Complete the JBS 1 Declaration.
+        {% elif not jbs1_supervisor_signed_value %}
+          Wait for your supervisor to sign the JBS 1 Declaration.
+        {% elif not jbs1_program_manager_signed_value %}
+          Wait for MBA Admin to sign the JBS 1 Declaration as Program Manager.
         {% elif not plagiarism_docs %}
           Complete the Combined Plagiarism, Turnitin and AI Declaration.
         {% elif not affidavit_docs %}

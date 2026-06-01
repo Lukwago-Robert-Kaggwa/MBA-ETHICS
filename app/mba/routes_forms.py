@@ -14,6 +14,7 @@ from datetime import datetime
 
 from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import or_
 
 from ..extensions import db
 from ..mail import send_bulk_emails
@@ -24,6 +25,7 @@ from ..models import (
     MbaProjectDocument,
     MbaRole,
     MbaScholarProfile,
+    MbaStudentProfile,
     ProjectStatus,
 )
 from .grading import project_grade_summary
@@ -42,7 +44,8 @@ from .route_support import (
     ADDITIONAL_ASSESSOR_SLOT,
     PRIMARY_ASSESSOR_SLOTS,
     additional_external_examiner_nomination_doc_type,
-    additional_external_examiner_nomination_ready,
+    additional_external_examiner_nomination_can_generate,
+    additional_external_examiner_nomination_supervisor_signed,
     append_comment,
     apply_assessor_suggestions_if_ready,
     apply_saved_signature_snapshot,
@@ -70,14 +73,20 @@ from .route_support import (
     corrections_requested_email_messages,
     all_assessment_results_received,
     document_label,
+    encrypt_sensitive_document_bytes,
+    encrypt_sensitive_payload_fields,
     external_examiner_nomination_doc_type,
-    external_examiner_nomination_supervisor_signed,
     format_project_title,
     generate_form_submission_download_bytes,
     hdc_can_access_document,
     hdc_assessor_nomination_admin_email_messages,
     hdc_assessor_nomination_decision_summary,
     hdc_results_admin_email_messages,
+    intent_to_submit_supervisor_signed,
+    jbs1_program_manager_signed,
+    jbs1_supervisor_signed,
+    jbs10_supervisor_return_pending,
+    jbs10_supervisor_signed,
     mba_bp,
     mba_admin_notification_emails,
     project_supervisor_notification_emails,
@@ -93,11 +102,17 @@ from .route_support import (
     reset_jbs5_review_state,
     role_landing_url,
     set_assessor_hdc_decision,
+    sign_intent_to_submit_as_supervisor,
+    sign_jbs1_declaration_as_program_manager,
+    sign_jbs1_declaration_as_supervisor,
     sign_student_jbs5_as_supervisor,
+    sign_student_jbs10_as_supervisor,
     sync_hdc_assessor_nomination_status,
+    user_signature_printed_name,
     supervisor_approved_corrections,
     submit_project_to_admin_from_jbs5,
     supervisor_can_manage_corrections,
+    strip_sensitive_payload_fields,
     uploaded_doc_for,
     activate_project_corrections,
     activate_additional_assessment,
@@ -137,6 +152,12 @@ HDC_SIGNATURE_FIELDS_BY_FORM = {
         ("jbs_hdc_signature", "JBS HDC signature"),
         ("jbs_hdc_signature_date", "JBS HDC signature date"),
     ),
+    "intent_to_submit": (
+        ("hod_signature", "Head of Department signature"),
+        ("hod_signature_date", "Head of Department signature date"),
+        ("director_signature", "Director of School signature"),
+        ("director_signature_date", "Director of School signature date"),
+    ),
     external_examiner_nomination_doc_type(): (
         ("hod_signature_name", "Head of Department signature"),
         ("hod_signature_date", "Head of Department signature date"),
@@ -169,6 +190,198 @@ ASSESSMENT_SUMMARY_SIGNATURE_FIELDS = (
     "executive_dean_signature_name",
     "executive_dean_signature_date",
 )
+
+STUDENT_REUSABLE_FORM_FIELDS = (
+    "student_id_number",
+    "student_postal_code",
+    "postal_code",
+    "signing_location",
+    "student_signing_location",
+    "student_address",
+)
+
+SCHOLAR_REUSABLE_FORM_FIELDS = (
+    "staff_number",
+    "supervisor_staff_number",
+    "employee_number",
+    "new_employee",
+    "employed_at_uj",
+    "uj_department_division",
+    "identity_passport_number",
+    "date_of_birth",
+    "work_visa_number",
+    "gender",
+    "marital_status",
+    "sa_citizen",
+    "nationality",
+    "employed_outside_uj",
+    "home_language",
+    "care_of_intermediary",
+    "home_address",
+    "postal_address",
+    "home_postal_code",
+    "postal_code",
+    "home_tel",
+    "work_tel",
+    "disability_status",
+    "disability_nature",
+    "race",
+    "assessor_department",
+    "assessor_position",
+    "assessor_affiliation",
+    "assessor_address",
+    "qualification_institution",
+    "qualification_awarded_date",
+    "qualification_status",
+    "employment_group",
+    "appointment_category",
+    "temporary_employment_reason",
+    "appointment_reason_other",
+    "rate_per_month",
+    "rate_per_hour",
+    "other_rate_basis",
+    "full_cost_centre_string",
+    "permanent_post_number",
+    "appointed_against_permanent_position",
+    "position_number",
+    "total_budget_for_appointment",
+    "conflict_of_interest_details",
+    "faculty_division",
+    "department_unit_centre",
+    "requestor_extension",
+    "requestor_email",
+    "claim_unit_basis",
+    "claim_rate",
+    "claim_currency",
+    "claim_cost_centre_number",
+    "supervisor_signing_location",
+    "co_supervisor_signing_location",
+)
+
+SENSITIVE_PROFILE_DEFAULT_FIELDS = {
+    "income_tax_number",
+    "bank_changed",
+    "bank_account_holder",
+    "bank_name",
+    "bank_branch_name",
+    "bank_branch_code",
+    "bank_account_number",
+    "bank_account_type",
+    "bank_account_ownership",
+}
+
+PROFILE_DEFAULT_PLACEHOLDERS = {
+    "new_employee": "Yes",
+    "employed_at_uj": "No",
+    "sa_citizen": "Yes",
+    "employed_outside_uj": "No",
+    "care_of_intermediary": "None",
+    "disability_status": "No",
+    "employment_group": "Academic",
+    "temporary_employment_reason": "Services will not exceed 3 months",
+    "rate_per_month": "N/A",
+    "rate_per_hour": "1341.35",
+    "total_units": "1.53",
+    "actual_hours": "10",
+    "full_cost_centre_string": "05 05 046904 20 31330",
+    "permanent_post_number": "N/A",
+    "appointed_against_permanent_position": "No",
+    "total_budget_for_appointment": "2062.28",
+    "conflict_of_interest_details": "None",
+    "faculty_division": "Johannesburg Business School",
+    "department_unit_centre": "Johannesburg Business School",
+    "requestor_email": "vukonac@uj.ac.za",
+    "claim_unit_basis": "Per Hour",
+    "claim_rate": "1341.35",
+    "claim_currency": "ZAR",
+    "claim_cost_centre_number": "05 05 046904 20 31330",
+}
+
+
+def _has_profile_value(value):
+    return value is not None and str(value).strip() != ""
+
+
+def _profile_defaults(profile):
+    defaults = getattr(profile, "form_defaults", None)
+    if not isinstance(defaults, dict):
+        return {}
+    return {
+        key: value
+        for key, value in defaults.items()
+        if key not in SENSITIVE_PROFILE_DEFAULT_FIELDS
+    }
+
+
+def _apply_payload_values(prefill, payload, fields, *, overwrite=False, overwrite_placeholders=False):
+    if not isinstance(prefill, dict) or not isinstance(payload, dict):
+        return prefill
+    for field in fields:
+        value = payload.get(field)
+        if not _has_profile_value(value):
+            continue
+        current = prefill.get(field)
+        current_is_placeholder = (
+            overwrite_placeholders
+            and field in PROFILE_DEFAULT_PLACEHOLDERS
+            and str(current or "").strip() == PROFILE_DEFAULT_PLACEHOLDERS[field]
+        )
+        if overwrite or not _has_profile_value(current) or current_is_placeholder:
+            prefill[field] = value
+    return prefill
+
+
+def _update_profile_defaults(profile, payload, fields):
+    if not profile or not isinstance(payload, dict):
+        return profile
+    defaults = _profile_defaults(profile)
+    changed = False
+    for field in fields:
+        value = payload.get(field)
+        if _has_profile_value(value):
+            defaults[field] = str(value).strip()
+            changed = True
+    if changed:
+        profile.form_defaults = defaults
+    return profile
+
+
+def _latest_student_payload(form_types):
+    if not getattr(current_user, "id", None):
+        return {}
+    form = (
+        MbaForm.query.join(MbaProject, MbaForm.project_id == MbaProject.id)
+        .filter(MbaProject.student_id == current_user.id, MbaForm.form_type.in_(tuple(form_types)))
+        .order_by(MbaForm.submitted_at.desc(), MbaForm.created_at.desc())
+        .first()
+    )
+    return dict(form.payload or {}) if form and isinstance(form.payload, dict) else {}
+
+
+def _latest_scholar_payload(*, prefixes=(), form_types=()):
+    if not getattr(current_user, "id", None):
+        return {}
+    filters = []
+    if form_types:
+        filters.append(MbaForm.form_type.in_(tuple(form_types)))
+    for prefix in prefixes:
+        filters.append(MbaForm.form_type.like(f"{prefix}%"))
+    if not filters:
+        return {}
+    query = MbaForm.query.filter(or_(*filters)).order_by(MbaForm.submitted_at.desc(), MbaForm.created_at.desc()).limit(100)
+    for form in query:
+        payload = form.payload if isinstance(form.payload, dict) else {}
+        if str(payload.get("_submitted_by") or "") == str(current_user.id):
+            return dict(payload)
+        signature_user_id = (
+            payload.get("supervisor_signature_image_user_id")
+            or payload.get("supervisor_signature_name_image_user_id")
+            or payload.get("employee_signature_name_image_user_id")
+            or payload.get("claim_signature_name_image_user_id")
+        )
+        if str(signature_user_id or "") == str(current_user.id):
+            return dict(payload)
+    return {}
 
 ASSESSMENT_SUMMARY_RESULT_INPUT_FIELDS = tuple(
     field
@@ -237,6 +450,32 @@ def _assessment_grade_summary(project):
     return project_grade_summary(project.id, forms_by_project)
 
 
+def _clear_nomination_approval_state(payload):
+    for field in (
+        "supervisor_signature_name",
+        "supervisor_signature_date",
+        "hod_signature_name",
+        "hod_signature_date",
+        "executive_dean_signature_name",
+        "executive_dean_signature_date",
+        "nomination_forwarded_to_supervisor_at",
+        "nomination_forwarded_to_supervisor_by",
+        "assessor_hr_documents_sent_at",
+        "assessor_hr_documents_sent_to",
+        "assessor_hr_documents_sent_by",
+        "assessor_hr_documents_sent_count",
+    ):
+        payload.pop(field, None)
+    clear_signature_snapshots(
+        payload,
+        (
+            "supervisor_signature_name",
+            "hod_signature_name",
+            "executive_dean_signature_name",
+        ),
+    )
+
+
 def _validate_hdc_results_approval_ready(project):
     if not all_assessment_results_received(project):
         raise ValueError("Assessment results are not ready for HDC approval.")
@@ -262,6 +501,8 @@ def _record_hdc_results_decision(project, decision_action, comment):
         project.results_hdc_approved_classification = grade_summary.get("classification") or None
         message = "Assessment results signed and approved by HDC."
     elif decision_action == "decline_results":
+        if not comment:
+            raise ValueError("Add HDC feedback before declining the assessment results.")
         project.project_status = ProjectStatus.RESULTS_DECLINED.value
         project.results_hdc_decision = "declined"
         project.results_hdc_approved_mark = None
@@ -326,15 +567,12 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
     """
     mba_form = _save_form_payload(project, form_type, payload)
 
-    # Write the generated document to disk.
+    # Generated documents are stored in the database. stored_name remains as a stable legacy filename.
     project_dir = os.path.join(_uploads_dir(), str(project.id))
-    os.makedirs(project_dir, exist_ok=True)
     file_bytes, file_extension, mime_type = generate_form_submission_download_bytes(project, form_type, payload)
+    stored_file_bytes = encrypt_sensitive_document_bytes(doc_type, file_bytes)
     original_name = f"{doc_type}_form.{file_extension}"
     unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.{file_extension}"
-    dest_path = os.path.join(project_dir, unique_name)
-    with open(dest_path, "wb") as fh:
-        fh.write(file_bytes)
 
     document_uploaded_by_id = uploaded_by_id or current_user.id
     # Upsert MbaProjectDocument
@@ -348,7 +586,7 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
                 pass
         existing_doc.original_name = original_name
         existing_doc.stored_name = unique_name
-        existing_doc.file_data = file_bytes
+        existing_doc.file_data = stored_file_bytes
         existing_doc.mime_type = mime_type
         existing_doc.file_size = len(file_bytes)
         existing_doc.uploaded_by_id = document_uploaded_by_id
@@ -359,7 +597,7 @@ def _save_form_as_document(project, doc_type, form_type, payload, uploaded_by_id
             doc_type=doc_type,
             original_name=original_name,
             stored_name=unique_name,
-            file_data=file_bytes,
+            file_data=stored_file_bytes,
             mime_type=mime_type,
             file_size=len(file_bytes),
             uploaded_by_id=document_uploaded_by_id,
@@ -453,14 +691,7 @@ def refresh_external_examiner_nomination_if_ready(project):
     )
     payload = build_external_examiner_nomination_payload(project, existing_payload)
     if assessor_lineup_changed:
-        for field in (
-            "supervisor_signature_name",
-            "supervisor_signature_date",
-            "nomination_forwarded_to_supervisor_at",
-            "nomination_forwarded_to_supervisor_by",
-        ):
-            payload.pop(field, None)
-        clear_signature_snapshots(payload, ("supervisor_signature_name",))
+        _clear_nomination_approval_state(payload)
         if existing_form:
             existing_form.supervisor_signed = False
 
@@ -477,7 +708,7 @@ def refresh_external_examiner_nomination_if_ready(project):
 
 
 def refresh_additional_external_examiner_nomination_if_ready(project):
-    if not project or not additional_external_examiner_nomination_ready(project):
+    if not project or not additional_external_examiner_nomination_can_generate(project):
         return None
 
     form_type = additional_external_examiner_nomination_doc_type()
@@ -490,14 +721,7 @@ def refresh_additional_external_examiner_nomination_if_ready(project):
     )
     payload = build_additional_external_examiner_nomination_payload(project, existing_payload)
     if assessor_changed:
-        for field in (
-            "supervisor_signature_name",
-            "supervisor_signature_date",
-            "nomination_forwarded_to_supervisor_at",
-            "nomination_forwarded_to_supervisor_by",
-        ):
-            payload.pop(field, None)
-        clear_signature_snapshots(payload, ("supervisor_signature_name",))
+        _clear_nomination_approval_state(payload)
         if existing_form:
             existing_form.supervisor_signed = False
 
@@ -506,7 +730,7 @@ def refresh_additional_external_examiner_nomination_if_ready(project):
         form_type,
         form_type,
         payload,
-        uploaded_by_id=getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None) or current_user.id,
+        uploaded_by_id=current_user.id,
     )
     if existing_form and not assessor_changed and existing_form.supervisor_signed:
         nomination_form.supervisor_signed = True
@@ -587,13 +811,119 @@ def _corrections_response_missing_rows(payload):
     return missing
 
 
-def _send_email_safely(recipient, subject, body):
+def _send_email_safely(recipient, subject, body, cc=None):
     from ..mail import send_email
 
     try:
-        send_email(recipient, subject, body)
+        send_email(recipient, subject, body, cc=cc)
     except Exception:
         pass
+
+
+def _project_workflow_cc(project):
+    recipients = []
+    recipients.extend(mba_admin_notification_emails())
+    recipients.extend(project_supervisor_notification_emails(project))
+    student_email = project.student.email if project.student and project.student.email else ""
+    unique = []
+    seen = {student_email.lower()} if student_email else set()
+    for email in recipients:
+        normalized = str(email or "").strip()
+        lowered = normalized.lower()
+        if normalized and lowered not in seen:
+            unique.append(normalized)
+            seen.add(lowered)
+    return unique
+
+
+def _send_student_release_email(project, *, release_key, subject, body):
+    if not project.student or not project.student.email:
+        return None
+    marker = f"System: student release notice sent - {release_key}"
+    if marker in (project.comments or ""):
+        return None
+    email_result = send_bulk_emails(
+        [
+            {
+                "recipient": project.student.email,
+                "cc": _project_workflow_cc(project),
+                "subject": subject,
+                "body": body,
+            }
+        ]
+    )
+    delivered_count = len(email_result["delivered"])
+    failed_count = len(email_result["failed"])
+    comment_marker = marker if delivered_count else f"System: student release notice attempted - {release_key}"
+    project.comments = append_comment(
+        project.comments,
+        (
+            f"{comment_marker}; delivered={delivered_count}; "
+            f"failed={failed_count}."
+        ),
+    )
+    return email_result
+
+
+def _maybe_notify_supervisor_agreement_released(project):
+    if not project or not project.supervisor_accepted_at:
+        return None
+    return _send_student_release_email(
+        project,
+        release_key="supervisor_agreement",
+        subject=f"Supervisor Agreement Released: {project.project_title}",
+        body=(
+            f"Your supervisor has accepted the invitation for your MBA Capstone Project "
+            f"'{project.project_title}'.\n\n"
+            "Please sign in to the MBA system and complete the Supervisor Agreement. "
+            "After the Supervisor Agreement is submitted, your supervisor can complete the JBS5 title review."
+        ),
+    )
+
+
+def _maybe_notify_jbs10_intent_released(project):
+    if not (
+        project
+        and project.jbs5_hdc_approved_at
+        and (
+            _project_has_document(project.id, "ethics_certificate")
+            or _project_has_document(project.id, "ethics_exemption_form")
+        )
+    ):
+        return None
+    return _send_student_release_email(
+        project,
+        release_key="jbs10_intent",
+        subject=f"JBS10 and Intent to Submit Released: {project.project_title}",
+        body=(
+            f"JBS10 and Intent to Submit are now available for your MBA Capstone Project "
+            f"'{project.project_title}'.\n\n"
+            "Please sign in to the MBA system and complete both forms. "
+            "Both forms will be routed to your supervisor for signature before MBA Admin can continue the assessor nomination workflow."
+        ),
+    )
+
+
+def _maybe_notify_supporting_forms_released(project):
+    if not (
+        project
+        and jbs10_supervisor_signed(project)
+        and intent_to_submit_supervisor_signed(project)
+    ):
+        return None
+    return _send_student_release_email(
+        project,
+        release_key="supporting_forms",
+        subject=f"Final Supporting Forms Released: {project.project_title}",
+        body=(
+            f"The next supporting forms are now available for your MBA Capstone Project "
+            f"'{project.project_title}'.\n\n"
+            "Please complete the JBS 1 Declaration, the combined Plagiarism/Turnitin/AI Declaration, "
+            "and the JBS 2 Affidavit. The affidavit must be downloaded, stamped by a Commissioner of Oaths, "
+            "and uploaded again as the final stamped copy. JBS 1 will be routed to your supervisor and then "
+            "to MBA Admin for the Program Manager signature."
+        ),
+    )
 
 
 def _notify_admins_form_submitted(project, doc_type):
@@ -629,16 +959,116 @@ def _notify_admins_jbs5_ready_for_hdc(project, supervisor_signature):
         )
 
 
+def _notify_admins_jbs10_signed(project, supervisor_signature, assessor_suggestions_created=False):
+    supervisor_label = (
+        f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+        or current_user.email
+        or supervisor_signature
+    )
+    readiness = (
+        "JBS10 and Intent to Submit are now ready for assessor nomination work."
+        if intent_to_submit_supervisor_signed(project)
+        else "Intent to Submit is still awaiting supervisor signature before assessor nomination work can continue."
+    )
+    suggestion_note = " Assessor suggestions were generated." if assessor_suggestions_created else ""
+    for admin_email in mba_admin_notification_emails():
+        _send_email_safely(
+            admin_email,
+            f"JBS10 Signed by Supervisor: {project.project_title}",
+            (
+                f"Supervisor {supervisor_label} signed JBS10 for Capstone Project "
+                f"'{project.project_title}'. {readiness}{suggestion_note}"
+            ),
+        )
+
+
+def _notify_admins_intent_signed(project, supervisor_signature, assessor_suggestions_created=False):
+    supervisor_label = (
+        f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+        or current_user.email
+        or supervisor_signature
+    )
+    readiness = (
+        "JBS10 and Intent to Submit are now ready for assessor nomination work."
+        if jbs10_supervisor_signed(project)
+        else "JBS10 is still awaiting supervisor signature before assessor nomination work can continue."
+    )
+    suggestion_note = " Assessor suggestions were generated." if assessor_suggestions_created else ""
+    for admin_email in mba_admin_notification_emails():
+        _send_email_safely(
+            admin_email,
+            f"Intent to Submit Signed by Supervisor: {project.project_title}",
+            (
+                f"Supervisor {supervisor_label} signed Intent to Submit for Capstone Project "
+                f"'{project.project_title}'. {readiness}{suggestion_note}"
+            ),
+        )
+
+
+def _notify_admins_jbs1_supervisor_signed(project, supervisor_signature):
+    supervisor_label = (
+        f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+        or current_user.email
+        or supervisor_signature
+    )
+    sign_url = url_for(
+        "mba.admin_sign_jbs1_declaration",
+        project_id=project.id,
+        _external=True,
+    )
+    for admin_email in mba_admin_notification_emails():
+        _send_email_safely(
+            admin_email,
+            f"JBS 1 Requires Program Manager Signature: {project.project_title}",
+            (
+                f"Supervisor {supervisor_label} signed the JBS 1 Declaration for Capstone Project "
+                f"'{project.project_title}'.\n\n"
+                "Please sign in and sign the Program Manager section here:\n"
+                f"{sign_url}"
+            ),
+        )
+
+
 def _notify_supervisors_form_submitted(project, doc_type):
     for supervisor_email in project_supervisor_notification_emails(project):
-        _send_email_safely(
-            supervisor_email,
-            f"Student Submitted {document_label(doc_type)}",
-            (
+        if doc_type == "jbs10":
+            subject = f"JBS10 Requires Supervisor Review: {project.project_title}"
+            body = (
+                f"Student {current_user.first_name} ({current_user.email}) submitted JBS10 "
+                f"for Capstone Project '{project.project_title}'.\n\n"
+                "Please sign in to the MBA system, review the full JBS10 form, and either sign it or return it to the student for amendment."
+            )
+        elif doc_type == "intent_to_submit":
+            subject = f"Intent to Submit Requires Supervisor Signature: {project.project_title}"
+            body = (
+                f"Student {current_user.first_name} ({current_user.email}) submitted Intent to Submit "
+                f"for Capstone Project '{project.project_title}'.\n\n"
+                "Please sign in to the MBA system, review the full Intent to Submit form, and sign it."
+            )
+        elif doc_type == "jbs1_declaration":
+            sign_url = url_for(
+                "mba.supervisor_sign_jbs1_declaration",
+                project_id=project.id,
+                _external=True,
+            )
+            subject = f"JBS 1 Declaration Requires Supervisor Signature: {project.project_title}"
+            body = (
+                f"Student {current_user.first_name} ({current_user.email}) submitted the JBS 1 Declaration "
+                f"for Capstone Project '{project.project_title}'.\n\n"
+                "Please sign in, review the JBS 1 Declaration, and sign the supervisor section here:\n"
+                f"{sign_url}"
+            )
+        else:
+            subject = f"Student Submitted {document_label(doc_type)}"
+            body = (
                 f"Student {current_user.first_name} ({current_user.email}) "
                 f"submitted {document_label(doc_type)} for Capstone Project '{project.project_title}'. "
                 "Please sign in to the MBA system to view the submitted document."
-            ),
+            )
+        _send_email_safely(
+            supervisor_email,
+            subject,
+            body,
         )
 
 
@@ -694,10 +1124,12 @@ def _build_student_prefill(project):
     """Build a pre-fill dict from the current user's student profile + project."""
     profile = getattr(current_user, "student_profile", None)
     supervisor_name = ""
+    supervisor_staff_number = ""
     if project.primary_supervisor:
         sp = getattr(project.primary_supervisor, "scholar_profile", None)
         if sp:
             supervisor_name = f"{sp.title or ''} {sp.name or ''} {sp.surname or ''}".strip()
+            supervisor_staff_number = getattr(sp, "staff_number", "") or ""
         else:
             supervisor_name = project.primary_supervisor.email or ""
     full_name = f"{profile.name or ''} {profile.surname or ''}".strip() if profile else ""
@@ -708,7 +1140,12 @@ def _build_student_prefill(project):
     )
     today_dt = datetime.utcnow()
     today = today_dt.strftime("%Y-%m-%d")
-    return {
+    default_signing_location = (
+        getattr(profile, "default_signing_location", None)
+        or getattr(profile, "address", None)
+        or ""
+    )
+    prefill = {
         "full_name": full_name,
         "surname": profile.surname if profile else "",
         "student_number": profile.student_number if profile else "",
@@ -739,8 +1176,9 @@ def _build_student_prefill(project):
         "affidavit_day": today_dt.strftime("%d"),
         "affidavit_month": today_dt.strftime("%B"),
         "affidavit_year": today_dt.strftime("%y"),
-        "signing_location": profile.address if profile else "",
-        "student_id_number": "",
+        "signing_location": default_signing_location,
+        "student_id_number": getattr(profile, "id_passport_number", "") if profile else "",
+        "student_postal_code": getattr(profile, "postal_code", "") if profile else "",
         "ethical_clearance_number": "",
         "work_type": "Capstone Project",
         "research_title": project.project_title,
@@ -761,7 +1199,7 @@ def _build_student_prefill(project):
         "previous_co_supervisors": "",
         "amended_supervisor": "",
         "amended_co_supervisors": "",
-        "supervisor_staff_number": "",
+        "supervisor_staff_number": supervisor_staff_number,
         "co_supervisor_1": "",
         "co_supervisor_1_staff_number": "",
         "co_supervisor_2": "",
@@ -804,6 +1242,14 @@ def _build_student_prefill(project):
         "amended_external_assessor_3_qualification": "",
         "amended_external_assessor_3_email": "",
     }
+    _apply_payload_values(
+        prefill,
+        _latest_student_payload(("affidavit", "supervisor_agreement", "jbs1_declaration", "plagiarism_declaration")),
+        STUDENT_REUSABLE_FORM_FIELDS,
+        overwrite_placeholders=True,
+    )
+    _apply_payload_values(prefill, _profile_defaults(profile), STUDENT_REUSABLE_FORM_FIELDS, overwrite=True)
+    return prefill
 
 
 def _build_student_supervisor_agreement_prefill(project):
@@ -827,7 +1273,12 @@ def _build_student_supervisor_agreement_prefill(project):
         or "MBA"
     )
 
-    return {
+    default_signing_location = (
+        getattr(student_profile, "default_signing_location", None)
+        or getattr(student_profile, "address", None)
+        or ""
+    )
+    prefill = {
         "supervisor_full_name": supervisor_name,
         "department": supervisor_profile.department if supervisor_profile else "",
         "affiliation": supervisor_profile.affiliation if supervisor_profile else "",
@@ -849,14 +1300,14 @@ def _build_student_supervisor_agreement_prefill(project):
         ),
         "student_number": student_profile.student_number if student_profile else "",
         "student_address": student_profile.address if student_profile else "",
-        "student_postal_code": "",
+        "student_postal_code": getattr(student_profile, "postal_code", "") if student_profile else "",
         "degree": qualification,
         "research_title": project.project_title,
         "co_supervisor_full_name": "",
         "co_supervisor_department": "",
         "co_supervisor_surname": "",
         "co_supervisor_initials": "",
-        "student_signing_location": "",
+        "student_signing_location": default_signing_location,
         "supervisor_signing_location": "",
         "co_supervisor_signing_location": "",
         "student_signature_date": today.strftime("%Y-%m-%d"),
@@ -871,6 +1322,14 @@ def _build_student_supervisor_agreement_prefill(project):
         "supervisor_signature": "",
         "supervisor_signature_name": supervisor_name,
     }
+    _apply_payload_values(
+        prefill,
+        _latest_student_payload(("supervisor_agreement", "affidavit")),
+        STUDENT_REUSABLE_FORM_FIELDS,
+        overwrite_placeholders=True,
+    )
+    _apply_payload_values(prefill, _profile_defaults(student_profile), STUDENT_REUSABLE_FORM_FIELDS, overwrite=True)
+    return prefill
 
 
 # ---------------------------------------------------------------------------
@@ -922,8 +1381,8 @@ def fill_project_form(project_id, form_type):
         if not project.jbs5_hdc_approved_at:
             flash("JBS5 must be approved by HDC before these supporting forms become available.", "error")
             return redirect(url_for("mba.student_dashboard"))
-        if not _project_has_document(project.id, "jbs10") or not _project_has_document(project.id, "intent_to_submit"):
-            flash("These Capstone Project supporting forms become available after JBS10 and Intent to Submit are submitted.", "error")
+        if not jbs10_supervisor_signed(project) or not intent_to_submit_supervisor_signed(project):
+            flash("These Capstone Project supporting forms become available after JBS10 and Intent to Submit are signed by your supervisor.", "error")
             return redirect(url_for("mba.student_dashboard"))
     if form_type == "corrections_response":
         if not project_has_active_corrections(project):
@@ -955,6 +1414,15 @@ def fill_project_form(project_id, form_type):
     if form_type == "jbs5" and existing_form and existing_form.supervisor_signed:
         flash("JBS5 has already been signed by the supervisor and can no longer be edited.", "error")
         return redirect(url_for("mba.student_dashboard"))
+    if form_type == "jbs10" and jbs10_supervisor_signed(project):
+        flash("JBS10 has already been signed by the supervisor and can no longer be edited.", "error")
+        return redirect(url_for("mba.student_dashboard"))
+    if form_type == "intent_to_submit" and intent_to_submit_supervisor_signed(project):
+        flash("Intent to Submit has already been signed by the supervisor and can no longer be edited.", "error")
+        return redirect(url_for("mba.student_dashboard"))
+    if form_type == "jbs1_declaration" and jbs1_supervisor_signed(project):
+        flash("JBS 1 Declaration has already been signed by the supervisor and can no longer be edited.", "error")
+        return redirect(url_for("mba.student_dashboard"))
 
     if form_type == "corrections_response":
         prefill = _build_corrections_response_prefill(project, saved_payload)
@@ -968,6 +1436,79 @@ def fill_project_form(project_id, form_type):
     if form_type == "jbs5" and not (existing_form and existing_form.supervisor_signed):
         prefill["supervisor_signature"] = ""
         prefill["supervisor_signature_date"] = ""
+    if form_type == "jbs10":
+        for signature_field in (
+            "supervisor_signature",
+            "supervisor_signature_date",
+            "supervisor_signature_user_id",
+            "supervisor_signature_email",
+            "co_supervisor_signature",
+            "co_supervisor_signature_date",
+            "head_of_department_signature",
+            "head_of_department_signature_date",
+            "jbs_hdc_signature",
+            "jbs_hdc_signature_date",
+        ):
+            prefill[signature_field] = ""
+        clear_signature_snapshots(
+            prefill,
+            (
+                "supervisor_signature",
+                "co_supervisor_signature",
+                "head_of_department_signature",
+                "jbs_hdc_signature",
+            ),
+        )
+    if form_type == "intent_to_submit":
+        for signature_field in (
+            "supervisor_agree_signature",
+            "supervisor_agree_signature_user_id",
+            "supervisor_agree_signature_email",
+            "co_supervisor_agree_signature",
+            "supervisor_disagree_signature",
+            "co_supervisor_disagree_signature",
+            "disagree_reasons",
+            "disagree_reasons_date",
+            "hod_signature",
+            "hod_signature_date",
+            "director_signature",
+            "director_signature_date",
+        ):
+            prefill[signature_field] = ""
+        clear_signature_snapshots(
+            prefill,
+            (
+                "supervisor_agree_signature",
+                "co_supervisor_agree_signature",
+                "supervisor_disagree_signature",
+                "co_supervisor_disagree_signature",
+                "hod_signature",
+                "director_signature",
+            ),
+        )
+    if form_type == "jbs1_declaration":
+        for signature_field in (
+            "supervisor_signature",
+            "supervisor_signature_date",
+            "supervisor_signature_user_id",
+            "supervisor_signature_email",
+            "co_supervisor_signature",
+            "co_supervisor_signature_date",
+            "office_registration",
+            "office_approved_title",
+            "office_affidavit",
+            "office_language_edited",
+            "office_turnitin_report",
+            "office_program_manager",
+            "office_program_manager_date",
+            "office_program_manager_user_id",
+            "office_program_manager_email",
+        ):
+            prefill[signature_field] = ""
+        clear_signature_snapshots(
+            prefill,
+            ("supervisor_signature", "co_supervisor_signature", "office_program_manager"),
+        )
     student_signature_fields_by_form = {
         "jbs5": ("student_signature",),
         "supervisor_agreement": ("student_signature",),
@@ -983,10 +1524,10 @@ def fill_project_form(project_id, form_type):
         "project": project,
         "prefill": prefill,
         "student_acceptance": form_type == "supervisor_agreement",
+        "student_fill_mode": form_type in {"jbs10", "intent_to_submit", "jbs1_declaration"},
     }
 
     if request.method == "POST":
-        assessor_suggestions_created = False
         jbs5_auto_submitted = False
         payload = {
             k: (request.form.get(k) or "").strip()
@@ -1040,8 +1581,69 @@ def fill_project_form(project_id, form_type):
                 payload["supervisor_agreement_declaration"] = saved_payload.get("supervisor_agreement_declaration") or "1"
                 copy_signature_snapshots(payload, saved_payload, ("supervisor_signature",))
         if form_type == "jbs10":
+            payload.pop("supervisor_signature", None)
+            payload.pop("supervisor_signature_date", None)
+            payload.pop("supervisor_signature_user_id", None)
+            payload.pop("supervisor_signature_email", None)
+            payload.pop("co_supervisor_signature", None)
+            payload.pop("co_supervisor_signature_date", None)
+            clear_signature_snapshots(payload, ("supervisor_signature",))
             payload.pop("jbs_hdc_signature", None)
             payload.pop("jbs_hdc_signature_date", None)
+            payload.pop("head_of_department_signature", None)
+            payload.pop("head_of_department_signature_date", None)
+            clear_signature_snapshots(payload, ("head_of_department_signature", "jbs_hdc_signature"))
+            if isinstance(saved_payload, dict) and saved_payload.get("_supervisor_return_requested_at"):
+                payload["_supervisor_return_requested_at"] = saved_payload.get("_supervisor_return_requested_at")
+                payload["_supervisor_return_request"] = saved_payload.get("_supervisor_return_request", "")
+                payload["_supervisor_return_resolved_at"] = datetime.utcnow().isoformat()
+        if form_type == "intent_to_submit":
+            for signature_field in (
+                "supervisor_agree_signature",
+                "supervisor_agree_signature_user_id",
+                "supervisor_agree_signature_email",
+                "co_supervisor_agree_signature",
+                "supervisor_disagree_signature",
+                "co_supervisor_disagree_signature",
+                "disagree_reasons",
+                "disagree_reasons_date",
+                "hod_signature",
+                "hod_signature_date",
+                "director_signature",
+                "director_signature_date",
+            ):
+                payload.pop(signature_field, None)
+            clear_signature_snapshots(
+                payload,
+                (
+                    "supervisor_agree_signature",
+                    "co_supervisor_agree_signature",
+                    "supervisor_disagree_signature",
+                    "co_supervisor_disagree_signature",
+                    "hod_signature",
+                    "director_signature",
+                ),
+            )
+        if form_type == "jbs1_declaration":
+            for signature_field in (
+                "supervisor_signature",
+                "supervisor_signature_date",
+                "supervisor_signature_user_id",
+                "supervisor_signature_email",
+                "co_supervisor_signature",
+                "co_supervisor_signature_date",
+                "office_registration",
+                "office_approved_title",
+                "office_affidavit",
+                "office_language_edited",
+                "office_turnitin_report",
+                "office_program_manager",
+                "office_program_manager_date",
+                "office_program_manager_user_id",
+                "office_program_manager_email",
+            ):
+                payload.pop(signature_field, None)
+            clear_signature_snapshots(payload, ("supervisor_signature", "co_supervisor_signature", "office_program_manager"))
 
         consent_messages = {
             "plagiarism_declaration": (
@@ -1112,6 +1714,8 @@ def fill_project_form(project_id, form_type):
         refresh_saved_signature_snapshot(payload, student_signature_fields_by_form.get(form_type, ()), current_user)
 
         try:
+            if form_type != "corrections_response":
+                _learn_student_profile_defaults_from_payload(payload)
             if form_type == "affidavit":
                 saved_form = _save_form_payload(project, form_type, payload)
                 project.comments = append_comment(
@@ -1120,10 +1724,17 @@ def fill_project_form(project_id, form_type):
                 )
             else:
                 saved_form = _save_form_as_document(project, form_type, form_type, payload)
-            if form_type in {"jbs5", "supervisor_agreement", "plagiarism_declaration", "affidavit"}:
+            if form_type in {"jbs5", "supervisor_agreement", "plagiarism_declaration", "affidavit", "intent_to_submit"}:
                 saved_form.student_signed = True
             if form_type == "jbs5":
                 reset_jbs5_review_state(project, clear_supervisor_signature=True, clear_hdc_signature=True)
+            if form_type == "jbs10":
+                saved_form.supervisor_signed = False
+            if form_type == "intent_to_submit":
+                saved_form.supervisor_signed = False
+            if form_type == "jbs1_declaration":
+                saved_form.student_signed = True
+                saved_form.supervisor_signed = False
             if form_type == "corrections_response":
                 saved_form.student_signed = True
                 corrected_doc = _store_project_document(
@@ -1175,9 +1786,6 @@ def fill_project_form(project_id, form_type):
             if form_type == "jbs5":
                 db.session.flush()
                 jbs5_auto_submitted = submit_project_to_admin_from_jbs5(project)
-            if form_type in {"jbs10", "intent_to_submit"}:
-                db.session.flush()
-                assessor_suggestions_created = bool(apply_assessor_suggestions_if_ready(project))
             db.session.commit()
         except ValueError as exc:
             db.session.rollback()
@@ -1193,13 +1801,12 @@ def fill_project_form(project_id, form_type):
         if form_type == "jbs5" and jbs5_auto_submitted:
             _notify_admins_form_submitted(project, form_type)
         elif form_type in {
-            "jbs10",
-            "intent_to_submit",
             "supervisor_agreement",
             "plagiarism_declaration",
-            "jbs1_declaration",
         }:
             _notify_admins_form_submitted(project, form_type)
+        elif form_type in {"jbs10", "intent_to_submit", "jbs1_declaration"}:
+            _notify_supervisors_form_submitted(project, form_type)
         if form_type == "supervisor_agreement":
             _notify_supervisors_form_submitted(project, form_type)
 
@@ -1207,8 +1814,12 @@ def fill_project_form(project_id, form_type):
             flash(f"Capstone Project title was automatically formatted as: {payload['research_title']}", "info")
         if jbs5_auto_submitted:
             flash("Capstone Project submitted to MBA Admin from the JBS 5 form.", "success")
-        if assessor_suggestions_created:
-            flash("Assessor suggestions were generated for MBA Admin.", "info")
+        if form_type == "intent_to_submit":
+            flash("Intent to Submit submitted for supervisor signature.", "success")
+            return redirect(url_for("mba.student_dashboard"))
+        if form_type == "jbs1_declaration":
+            flash("JBS 1 Declaration submitted for supervisor signature.", "success")
+            return redirect(url_for("mba.student_dashboard"))
         if form_type == "corrections_response":
             flash(
                 "Corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report submitted for supervisor review.",
@@ -1225,14 +1836,6 @@ def fill_project_form(project_id, form_type):
         return redirect(url_for("mba.student_dashboard"))
 
     return render_template(template_name, **template_context)
-
-
-def _hdc_signature_name():
-    return (
-        f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
-        or current_user.email
-        or "HDC"
-    )
 
 
 def _jbs5_signed_by_student_and_supervisor(project):
@@ -1278,7 +1881,7 @@ def hdc_sign_project_form(project_id, form_type):
         external_examiner_nomination_doc_type(),
         additional_external_examiner_nomination_doc_type(),
     }
-    signature_only_form_types = {*nomination_signature_form_types, assessment_summary_doc_type()}
+    signature_only_form_types = {*nomination_signature_form_types, assessment_summary_doc_type(), "intent_to_submit", "jbs10"}
     if form_type not in {"jbs5", "jbs10", *signature_only_form_types}:
         abort(404)
 
@@ -1300,6 +1903,12 @@ def hdc_sign_project_form(project_id, form_type):
     if form_type == assessment_summary_doc_type() and project.project_status != ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value:
         flash("The assessment summary is not waiting for an HDC results decision.", "error")
         return redirect(url_for("mba.hdc_dashboard"))
+    if (
+        form_type == additional_external_examiner_nomination_doc_type()
+        and not additional_external_examiner_nomination_supervisor_signed(project)
+    ):
+        flash("The supervisor must sign the additional assessor nomination before HDC signature fields can be completed.", "error")
+        return redirect(url_for("mba.hdc_dashboard"))
     if form_type in signature_only_form_types and not hdc_can_access_document(project, form_type):
         flash(f"{document_label(form_type)} is not available for HDC signature editing.", "error")
         return redirect(url_for("mba.hdc_dashboard"))
@@ -1313,8 +1922,10 @@ def hdc_sign_project_form(project_id, form_type):
     today_dt = datetime.utcnow()
     today = today_dt.strftime("%Y-%m-%d")
     prefill = dict(payload)
-    prefill.setdefault("jbs_hdc_signature", _hdc_signature_name())
     prefill.setdefault("jbs_hdc_signature_date", today)
+    if form_type == "intent_to_submit":
+        prefill.setdefault("hod_signature_date", today)
+        prefill.setdefault("director_signature_date", today)
     prefill["_doc_type"] = form_type
     apply_saved_signature_snapshot(
         prefill,
@@ -1346,7 +1957,19 @@ def hdc_sign_project_form(project_id, form_type):
             decision_action = (request.form.get("action") or "").strip()
             comment = (request.form.get("comment") or "").strip()
             signature_values = _submitted_hdc_signature_values(form_type)
+            hdc_detail_values = {}
+            if form_type == "intent_to_submit":
+                hdc_detail_values = {
+                    field: (request.form.get(field) or "").strip()
+                    for field in (
+                        "title_approved_by_hdc",
+                        "ethical_clearance_number",
+                        "examiners_approved_by_hdc",
+                        "examiners_nominated_with_notice",
+                    )
+                }
             prefill.update(signature_values)
+            prefill.update(hdc_detail_values)
             missing_fields = _missing_hdc_signature_fields(form_type, signature_values)
             if missing_fields:
                 flash(
@@ -1360,6 +1983,10 @@ def hdc_sign_project_form(project_id, form_type):
                 flash("Choose whether to approve or decline the assessment results after signing.", "error")
                 template_context["prefill"] = prefill
                 return render_template(template_name, **template_context)
+            if form_type == assessment_summary_doc_type() and decision_action == "decline_results" and not comment:
+                flash("Add HDC feedback before declining the assessment results.", "error")
+                template_context["prefill"] = prefill
+                return render_template(template_name, **template_context)
             if form_type == assessment_summary_doc_type() and decision_action == "approve_results":
                 try:
                     _validate_hdc_results_approval_ready(project)
@@ -1368,6 +1995,7 @@ def hdc_sign_project_form(project_id, form_type):
                     template_context["prefill"] = prefill
                     return render_template(template_name, **template_context)
             payload.update(signature_values)
+            payload.update(hdc_detail_values)
             refresh_saved_signature_snapshot(
                 payload,
                 tuple(field for field in signature_values if not field.endswith("_date")),
@@ -1379,7 +2007,7 @@ def hdc_sign_project_form(project_id, form_type):
                     form_type,
                     form_type,
                     payload,
-                    uploaded_by_id=current_user.id,
+                    uploaded_by_id=project.student_id if form_type in {"intent_to_submit", "jbs10"} else current_user.id,
                 )
                 if form_type == assessment_summary_doc_type():
                     db.session.flush()
@@ -1417,7 +2045,7 @@ def hdc_sign_project_form(project_id, form_type):
             flash("Choose an HDC decision before submitting.", "error")
             return render_template(template_name, **template_context)
         missing_fields = _missing_hdc_signature_fields(form_type, signature_values)
-        signature_required = decision == "approve" or form_type == "jbs10"
+        signature_required = decision == "approve"
         if signature_required and missing_fields:
             flash(
                 "Complete these signature fields before submitting this HDC decision: "
@@ -1430,7 +2058,7 @@ def hdc_sign_project_form(project_id, form_type):
             flash("Add HDC feedback before returning the document.", "error")
             return render_template(template_name, **template_context)
 
-        if decision == "approve" or form_type == "jbs10":
+        if decision == "approve":
             payload.update(signature_values)
             refresh_saved_signature_snapshot(
                 payload,
@@ -1452,68 +2080,31 @@ def hdc_sign_project_form(project_id, form_type):
                 payload,
                 uploaded_by_id=project.student_id,
             )
-            if form_type == "jbs5":
-                if decision == "approve":
-                    if not _jbs5_signed_by_student_and_supervisor(project):
-                        raise ValueError("JBS5 must be signed by both the student and supervisor before HDC can approve it.")
-                    project.project_status = ProjectStatus.JBS5_HDC_APPROVED.value
-                    project.title_approved = True
-                    project.jbs5_hdc_approved_at = datetime.utcnow()
-                    project.comments = append_comment(
-                        project.comments,
-                        f"{current_user.email}: signed and approved JBS5 for HDC.",
-                    )
-                    message = "JBS5 signed and approved by HDC."
-                else:
-                    reset_jbs5_review_state(project, clear_supervisor_signature=True, clear_hdc_signature=True)
-                    project.project_status = ProjectStatus.JBS5_HDC_DECLINED.value
-                    project.comments = append_comment(
-                        project.comments,
-                        f"{current_user.email}: returned JBS5 from HDC review.",
-                    )
-                    message = "JBS5 returned with HDC feedback."
-                if comment:
-                    project.jbs5_hdc_comments = append_comment(
-                        project.jbs5_hdc_comments,
-                        f"{current_user.email}: {comment}",
-                    )
-            else:
-                if not project.jbs5_hdc_approved_at:
-                    raise ValueError("HDC must approve JBS5 before JBS10 nominations can be reviewed.")
-                decision_value = HDC_ASSESSOR_APPROVED if decision == "approve" else HDC_ASSESSOR_DECLINED
-                for slot in PRIMARY_ASSESSOR_SLOTS:
-                    if getattr(project, f"{slot}_id", None) and not assessor_hdc_decision(project, slot):
-                        set_assessor_hdc_decision(project, slot, decision_value)
-                review_status = sync_hdc_assessor_nomination_status(project)
-                if review_status == "approved":
-                    project.comments = append_comment(
-                        project.comments,
-                        f"{current_user.email}: signed JBS10 and approved assessor nominations.",
-                    )
-                    message = "JBS10 signed and assessor nominations approved by HDC."
-                elif review_status == "declined":
-                    project.comments = append_comment(
-                        project.comments,
-                        f"{current_user.email}: completed JBS10 review with rejected assessor nomination(s).",
-                    )
-                    if decision == "approve":
-                        message = "JBS10 signed. Rejected assessor nomination(s) have been returned to MBA Admin."
-                    else:
-                        message = "JBS10 nominations returned with HDC feedback."
-                elif review_status == "signature_pending":
-                    raise ValueError("Complete the JBS10 HDC signature before approving assessor nominations.")
-                elif review_status == "signature_pending_declined":
-                    raise ValueError("Complete the JBS10 HDC signature before returning rejected assessor nomination(s).")
-                else:
-                    raise ValueError("Record an HDC decision for both assessor nominations before completing JBS10 review.")
-                if comment:
-                    project.hdc_comments = append_comment(project.hdc_comments, f"{current_user.email}: {comment}")
-                decision_summary = hdc_assessor_nomination_decision_summary(project)
+            if decision == "approve":
+                if not _jbs5_signed_by_student_and_supervisor(project):
+                    raise ValueError("JBS5 must be signed by both the student and supervisor before HDC can approve it.")
+                project.project_status = ProjectStatus.JBS5_HDC_APPROVED.value
+                project.title_approved = True
+                project.jbs5_hdc_approved_at = datetime.utcnow()
                 project.comments = append_comment(
                     project.comments,
-                    f"{current_user.email}: HDC assessor nomination decision recorded - {decision_summary}.",
+                    f"{current_user.email}: signed and approved JBS5 for HDC.",
                 )
-                _send_hdc_nomination_admin_alert(project)
+                _maybe_notify_jbs10_intent_released(project)
+                message = "JBS5 signed and approved by HDC."
+            else:
+                reset_jbs5_review_state(project, clear_supervisor_signature=True, clear_hdc_signature=True)
+                project.project_status = ProjectStatus.JBS5_HDC_DECLINED.value
+                project.comments = append_comment(
+                    project.comments,
+                    f"{current_user.email}: returned JBS5 from HDC review.",
+                )
+                message = "JBS5 returned with HDC feedback."
+            if comment:
+                project.jbs5_hdc_comments = append_comment(
+                    project.jbs5_hdc_comments,
+                    f"{current_user.email}: {comment}",
+                )
             db.session.commit()
         except ValueError as exc:
             db.session.rollback()
@@ -1717,9 +2308,386 @@ def supervisor_sign_jbs5(project_id):
     return render_template(template_name, **template_context)
 
 
-@mba_bp.route("/projects/<int:project_id>/supervisor-sign-external-examiner-nomination", methods=["GET", "POST"])
+@mba_bp.route("/projects/<int:project_id>/supervisor-sign-jbs1-declaration", methods=["GET", "POST"])
 @login_required
-def supervisor_sign_external_examiner_nomination(project_id):
+def supervisor_sign_jbs1_declaration(project_id):
+    if not require_mba_role(MbaRole.SCHOLAR.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    if project.primary_supervisor_id != current_user.id:
+        abort(403)
+
+    jbs1_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs1_declaration").first()
+    if not jbs1_form or not isinstance(jbs1_form.payload, dict):
+        flash("The student-submitted JBS 1 Declaration is not available yet.", "error")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    if jbs1_supervisor_signed(project):
+        flash("JBS 1 Declaration has already been signed by the supervisor.", "info")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    profile = getattr(current_user, "scholar_profile", None)
+    default_name = (
+        f"{profile.title or ''} {profile.name or ''} {profile.surname or ''}".strip()
+        if profile
+        else ""
+    ) or f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+    template_name = "mba/form_fill_jbs1_declaration.html"
+    payload = dict(jbs1_form.payload or {})
+    prefill = dict(payload)
+    prefill.setdefault("research_title", project.project_title)
+    prefill["supervisor_signature"] = default_name
+    prefill["supervisor_signature_date"] = datetime.utcnow().strftime("%Y-%m-%d")
+    apply_saved_signature_snapshot(prefill, ("supervisor_signature",), current_user)
+    template_context = {
+        "project": project,
+        "prefill": prefill,
+        "supervisor_signature_mode": True,
+    }
+
+    if request.method == "POST":
+        supervisor_signature = (request.form.get("supervisor_signature") or "").strip()
+        supervisor_signature_date = (request.form.get("supervisor_signature_date") or "").strip()
+        if not supervisor_signature or not supervisor_signature_date:
+            flash("Supervisor signature and date are required.", "error")
+            prefill["supervisor_signature"] = supervisor_signature
+            prefill["supervisor_signature_date"] = supervisor_signature_date
+            return render_template(template_name, **template_context)
+        try:
+            sign_jbs1_declaration_as_supervisor(
+                project,
+                supervisor_signature,
+                supervisor_signature_date,
+                supervisor_user=current_user,
+            )
+            db.session.commit()
+            _notify_admins_jbs1_supervisor_signed(project, supervisor_signature)
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template(template_name, **template_context)
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("JBS 1 supervisor signature failed")
+            flash("JBS 1 Declaration could not be signed. Please try again.", "error")
+            return render_template(template_name, **template_context)
+
+        flash("JBS 1 Declaration signed. MBA Admin has been notified for Program Manager signature.", "success")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    return render_template(template_name, **template_context)
+
+
+@mba_bp.route("/projects/<int:project_id>/admin-sign-jbs1-declaration", methods=["GET", "POST"])
+@login_required
+def admin_sign_jbs1_declaration(project_id):
+    if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    jbs1_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs1_declaration").first()
+    if not jbs1_form or not isinstance(jbs1_form.payload, dict):
+        flash("The student-submitted JBS 1 Declaration is not available yet.", "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    if not jbs1_supervisor_signed(project):
+        flash("The supervisor must sign JBS 1 Declaration before Admin signs as Program Manager.", "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    if jbs1_program_manager_signed(project):
+        flash("JBS 1 Declaration has already been signed by the Program Manager.", "info")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    default_name = (
+        user_signature_printed_name(current_user)
+        or f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+        or current_user.email
+    )
+    template_name = "mba/form_fill_jbs1_declaration.html"
+    payload = dict(jbs1_form.payload or {})
+    prefill = dict(payload)
+    prefill.setdefault("research_title", project.project_title)
+    prefill.setdefault("office_approved_title", project.project_title)
+    prefill["office_program_manager"] = default_name
+    prefill["office_program_manager_date"] = datetime.utcnow().strftime("%Y-%m-%d")
+    apply_saved_signature_snapshot(prefill, ("office_program_manager",), current_user)
+    template_context = {
+        "project": project,
+        "prefill": prefill,
+        "admin_signature_mode": True,
+    }
+
+    if request.method == "POST":
+        program_manager_signature = (request.form.get("office_program_manager") or "").strip()
+        program_manager_signature_date = (request.form.get("office_program_manager_date") or "").strip()
+        if not program_manager_signature or not program_manager_signature_date:
+            flash("Program Manager signature and date are required.", "error")
+            prefill["office_program_manager"] = program_manager_signature
+            prefill["office_program_manager_date"] = program_manager_signature_date
+            return render_template(template_name, **template_context)
+        office_values = {
+            field: (request.form.get(field) or "").strip()
+            for field in (
+                "office_registration",
+                "office_approved_title",
+                "office_affidavit",
+                "office_language_edited",
+                "office_turnitin_report",
+            )
+        }
+        try:
+            sign_jbs1_declaration_as_program_manager(
+                project,
+                program_manager_signature,
+                program_manager_signature_date,
+                admin_user=current_user,
+                office_values=office_values,
+            )
+            db.session.commit()
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template(template_name, **template_context)
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("JBS 1 Program Manager signature failed")
+            flash("JBS 1 Declaration could not be signed by Program Manager. Please try again.", "error")
+            return render_template(template_name, **template_context)
+
+        flash("JBS 1 Declaration signed by Program Manager.", "success")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    return render_template(template_name, **template_context)
+
+
+@mba_bp.route("/projects/<int:project_id>/supervisor-sign-jbs10", methods=["GET", "POST"])
+@login_required
+def supervisor_sign_jbs10(project_id):
+    if not require_mba_role(MbaRole.SCHOLAR.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    if project.primary_supervisor_id != current_user.id:
+        abort(403)
+
+    jbs10_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs10").first()
+    if not jbs10_form or not isinstance(jbs10_form.payload, dict):
+        flash("The student-submitted JBS10 form is not available yet.", "error")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    if jbs10_supervisor_signed(project):
+        flash("JBS10 has already been signed by the supervisor.", "info")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    if jbs10_supervisor_return_pending(project):
+        flash("Wait for the student to amend and resubmit JBS10 before signing it.", "error")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    profile = getattr(current_user, "scholar_profile", None)
+    default_name = (
+        f"{profile.title or ''} {profile.name or ''} {profile.surname or ''}".strip()
+        if profile
+        else ""
+    ) or f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+    template_name = "mba/form_fill_jbs10.html"
+    payload = dict(jbs10_form.payload or {})
+    prefill = dict(payload)
+    prefill.setdefault("research_title", project.project_title)
+    prefill.setdefault("discipline", project.discipline_name)
+    prefill["supervisor_signature"] = default_name
+    prefill["supervisor_signature_date"] = datetime.utcnow().strftime("%Y-%m-%d")
+    apply_saved_signature_snapshot(prefill, ("supervisor_signature",), current_user)
+    template_context = {
+        "project": project,
+        "prefill": prefill,
+        "supervisor_signature_mode": True,
+    }
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "sign").strip()
+        if action == "return":
+            comment = (request.form.get("supervisor_return_comment") or "").strip()
+            if not comment:
+                flash("Add the amendments required before returning JBS10 to the student.", "error")
+                return render_template(template_name, **template_context)
+            payload.pop("supervisor_signature", None)
+            payload.pop("supervisor_signature_date", None)
+            payload.pop("supervisor_signature_user_id", None)
+            payload.pop("supervisor_signature_email", None)
+            clear_signature_snapshots(payload, ("supervisor_signature",))
+            payload["_supervisor_return_requested_at"] = datetime.utcnow().isoformat()
+            payload["_supervisor_return_request"] = comment
+            payload.pop("_supervisor_return_resolved_at", None)
+            try:
+                saved_form = _save_form_as_document(
+                    project,
+                    "jbs10",
+                    "jbs10",
+                    payload,
+                    uploaded_by_id=project.student_id,
+                )
+                saved_form.supervisor_signed = False
+                project.comments = append_comment(
+                    project.comments,
+                    f"{current_user.email}: returned JBS10 to the student for amendment: {comment}",
+                )
+                messages = []
+                if project.student and project.student.email:
+                    messages.append(
+                        {
+                            "recipient": project.student.email,
+                            "cc": _project_workflow_cc(project),
+                            "subject": f"JBS10 Amendments Required: {project.project_title}",
+                            "body": (
+                                f"Your supervisor returned JBS10 for '{project.project_title}' for amendment.\n\n"
+                                f"Required amendments:\n{comment}\n\n"
+                                "Please sign in to the MBA system, edit JBS10, and submit it again for supervisor review."
+                            ),
+                        }
+                    )
+                if messages:
+                    email_result = send_bulk_emails(messages)
+                    project.comments = append_comment(
+                        project.comments,
+                        (
+                            "JBS10 amendment request email result: "
+                            f"delivered={len(email_result['delivered'])}, failed={len(email_result['failed'])}"
+                        ),
+                    )
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("JBS10 return to student failed")
+                flash("JBS10 could not be returned. Please try again.", "error")
+                return render_template(template_name, **template_context)
+            flash("JBS10 returned to the student for amendment.", "success")
+            return redirect(url_for("mba.scholar_dashboard"))
+
+        supervisor_signature = (request.form.get("supervisor_signature") or "").strip()
+        supervisor_signature_date = (request.form.get("supervisor_signature_date") or "").strip()
+        if not supervisor_signature or not supervisor_signature_date:
+            flash("Supervisor signature and date are required.", "error")
+            prefill["supervisor_signature"] = supervisor_signature
+            prefill["supervisor_signature_date"] = supervisor_signature_date
+            return render_template(template_name, **template_context)
+        try:
+            sign_student_jbs10_as_supervisor(
+                project,
+                supervisor_signature,
+                supervisor_signature_date,
+                supervisor_user=current_user,
+            )
+            db.session.flush()
+            assessor_suggestions_created = bool(apply_assessor_suggestions_if_ready(project))
+            _maybe_notify_supporting_forms_released(project)
+            db.session.commit()
+            _notify_admins_jbs10_signed(project, supervisor_signature, assessor_suggestions_created)
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template(template_name, **template_context)
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("JBS10 supervisor signature failed")
+            flash("JBS10 could not be signed. Please try again.", "error")
+            return render_template(template_name, **template_context)
+
+        if assessor_suggestions_created:
+            flash("JBS10 signed. Assessor suggestions were generated for MBA Admin.", "success")
+        else:
+            flash("JBS10 signed. MBA Admin has been notified.", "success")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    return render_template(template_name, **template_context)
+
+
+@mba_bp.route("/projects/<int:project_id>/supervisor-sign-intent-to-submit", methods=["GET", "POST"])
+@login_required
+def supervisor_sign_intent_to_submit(project_id):
+    if not require_mba_role(MbaRole.SCHOLAR.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    if project.primary_supervisor_id != current_user.id:
+        abort(403)
+
+    intent_form = MbaForm.query.filter_by(project_id=project.id, form_type="intent_to_submit").first()
+    if not intent_form or not isinstance(intent_form.payload, dict):
+        flash("The student-submitted Intent to Submit form is not available yet.", "error")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    if intent_to_submit_supervisor_signed(project):
+        flash("Intent to Submit has already been signed by the supervisor.", "info")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    profile = getattr(current_user, "scholar_profile", None)
+    default_name = (
+        f"{profile.title or ''} {profile.name or ''} {profile.surname or ''}".strip()
+        if profile
+        else ""
+    ) or f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+    template_name = "mba/form_fill_intent_to_submit.html"
+    payload = dict(intent_form.payload or {})
+    prefill = dict(payload)
+    prefill.setdefault("research_title", project.project_title)
+    prefill["supervisor_agree_signature"] = default_name
+    apply_saved_signature_snapshot(prefill, ("supervisor_agree_signature",), current_user)
+    template_context = {
+        "project": project,
+        "prefill": prefill,
+        "supervisor_signature_mode": True,
+    }
+
+    if request.method == "POST":
+        supervisor_signature = (request.form.get("supervisor_agree_signature") or "").strip()
+        if not supervisor_signature:
+            flash("Supervisor signature is required.", "error")
+            prefill["supervisor_agree_signature"] = supervisor_signature
+            return render_template(template_name, **template_context)
+        try:
+            sign_intent_to_submit_as_supervisor(
+                project,
+                supervisor_signature,
+                supervisor_user=current_user,
+            )
+            db.session.flush()
+            assessor_suggestions_created = bool(apply_assessor_suggestions_if_ready(project))
+            _maybe_notify_supporting_forms_released(project)
+            db.session.commit()
+            _notify_admins_intent_signed(project, supervisor_signature, assessor_suggestions_created)
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template(template_name, **template_context)
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Intent to Submit supervisor signature failed")
+            flash("Intent to Submit could not be signed. Please try again.", "error")
+            return render_template(template_name, **template_context)
+
+        if assessor_suggestions_created:
+            flash("Intent to Submit signed. Assessor suggestions were generated for MBA Admin.", "success")
+        else:
+            flash("Intent to Submit signed. MBA Admin has been notified.", "success")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    return render_template(template_name, **template_context)
+
+
+def _supervisor_sign_nomination_form(project_id, form_type, form_label, admin_next_step):
     if not require_mba_role(MbaRole.SCHOLAR.value):
         return redirect(role_landing_url())
 
@@ -1729,15 +2697,14 @@ def supervisor_sign_external_examiner_nomination(project_id):
     if project.primary_supervisor_id != current_user.id:
         abort(403)
 
-    form_type = external_examiner_nomination_doc_type()
     nomination_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
     if not nomination_form or not isinstance(nomination_form.payload, dict):
-        flash("The amended external examiner nomination form is not ready yet.", "error")
+        flash(f"The {form_label} form is not ready yet.", "error")
         return redirect(role_landing_url())
 
     payload = dict(nomination_form.payload or {})
     if not payload.get("nomination_forwarded_to_supervisor_at") and not nomination_form.supervisor_signed:
-        flash("MBA Admin has not forwarded the amended external examiner nomination form for signature yet.", "error")
+        flash(f"MBA Admin has not forwarded the {form_label} form for signature yet.", "error")
         return redirect(role_landing_url())
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -1777,22 +2744,21 @@ def supervisor_sign_external_examiner_nomination(project_id):
             saved_form.supervisor_signed = True
             project.comments = append_comment(
                 project.comments,
-                f"{current_user.email}: signed the amended external examiner nomination form.",
+                f"{current_user.email}: signed the {form_label} form.",
             )
             for admin_email in mba_admin_notification_emails():
                 _send_email_safely(
                     admin_email,
-                    f"External Examiner Nomination Signed: {project.project_title}",
+                    f"{form_label.title()} Signed: {project.project_title}",
                     (
-                        f"Supervisor {current_user.email} signed the amended external examiner "
-                        f"nomination form for '{project.project_title}'. MBA Admin can now forward "
-                        "the assessor nomination to HDC."
+                        f"Supervisor {current_user.email} signed the {form_label} form for "
+                        f"'{project.project_title}'. {admin_next_step}"
                     ),
                 )
             db.session.commit()
         except Exception:
             db.session.rollback()
-            current_app.logger.exception("External examiner nomination supervisor signature failed")
+            current_app.logger.exception("%s supervisor signature failed", form_type)
             flash("The nomination form could not be signed. Please try again.", "error")
             return render_template(
                 "mba/form_sign_external_examiner_nomination.html",
@@ -1800,7 +2766,7 @@ def supervisor_sign_external_examiner_nomination(project_id):
                 prefill=payload,
                 nomination_doc=uploaded_doc_for(project, form_type),
             )
-        flash("External examiner nomination form signed. MBA Admin has been notified.", "success")
+        flash(f"{form_label.title()} form signed. MBA Admin has been notified.", "success")
         return redirect(role_landing_url())
 
     return render_template(
@@ -1808,6 +2774,28 @@ def supervisor_sign_external_examiner_nomination(project_id):
         project=project,
         prefill=payload,
         nomination_doc=uploaded_doc_for(project, form_type),
+    )
+
+
+@mba_bp.route("/projects/<int:project_id>/supervisor-sign-external-examiner-nomination", methods=["GET", "POST"])
+@login_required
+def supervisor_sign_external_examiner_nomination(project_id):
+    return _supervisor_sign_nomination_form(
+        project_id,
+        external_examiner_nomination_doc_type(),
+        "amended external examiner nomination",
+        "MBA Admin can now forward the assessor nomination to HDC.",
+    )
+
+
+@mba_bp.route("/projects/<int:project_id>/supervisor-sign-additional-external-examiner-nomination", methods=["GET", "POST"])
+@login_required
+def supervisor_sign_additional_external_examiner_nomination(project_id):
+    return _supervisor_sign_nomination_form(
+        project_id,
+        additional_external_examiner_nomination_doc_type(),
+        "additional assessor nomination",
+        "HDC must sign the additional nomination before MBA Admin can invite the third assessor.",
     )
 
 
@@ -1978,7 +2966,7 @@ def supervisor_fill_form(project_id):
         ),
         "student_number": student_profile.student_number if student_profile else "",
         "student_address": student_profile.address if student_profile else "",
-        "student_postal_code": "",
+        "student_postal_code": getattr(student_profile, "postal_code", "") if student_profile else "",
         "degree": (
             (project.qualification or "").strip()
             or (student_profile.degree if student_profile else "")
@@ -1989,8 +2977,8 @@ def supervisor_fill_form(project_id):
         "co_supervisor_department": "",
         "co_supervisor_surname": "",
         "co_supervisor_initials": "",
-        "student_signing_location": "",
-        "supervisor_signing_location": "",
+        "student_signing_location": getattr(student_profile, "default_signing_location", "") if student_profile else "",
+        "supervisor_signing_location": getattr(profile, "default_signing_location", "") if profile else "",
         "co_supervisor_signing_location": "",
         "student_signature_name": (
             f"{student_profile.name or ''} {student_profile.surname or ''}".strip()
@@ -2012,6 +3000,13 @@ def supervisor_fill_form(project_id):
             else ""
         ),
     }
+    _apply_payload_values(
+        prefill,
+        _latest_scholar_payload(prefixes=(), form_types=("supervisor_agreement",)),
+        SCHOLAR_REUSABLE_FORM_FIELDS,
+        overwrite_placeholders=True,
+    )
+    _apply_payload_values(prefill, _profile_defaults(profile), SCHOLAR_REUSABLE_FORM_FIELDS, overwrite=True)
     prefill.update(saved_payload)
     apply_saved_signature_snapshot(prefill, ("supervisor_signature",), current_user)
 
@@ -2056,6 +3051,8 @@ def supervisor_fill_form(project_id):
                 payload["student_agreement_declaration"] = saved_payload.get("student_agreement_declaration") or "1"
                 copy_signature_snapshots(payload, saved_payload, ("student_signature",))
             refresh_saved_signature_snapshot(payload, ("supervisor_signature",), current_user)
+            payload["_submitted_by"] = str(current_user.id)
+            _learn_scholar_profile_defaults_from_payload(payload)
             supervisor_form = _save_form_as_document(project, "supervisor_agreement", "supervisor_agreement", payload)
             supervisor_form.supervisor_signed = True
 
@@ -2078,6 +3075,7 @@ def supervisor_fill_form(project_id):
                 project.comments,
                 f"Supervisor agreement submitted and invitation accepted by {current_user.email}",
             )
+            _maybe_notify_supervisor_agreement_released(project)
             db.session.commit()
         except ValueError as exc:
             db.session.rollback()
@@ -2100,23 +3098,6 @@ def supervisor_fill_form(project_id):
 
         # Notify admin
         _notify_admins_form_submitted(project, "supervisor_agreement")
-
-        # Notify student
-        if project.student and project.student.email:
-            from ..mail import send_email
-
-            try:
-                send_email(
-                    project.student.email,
-                    "Supervisor Accepted: JBS5 Under Review",
-                    (
-                        f"Your supervisor has accepted the invitation and submitted the "
-                        f"supervisor agreement for '{project.project_title}'. "
-                        "They will now review JBS5 and either request title changes or sign it."
-                    ),
-                )
-            except Exception:
-                pass
 
         flash("Supervisor Agreement submitted. Invitation accepted. You can now review JBS5.", "success")
         return redirect(url_for("mba.scholar_dashboard"))
@@ -2158,6 +3139,22 @@ def _sync_scholar_profile_from_assessor_payload(payload, cv_uploaded=False):
     profile.surname = surname or profile.surname
     profile.title = (payload.get("assessor_title") or "").strip() or profile.title
     profile.contact = (payload.get("assessor_contact") or "").strip() or profile.contact
+    profile.staff_number = (
+        (payload.get("staff_number") or "").strip()
+        or (payload.get("employee_number") or "").strip()
+        or profile.staff_number
+    )
+    profile.id_passport_number = (payload.get("identity_passport_number") or "").strip() or profile.id_passport_number
+    profile.postal_code = (
+        (payload.get("postal_code") or "").strip()
+        or (payload.get("home_postal_code") or "").strip()
+        or profile.postal_code
+    )
+    profile.default_signing_location = (
+        (payload.get("supervisor_signing_location") or "").strip()
+        or (payload.get("signing_location") or "").strip()
+        or profile.default_signing_location
+    )
     profile.department = (
         (payload.get("assessor_department") or "").strip()
         or (payload.get("department_unit_centre") or "").strip()
@@ -2208,6 +3205,49 @@ def _sync_scholar_profile_from_assessor_payload(payload, cv_uploaded=False):
     current_user.has_profile = True
     if cv_uploaded:
         current_user.has_cv = True
+    _update_profile_defaults(profile, payload, SCHOLAR_REUSABLE_FORM_FIELDS)
+    db.session.add(profile)
+
+
+def _learn_student_profile_defaults_from_payload(payload):
+    if not getattr(current_user, "id", None):
+        return None
+    profile = current_user.student_profile or MbaStudentProfile(user_id=current_user.id)
+    if not current_user.student_profile:
+        db.session.add(profile)
+    profile.id_passport_number = (payload.get("student_id_number") or "").strip() or profile.id_passport_number
+    profile.postal_code = (
+        (payload.get("student_postal_code") or "").strip()
+        or (payload.get("postal_code") or "").strip()
+        or profile.postal_code
+    )
+    profile.default_signing_location = (
+        (payload.get("signing_location") or "").strip()
+        or (payload.get("student_signing_location") or "").strip()
+        or profile.default_signing_location
+    )
+    if payload.get("student_address"):
+        profile.address = (payload.get("student_address") or "").strip() or profile.address
+    _update_profile_defaults(profile, payload, STUDENT_REUSABLE_FORM_FIELDS)
+    db.session.add(profile)
+
+
+def _learn_scholar_profile_defaults_from_payload(payload):
+    profile = current_user.scholar_profile or MbaScholarProfile(user_id=current_user.id)
+    if not current_user.scholar_profile:
+        db.session.add(profile)
+    profile.staff_number = (
+        (payload.get("staff_number") or "").strip()
+        or (payload.get("employee_number") or "").strip()
+        or (payload.get("supervisor_staff_number") or "").strip()
+        or profile.staff_number
+    )
+    profile.default_signing_location = (
+        (payload.get("supervisor_signing_location") or "").strip()
+        or (payload.get("co_supervisor_signing_location") or "").strip()
+        or profile.default_signing_location
+    )
+    _update_profile_defaults(profile, payload, SCHOLAR_REUSABLE_FORM_FIELDS)
     db.session.add(profile)
 
 
@@ -2255,12 +3295,13 @@ def _assessor_acceptance_prefill(project, slot):
         "assessor_surname": last_name,
         "assessor_first_names": first_name,
         "assessor_title": profile.title if profile else "",
-        "employee_number": "",
+        "staff_number": getattr(profile, "staff_number", "") if profile else "",
+        "employee_number": getattr(profile, "staff_number", "") if profile else "",
         "new_employee": "Yes",
         "employed_at_uj": "Yes" if "university of johannesburg" in (affiliation or "").lower() or "uj" in (affiliation or "").lower() else "No",
         "uj_department_division": department,
         "appointed_as": "External Assessor",
-        "identity_passport_number": "",
+        "identity_passport_number": getattr(profile, "id_passport_number", "") if profile else "",
         "date_of_birth": "",
         "work_visa_number": "",
         "gender": "",
@@ -2273,8 +3314,8 @@ def _assessor_acceptance_prefill(project, slot):
         "care_of_intermediary": "None",
         "home_address": profile_address or "",
         "postal_address": profile_address or "",
-        "home_postal_code": "",
-        "postal_code": "",
+        "home_postal_code": getattr(profile, "postal_code", "") if profile else "",
+        "postal_code": getattr(profile, "postal_code", "") if profile else "",
         "home_tel": "",
         "assessor_contact": profile.contact if profile else "",
         "assessor_email": current_user.email or "",
@@ -2303,14 +3344,14 @@ def _assessor_acceptance_prefill(project, slot):
         "highest_qualification": qualification,
         "qualification_awarded_date": "",
         "qualification_status": "Completed" if qualification else "",
-        "bank_changed": "No",
-        "bank_account_holder": full_name or current_user.email,
+        "bank_changed": "",
+        "bank_account_holder": "",
         "bank_name": "",
         "bank_branch_name": "",
         "bank_branch_code": "",
         "bank_account_number": "",
         "bank_account_type": "",
-        "bank_account_ownership": "Own",
+        "bank_account_ownership": "",
         "employment_group": "Academic",
         "appointment_category": project_qualification,
         "appointment_start_date": today,
@@ -2381,6 +3422,13 @@ def _assessor_acceptance_prefill(project, slot):
         "assessor_profile_date": today,
         "assessor_signature_name": full_name or current_user.email,
     }
+    _apply_payload_values(
+        prefill,
+        _latest_scholar_payload(prefixes=("assessor_temp_appointment_", "assessor_temp_claim_")),
+        SCHOLAR_REUSABLE_FORM_FIELDS,
+        overwrite_placeholders=True,
+    )
+    _apply_payload_values(prefill, _profile_defaults(profile), SCHOLAR_REUSABLE_FORM_FIELDS, overwrite=True)
     for saved_form_type in [
         assessor_temp_appointment_doc_type(slot),
         assessor_temp_claim_doc_type(slot),
@@ -2391,7 +3439,7 @@ def _assessor_acceptance_prefill(project, slot):
             and isinstance(saved_form.payload, dict)
             and str(saved_form.payload.get("_submitted_by") or "") == str(current_user.id)
         ):
-            prefill.update(saved_form.payload)
+            prefill.update(strip_sensitive_payload_fields(saved_form.payload))
     current_cv_doc = next(
         (
             doc for doc in project.documents
@@ -2500,12 +3548,14 @@ def assessor_acceptance_form(project_id, slot):
             "assessor_email": "Email address is required.",
             "assessor_contact": "Cell / mobile number is required.",
             "highest_qualification": "Highest qualification is required.",
+            "bank_changed": "Choose whether your banking details have changed.",
             "bank_account_holder": "Account holder name is required.",
             "bank_name": "Bank name is required.",
             "bank_branch_name": "Branch name is required.",
             "bank_branch_code": "Branch code is required.",
             "bank_account_number": "Account number is required.",
             "bank_account_type": "Account type is required.",
+            "bank_account_ownership": "Account ownership is required.",
             "appointment_category": "Appointment category is required.",
             "appointment_start_date": "Appointment start date is required.",
             "appointment_end_date": "Appointment end date is required.",
@@ -2700,10 +3750,12 @@ def assessor_acceptance_form(project_id, slot):
         }
         claim_payload["_submitted_by"] = str(current_user.id)
         refresh_saved_signature_snapshot(claim_payload, ("claim_signature_name",), current_user)
+        stored_appointment_payload = encrypt_sensitive_payload_fields(appointment_payload)
+        stored_claim_payload = encrypt_sensitive_payload_fields(claim_payload)
         status_before_submit = getattr(project, f"{slot}_invitation_status")
         try:
-            _save_form_as_document(project, assessor_temp_appointment_doc_type(slot), assessor_temp_appointment_doc_type(slot), appointment_payload)
-            _save_form_as_document(project, assessor_temp_claim_doc_type(slot), assessor_temp_claim_doc_type(slot), claim_payload)
+            _save_form_as_document(project, assessor_temp_appointment_doc_type(slot), assessor_temp_appointment_doc_type(slot), stored_appointment_payload)
+            _save_form_as_document(project, assessor_temp_claim_doc_type(slot), assessor_temp_claim_doc_type(slot), stored_claim_payload)
             if uploaded_cv and uploaded_cv.filename:
                 _store_project_document(project, assessor_cv_doc_type(slot), uploaded_cv)
             if uploaded_highest_qualification and uploaded_highest_qualification.filename:
@@ -2867,7 +3919,10 @@ def assessor_grade_form(project_id, slot):
                 or str(saved_form.payload.get("_submitted_by") or "") == str(current_user.id)
             )
         ):
-            prefill.update(saved_form.payload)
+            if saved_form_type.startswith(("assessor_temp_appointment_", "assessor_temp_claim_")):
+                prefill.update(strip_sensitive_payload_fields(saved_form.payload))
+            else:
+                prefill.update(saved_form.payload)
     apply_saved_signature_snapshot(prefill, ("assessor_signature_name",), current_user)
 
     template = "mba/form_fill_assessor_grade.html"

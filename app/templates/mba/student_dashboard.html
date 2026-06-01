@@ -183,9 +183,17 @@
               {% set supervisor_docs = project.documents | selectattr('doc_type', 'equalto', 'supervisor_agreement') | list %}
               {% set student_supervisor_docs = supervisor_docs | selectattr('uploaded_by_id', 'equalto', current_user.id) | list %}
               {% set student_supervisor_submitted = student_supervisor_docs|length > 0 %}
+              {% set jbs10_form = project.forms | selectattr('form_type', 'equalto', 'jbs10') | list | first %}
+              {% set jbs10_signed_by_supervisor = jbs10_supervisor_signed(project) if jbs10_supervisor_signed is defined else (jbs10_form and jbs10_form.supervisor_signed) %}
+              {% set jbs10_return_pending = jbs10_supervisor_return_pending(project) if jbs10_supervisor_return_pending is defined else false %}
               {% set jbs10_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs10') | list %}
+              {% set intent_form = project.forms | selectattr('form_type', 'equalto', 'intent_to_submit') | list | first %}
               {% set intent_docs = project.documents | selectattr('doc_type', 'equalto', 'intent_to_submit') | list %}
+              {% set intent_signed_by_supervisor = intent_to_submit_supervisor_signed(project) if intent_to_submit_supervisor_signed is defined else (intent_form and intent_form.supervisor_signed) %}
+              {% set jbs1_form = project.forms | selectattr('form_type', 'equalto', 'jbs1_declaration') | list | first %}
               {% set jbs1_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
+              {% set jbs1_supervisor_signed_value = jbs1_supervisor_signed(project) if jbs1_supervisor_signed is defined else (jbs1_form and jbs1_form.supervisor_signed) %}
+              {% set jbs1_program_manager_signed_value = jbs1_program_manager_signed(project) if jbs1_program_manager_signed is defined else (jbs1_form and jbs1_form.payload and jbs1_form.payload.get('office_program_manager') and jbs1_form.payload.get('office_program_manager_date')) %}
               {% set plagiarism_docs = project.documents | selectattr('doc_type', 'equalto', 'plagiarism_declaration') | list %}
               {% set affidavit_form = project.forms | selectattr('form_type', 'equalto', 'affidavit') | list | first %}
               {% set affidavit_docs = project.documents | selectattr('doc_type', 'equalto', 'affidavit_stamped') | list %}
@@ -197,7 +205,7 @@
               {% set has_ethics_support_docs = ethics_certificate_docs or ethics_exemption_docs %}
               {% set jbs5_hdc_approved = project.jbs5_hdc_approved_at %}
               {% set support_upload_count = (1 if global_document_docs else 0) + (1 if combined_turnitin_ai_report_docs else 0) %}
-              {% set support_forms_ready = jbs1_docs and plagiarism_docs and affidavit_docs %}
+              {% set support_forms_ready = jbs1_program_manager_signed_value and plagiarism_docs and affidavit_docs %}
               <div class="form-download-row">
                 <div class="form-download-info">
                   <strong>Supervisor Agreement Form</strong>
@@ -268,7 +276,7 @@
                 {% if has_ethics_support_docs and jbs5_hdc_approved %}
                   <hr style="margin:1.5rem 0;">
                   <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
-                    Ethics proof is on file. Submit JBS10 and Intent to Submit here. MBA Admin will use them to nominate two assessors.
+                    Ethics proof is on file. Submit JBS10 and Intent to Submit here. Both forms will go to your supervisor for signature before MBA Admin can continue assessor nomination.
                   </p>
                   {% for doc_key, doc_info in [('jbs10', 'JBS10 Project Submission Form'), ('intent_to_submit', 'Intent to Submit')] %}
                     <div class="form-download-row">
@@ -287,15 +295,39 @@
                           {% endfor %}
                         </div>
                       {% endif %}
-                      <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
+                      {% if doc_key == 'jbs10' and jbs10_signed_by_supervisor %}
+                        <span class="status-pill status-pill--accepted" style="display:inline-flex;margin-top:0.5rem;">Signed by supervisor</span>
+                      {% elif doc_key == 'intent_to_submit' and intent_signed_by_supervisor %}
+                        <span class="status-pill status-pill--accepted" style="display:inline-flex;margin-top:0.5rem;">Signed by supervisor</span>
+                      {% else %}
+                        <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">
+                          {% if doc_key == 'jbs10' and jbs10_return_pending %}
+                            Amend and Resubmit
+                          {% elif matching_docs %}
+                            Edit Form
+                          {% else %}
+                            Fill Form
+                          {% endif %}
+                        </a>
+                      {% endif %}
+                      {% if doc_key == 'jbs10' and jbs10_docs and not jbs10_signed_by_supervisor and not jbs10_return_pending %}
+                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Submitted to supervisor for review.</span>
+                      {% elif doc_key == 'jbs10' and jbs10_return_pending %}
+                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Supervisor returned JBS10 for amendment.</span>
+                        {% if jbs10_form and jbs10_form.payload and jbs10_form.payload.get('_supervisor_return_request') %}
+                          <span class="muted" style="display:block;margin-top:0.25rem;font-size:0.84rem;">{{ jbs10_form.payload.get('_supervisor_return_request') }}</span>
+                        {% endif %}
+                      {% elif doc_key == 'intent_to_submit' and intent_docs and not intent_signed_by_supervisor %}
+                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Submitted to supervisor for signature.</span>
+                      {% endif %}
                     </div>
                   {% endfor %}
                 {% endif %}
 
-                {% if jbs5_hdc_approved and jbs10_docs and intent_docs %}
+                {% if jbs5_hdc_approved and jbs10_signed_by_supervisor and intent_signed_by_supervisor %}
                   <hr style="margin:1.5rem 0;">
                   <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
-                    JBS10 and Intent to Submit are in. Submit the Capstone Manuscript through Moodle. On this system, upload only supporting documents, including the Global Document and combined Turnitin-AI report. MBA Admin will upload the Capstone Manuscript here after downloading it from Moodle.
+                    JBS10 and Intent to Submit are signed by your supervisor. Submit the Capstone Manuscript through Moodle. On this system, upload only supporting documents, including the Global Document and combined Turnitin-AI report. MBA Admin will upload the Capstone Manuscript here after downloading it from Moodle.
                   </p>
                   {% if project.dissertation_moodle_request_sent_at and not dissertation_docs %}
                     <div style="margin:0.75rem 0 1rem;padding:0.9rem 1rem;border-left:4px solid var(--accent,#f97316);background:#fff7ed;border-radius:8px;color:var(--text,#1f2937);font-size:0.9rem;line-height:1.55;">
@@ -324,7 +356,16 @@
                           {% endfor %}
                         </div>
                       {% endif %}
-                      <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
+                      {% if doc_key == 'jbs1_declaration' and jbs1_program_manager_signed_value %}
+                        <span class="status-pill status-pill--accepted" style="display:inline-flex;margin-top:0.5rem;">Signed by supervisor and Admin</span>
+                      {% elif doc_key == 'jbs1_declaration' and jbs1_supervisor_signed_value %}
+                        <span class="status-pill status-pill--awaiting_admin" style="display:inline-flex;margin-top:0.5rem;">Awaiting Admin signature</span>
+                      {% else %}
+                        <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
+                      {% endif %}
+                      {% if doc_key == 'jbs1_declaration' and matching_docs and not jbs1_supervisor_signed_value %}
+                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Submitted to supervisor for signature.</span>
+                      {% endif %}
                     </div>
                   {% endfor %}
 

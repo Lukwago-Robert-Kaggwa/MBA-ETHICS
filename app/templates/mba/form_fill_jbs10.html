@@ -1,22 +1,33 @@
 {% extends "base.html" %}
-{% block title %}{% if hdc_signature_mode|default(false) %}HDC Review JBS10{% else %}JBS 10 - Title / Supervisor / Assessor Registration{% endif %}{% endblock %}
+{% block title %}{% if hdc_signature_mode|default(false) %}HDC Review JBS10{% elif supervisor_signature_mode|default(false) %}Sign JBS10{% else %}JBS 10 - Title / Supervisor / Assessor Registration{% endif %}{% endblock %}
 {% block app_name %}MBA{% endblock %}
-{% block page_heading %}{% if hdc_signature_mode|default(false) %}HDC Review JBS10{% else %}JBS 10 - Title / Supervisor / Assessor Registration{% endif %}{% endblock %}
+{% block page_heading %}{% if hdc_signature_mode|default(false) %}HDC Review JBS10{% elif supervisor_signature_mode|default(false) %}Sign JBS10{% else %}JBS 10 - Title / Supervisor / Assessor Registration{% endif %}{% endblock %}
 {% block page_subheading %}{{ project.project_title }}{% endblock %}
 
 {% block body %}
+{% set supervisor_signature_mode = supervisor_signature_mode|default(false) %}
 {% set hdc_signature_mode = hdc_signature_mode|default(false) %}
-{% set content_locked = hdc_signature_mode %}
+{% set student_fill_mode = student_fill_mode|default(false) %}
+{% set content_locked = supervisor_signature_mode or hdc_signature_mode %}
+{% macro signature_field(name, value, editable=false, required=false) -%}
+  <div class="mba-doc-signature-field">
+    {% if prefill.get(name ~ '_image') %}
+      <img class="mba-doc-signature-image" src="{{ prefill.get(name ~ '_image') }}" alt="Saved signature">
+    {% endif %}
+    <input class="mba-doc-input" name="{{ name }}" value="{{ value or '' }}" {% if not editable %}readonly{% endif %} {% if required %}required{% endif %}>
+  </div>
+{%- endmacro %}
 {% set current_study_type = prefill.get('study_type', 'Capstone Project') %}
 {% set current_study_type_key = current_study_type|lower %}
 {% set current_4ir = prefill.get('is_4ir_research', 'No')|lower %}
 {% set current_staff = prefill.get('student_is_staff_member', 'No')|lower %}
-{% set assessor_readonly = hdc_signature_mode %}
+{% set assessor_readonly = supervisor_signature_mode or hdc_signature_mode %}
+{% set hide_signatures_for_student = student_fill_mode and not supervisor_signature_mode and not hdc_signature_mode %}
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel">
     <div class="mba-doc-paper mba-doc-paper--jbs10 jbs10-doc">
-      <form action="{% if hdc_signature_mode %}{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs10') }}{% else %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs10') }}{% endif %}" method="post" class="mba-doc-form jbs10-doc-form">
+      <form action="{% if hdc_signature_mode %}{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs10') }}{% elif supervisor_signature_mode %}{{ url_for('mba.supervisor_sign_jbs10', project_id=project.id) }}{% else %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs10') }}{% endif %}" method="post" class="mba-doc-form jbs10-doc-form">
         <div class="jbs10-doc-header" aria-label="JBS10 document heading">
           <img class="mba-doc-logo jbs10-doc-logo" src="{{ url_for('static', filename='img/jbs10_logo.png') }}" alt="University of Johannesburg logo">
           <div class="jbs10-doc-meta">
@@ -242,15 +253,15 @@
           </colgroup>
           <tr>
             <td class="mba-doc-label">Signature: Supervisor</td>
-            <td><input class="mba-doc-input" name="supervisor_signature" value="{{ prefill.get('supervisor_signature', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td>{{ signature_field('supervisor_signature', '' if hide_signatures_for_student else prefill.get('supervisor_signature', ''), supervisor_signature_mode, supervisor_signature_mode) }}</td>
             <td class="mba-doc-label">Date</td>
-            <td><input class="mba-doc-input" type="date" name="supervisor_signature_date" value="{{ prefill.get('supervisor_signature_date', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" type="date" name="supervisor_signature_date" value="{{ '' if hide_signatures_for_student else prefill.get('supervisor_signature_date', '') }}" {% if not supervisor_signature_mode %}readonly{% endif %} {% if supervisor_signature_mode %}required{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Signature: Co-Supervisor</td>
-            <td><input class="mba-doc-input" name="co_supervisor_signature" value="{{ prefill.get('co_supervisor_signature', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" name="co_supervisor_signature" value="{{ '' if hide_signatures_for_student else prefill.get('co_supervisor_signature', '') }}" readonly></td>
             <td class="mba-doc-label">Date</td>
-            <td><input class="mba-doc-input" type="date" name="co_supervisor_signature_date" value="{{ prefill.get('co_supervisor_signature_date', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" type="date" name="co_supervisor_signature_date" value="{{ '' if hide_signatures_for_student else prefill.get('co_supervisor_signature_date', '') }}" readonly></td>
           </tr>
         </table>
 
@@ -263,9 +274,9 @@
           </colgroup>
           <tr>
             <td class="mba-doc-label">Signature: Head of Department</td>
-            <td><input class="mba-doc-input" name="head_of_department_signature" value="{{ prefill.get('head_of_department_signature', '') }}" {% if content_locked and not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>
+            <td>{{ signature_field('head_of_department_signature', prefill.get('head_of_department_signature', ''), hdc_signature_mode, hdc_signature_mode) }}</td>
             <td class="mba-doc-label">Date</td>
-            <td><input class="mba-doc-input" type="date" name="head_of_department_signature_date" value="{{ prefill.get('head_of_department_signature_date', '') }}" {% if content_locked and not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>
+            <td><input class="mba-doc-input" type="date" name="head_of_department_signature_date" value="{{ prefill.get('head_of_department_signature_date', '') }}" {% if not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>
           </tr>
         </table>
 
@@ -278,7 +289,7 @@
           </colgroup>
           <tr>
             <td class="mba-doc-label">Signature: JBS HDC</td>
-            <td><input class="mba-doc-input" name="jbs_hdc_signature" value="{{ prefill.get('jbs_hdc_signature', '') }}" {% if not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>
+            <td>{{ signature_field('jbs_hdc_signature', prefill.get('jbs_hdc_signature', ''), hdc_signature_mode, hdc_signature_mode) }}</td>
             <td class="mba-doc-label">Date</td>
             <td><input class="mba-doc-input" type="date" name="jbs_hdc_signature_date" value="{{ prefill.get('jbs_hdc_signature_date', '') }}" {% if not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>
           </tr>
@@ -288,22 +299,33 @@
           <div class="mba-doc-muted-box" style="border:1.5px solid #92400e;background:#fffbeb;margin-top:1rem;">
             <p class="mba-doc-note" style="font-weight:700;color:#78350f;margin-bottom:8px;">HDC review</p>
             <p class="mba-doc-note" style="color:#78350f;">
-              Review the opened JBS10 form and the assessor nomination documents. Complete the Head of Department and JBS HDC signature fields to finalize the recorded assessor decisions.
+              Review the opened JBS10 form and complete the Head of Department and JBS HDC signature fields. Return to the HDC dashboard after signing this document to complete the overall nomination review.
             </p>
           </div>
-          <label>HDC feedback
-            <textarea class="mba-doc-textarea" name="comment" rows="3" placeholder="Required when returning without signature; optional when signing"></textarea>
+        {% endif %}
+
+        {% if supervisor_signature_mode %}
+          <div class="mba-doc-muted-box" style="border:1.5px solid #b45309;background:#fff7ed;margin-top:1rem;">
+            <p class="mba-doc-note" style="font-weight:700;color:#92400e;margin-bottom:8px;">Supervisor review</p>
+            <p class="mba-doc-note" style="color:#92400e;">
+              Review the full JBS10 form. Sign it only when the details are correct. If amendments are needed, return the form to the student with clear instructions.
+            </p>
+          </div>
+          <label>Amendments required
+            <textarea class="mba-doc-textarea" name="supervisor_return_comment" rows="3" placeholder="Required when returning JBS10 to the student">{{ prefill.get('_supervisor_return_request', '') }}</textarea>
           </label>
         {% endif %}
 
         <div class="mba-doc-actions">
           {% if hdc_signature_mode %}
-            <button class="primary-button" type="submit" name="decision" value="approve">Sign JBS10 and Finish Review</button>
-            <button class="secondary-button" type="submit" name="decision" value="decline" formnovalidate>Return Pending Nominations</button>
+            <button class="primary-button" type="submit">Sign JBS10</button>
+          {% elif supervisor_signature_mode %}
+            <button class="primary-button" type="submit" name="action" value="sign">Sign JBS10</button>
+            <button class="secondary-button" type="submit" name="action" value="return" formnovalidate>Return to Student</button>
           {% else %}
-            <button class="primary-button" type="submit">Submit JBS 10</button>
+            <button class="primary-button" type="submit">Submit JBS 10 for Supervisor Review</button>
           {% endif %}
-          <a href="{% if hdc_signature_mode %}{{ url_for('mba.hdc_dashboard') }}{% else %}{{ url_for('mba.student_dashboard') }}{% endif %}" class="secondary-button">Cancel</a>
+          <a href="{% if hdc_signature_mode %}{{ url_for('mba.hdc_dashboard') }}{% elif supervisor_signature_mode %}{{ url_for('mba.scholar_dashboard') }}{% else %}{{ url_for('mba.student_dashboard') }}{% endif %}" class="secondary-button">Cancel</a>
         </div>
       </form>
     </div>
@@ -313,7 +335,24 @@
 {% if hdc_signature_mode %}
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      const editable = new Set(['head_of_department_signature', 'head_of_department_signature_date', 'jbs_hdc_signature', 'jbs_hdc_signature_date', 'comment', 'decision']);
+      const editable = new Set(['head_of_department_signature', 'head_of_department_signature_date', 'jbs_hdc_signature', 'jbs_hdc_signature_date']);
+      document.querySelectorAll('.mba-doc-form input, .mba-doc-form textarea, .mba-doc-form select').forEach(function (field) {
+        if (editable.has(field.name) || field.type === 'hidden' || field.type === 'submit') {
+          return;
+        }
+        if (field.type === 'checkbox' || field.type === 'radio' || field.tagName === 'SELECT') {
+          field.disabled = true;
+        } else {
+          field.readOnly = true;
+        }
+      });
+    });
+  </script>
+{% endif %}
+{% if supervisor_signature_mode %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const editable = new Set(['supervisor_signature', 'supervisor_signature_date', 'supervisor_return_comment', 'action']);
       document.querySelectorAll('.mba-doc-form input, .mba-doc-form textarea, .mba-doc-form select').forEach(function (field) {
         if (editable.has(field.name) || field.type === 'hidden' || field.type === 'submit') {
           return;

@@ -71,6 +71,46 @@ class MbaUser(UserAuthMixin, db.Model):
         }
 
 
+class MbaUserSignature(db.Model):
+    __tablename__ = "mba_user_signatures"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=False, index=True)
+    user = db.relationship(
+        "MbaUser",
+        backref=db.backref("signature_records", order_by=lambda: MbaUserSignature.created_at.desc()),
+    )
+    file_data = deferred(db.Column(db.LargeBinary, nullable=False))
+    mime_type = db.Column(db.String(120), nullable=False)
+    file_size = db.Column(db.Integer, nullable=False)
+    sha256 = db.Column(db.String(64), nullable=False, index=True)
+    source = db.Column(db.String(40), nullable=True)
+    signature_type = db.Column(db.String(40), nullable=False, default="primary", index=True)
+    printed_name = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MbaDocumentTemplate(db.Model):
+    __tablename__ = "mba_document_templates"
+    __table_args__ = (UniqueConstraint("template_key", "version", name="uq_mba_document_template_key_version"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    template_key = db.Column(db.String(160), nullable=False, index=True)
+    version = db.Column(db.Integer, nullable=False, default=1)
+    filename = db.Column(db.String(255), nullable=False)
+    file_data = deferred(db.Column(db.LargeBinary, nullable=False))
+    mime_type = db.Column(db.String(120), nullable=False)
+    file_size = db.Column(db.Integer, nullable=False)
+    sha256 = db.Column(db.String(64), nullable=False, index=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=True)
+    uploaded_by = db.relationship("MbaUser", foreign_keys=[uploaded_by_id])
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    notes = db.Column(db.Text, nullable=True)
+
+
 class EthicsUser(UserAuthMixin, db.Model):
     __tablename__ = "ethcis_users"
     __table_args__ = (
@@ -114,6 +154,10 @@ class MbaStudentProfile(db.Model):
     block_id = db.Column(db.String(120))
     degree = db.Column(db.String(80), nullable=False, default="MBA")
     address = db.Column(db.Text)
+    postal_code = db.Column(db.String(20), nullable=True)
+    id_passport_number = db.Column(db.String(80), nullable=True)
+    default_signing_location = db.Column(db.String(255), nullable=True)
+    form_defaults = db.Column(db.JSON, nullable=True, default=dict)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
@@ -131,6 +175,10 @@ class MbaScholarProfile(db.Model):
     department = db.Column(db.String(160))
     position = db.Column(db.String(160))
     contact = db.Column(db.String(80))
+    staff_number = db.Column(db.String(80), nullable=True)
+    id_passport_number = db.Column(db.String(80), nullable=True)
+    postal_code = db.Column(db.String(20), nullable=True)
+    default_signing_location = db.Column(db.String(255), nullable=True)
     students = db.Column(db.Integer, nullable=False, default=0)
     qualification = db.Column(db.String(180))
     affiliation = db.Column(db.String(180))
@@ -145,6 +193,7 @@ class MbaScholarProfile(db.Model):
     scholarly_profile_links = db.Column(db.Text)
     approved_before = db.Column(db.Boolean, nullable=False, default=False)
     international_assessor = db.Column(db.Boolean, nullable=False, default=False)
+    form_defaults = db.Column(db.JSON, nullable=True, default=dict)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 

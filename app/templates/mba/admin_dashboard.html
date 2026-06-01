@@ -285,8 +285,13 @@
       or (student_supervisor_agreement_docs|length > 0) %}
       {% set student_jbs10_docs = project_doc_list | selectattr('doc_type', 'equalto', 'jbs10') |
       selectattr('uploaded_by_id', 'equalto', project.student_id) | list %}
+      {% set jbs10_form = project.forms | selectattr('form_type', 'equalto', 'jbs10') | list | first %}
+      {% set jbs10_signed_by_supervisor = jbs10_supervisor_signed(project) if jbs10_supervisor_signed is defined else (jbs10_form and jbs10_form.supervisor_signed) %}
+      {% set jbs10_return_pending = jbs10_supervisor_return_pending(project) if jbs10_supervisor_return_pending is defined else false %}
       {% set student_intent_docs = project_doc_list | selectattr('doc_type', 'equalto', 'intent_to_submit') |
       selectattr('uploaded_by_id', 'equalto', project.student_id) | list %}
+      {% set intent_form = project.forms | selectattr('form_type', 'equalto', 'intent_to_submit') | list | first %}
+      {% set intent_signed_by_supervisor = intent_to_submit_supervisor_signed(project) if intent_to_submit_supervisor_signed is defined else (intent_form and intent_form.supervisor_signed) %}
       {% set external_nomination_docs = project_doc_list | selectattr('doc_type', 'equalto',
       external_examiner_nomination_doc_type()) | list %}
       {% set external_nomination_doc = external_nomination_docs[0] if external_nomination_docs else none %}
@@ -296,7 +301,7 @@
       {% set workflow_already_beyond_nomination = project.project_status in ['results_submitted_to_hdc',
       'results_declined', 'results_approved', 'graduated'] or project.dissertation_released_to_assessors %}
       {% set assessor_hr_stage_complete = assessor_hr_docs_sent or workflow_already_beyond_nomination %}
-      {% set student_assessor_prerequisites_ready = (student_jbs10_docs|length > 0) and (student_intent_docs|length > 0) %}
+      {% set student_assessor_prerequisites_ready = jbs10_signed_by_supervisor and intent_signed_by_supervisor %}
       {% set assessor_prerequisites_complete = (project.jbs5_hdc_approved_at is not none) and student_assessor_prerequisites_ready %}
       {% set can_forward_external_nomination_to_supervisor = primary_assessors_accepted and invitation_state.assessor_packs_complete
       and not external_nomination_signed and not nominations_forwarded_to_hdc and not nominations_approved_by_hdc %}
@@ -307,6 +312,7 @@
       {% set jbs5_pending_hdc = project.project_status == 'jbs5_submitted_to_hdc' %}
       {% set can_forward_jbs5_to_hdc = jbs5_supervisor_signed and not project.jbs5_hdc_approved_at and not
       jbs5_pending_hdc %}
+      {% set can_return_jbs5_to_student = project.project_status in ['admin_submitted', 'supervisor_accepted', 'admin_declined'] and not project.jbs5_hdc_approved_at and not jbs5_pending_hdc and jbs5_form %}
       {% set suggested_supervisor_count = suggestions.ranked_supervisors|length if suggestions and
       suggestions.ranked_supervisors else 0 %}
       {% set can_invite_suggested_supervisors = suggested_supervisor_count >= supervisor_suggestion_limit and not
@@ -350,6 +356,17 @@
       {% else %}
       {% set forward_jbs5_reason = 'JBS5 is not ready to forward yet.' %}
       {% endif %}
+      {% if can_return_jbs5_to_student %}
+      {% set return_jbs5_reason = '' %}
+      {% elif project.jbs5_hdc_approved_at %}
+      {% set return_jbs5_reason = 'JBS5 has already been approved by HDC.' %}
+      {% elif jbs5_pending_hdc %}
+      {% set return_jbs5_reason = 'JBS5 is already with HDC for review.' %}
+      {% elif not jbs5_form %}
+      {% set return_jbs5_reason = 'The student JBS5 form is not available yet.' %}
+      {% else %}
+      {% set return_jbs5_reason = 'JBS5 can only be returned while it is in MBA Admin review.' %}
+      {% endif %}
       {% if can_invite_more_assessors %}
       {% set invite_selected_assessors_reason = '' %}
       {% elif assessor_change_locked %}
@@ -359,9 +376,16 @@
       decline before inviting another.' %}
       {% elif not project.jbs5_hdc_approved_at %}
       {% set invite_selected_assessors_reason = 'HDC must approve JBS5 before assessor invitations can be sent.' %}
-      {% elif not student_assessor_prerequisites_ready %}
-      {% set invite_selected_assessors_reason = 'The student must submit JBS10 and Intent to Submit before assessor
-      invitations can be sent.' %}
+      {% elif not (student_jbs10_docs|length > 0) %}
+      {% set invite_selected_assessors_reason = 'The student must submit JBS10 before assessor invitations can be sent.' %}
+      {% elif jbs10_return_pending %}
+      {% set invite_selected_assessors_reason = 'The supervisor returned JBS10 to the student for amendment.' %}
+      {% elif not jbs10_signed_by_supervisor %}
+      {% set invite_selected_assessors_reason = 'The supervisor must sign JBS10 before assessor invitations can be sent.' %}
+      {% elif not (student_intent_docs|length > 0) %}
+      {% set invite_selected_assessors_reason = 'The student must submit Intent to Submit before assessor invitations can be sent.' %}
+      {% elif not intent_signed_by_supervisor %}
+      {% set invite_selected_assessors_reason = 'The supervisor must sign Intent to Submit before assessor invitations can be sent.' %}
       {% else %}
       {% set invite_selected_assessors_reason = 'The supervisor invitation stage must be confirmed before assessor
       invitations can be sent.' %}
@@ -384,6 +408,10 @@
       {% set nominations_hdc_reason = 'HDC has already approved the nominated assessors.' %}
       {% elif not project.jbs5_hdc_approved_at %}
       {% set nominations_hdc_reason = 'HDC must approve JBS5 before nominations can be forwarded.' %}
+      {% elif not jbs10_signed_by_supervisor %}
+      {% set nominations_hdc_reason = 'The supervisor must sign JBS10 before nominations can be forwarded to HDC.' %}
+      {% elif not intent_signed_by_supervisor %}
+      {% set nominations_hdc_reason = 'The supervisor must sign Intent to Submit before nominations can be forwarded to HDC.' %}
       {% elif hdc_declined_assessor_pending_replacement or hdc_rejection_without_slot_decisions %}
       {% set nominations_hdc_reason = 'Replace the assessor nomination declined by HDC before forwarding nominations
       again.' %}
@@ -490,6 +518,10 @@
       {% set student_dissertation_docs = proj_docs | selectattr('doc_type', 'equalto', 'dissertation') | list %}
       {% set combined_declaration_docs = proj_docs | selectattr('doc_type', 'equalto', 'plagiarism_declaration') | list
       %}
+      {% set jbs1_declaration_form = project.forms | selectattr('form_type', 'equalto', 'jbs1_declaration') | list | first %}
+      {% set jbs1_declaration_docs = proj_docs | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
+      {% set jbs1_supervisor_signed_value = jbs1_supervisor_signed(project) if jbs1_supervisor_signed is defined else (jbs1_declaration_form and jbs1_declaration_form.supervisor_signed) %}
+      {% set jbs1_program_manager_signed_value = jbs1_program_manager_signed(project) if jbs1_program_manager_signed is defined else (jbs1_declaration_form and jbs1_declaration_form.payload and jbs1_declaration_form.payload.get('office_program_manager') and jbs1_declaration_form.payload.get('office_program_manager_date')) %}
       {% set student_dissertation_doc = student_dissertation_docs[0] if student_dissertation_docs else None %}
       {% set can_release_dissertation = student_dissertation_doc and assessor_hr_stage_complete and project.project_status in ['admin_approved',
       'hdc_verified', 'results_submitted_to_hdc', 'results_declined', 'results_approved', 'graduated'] %}
@@ -504,8 +536,20 @@
       {% else %}
       {% set release_dissertation_reason = '' %}
       {% endif %}
-      {% set upload_capstone_reason = '' if combined_declaration_docs else 'The combined plagiarism, Turnitin and AI
-      declaration must be on file before this upload.' %}
+      {% if not jbs1_declaration_docs %}
+      {% set upload_capstone_reason = 'The JBS 1 Declaration must be submitted by the student before this upload.' %}
+      {% elif not jbs1_supervisor_signed_value %}
+      {% set upload_capstone_reason = 'The JBS 1 Declaration must be signed by the supervisor before this upload.' %}
+      {% elif not jbs1_program_manager_signed_value %}
+      {% set upload_capstone_reason = 'The JBS 1 Declaration must be signed by Admin as Program Manager before this upload.' %}
+      {% elif not combined_declaration_docs %}
+      {% set upload_capstone_reason = 'The combined plagiarism, Turnitin and AI declaration must be on file before this upload.' %}
+      {% elif not assessor_hr_stage_complete %}
+      {% set upload_capstone_reason = 'Send the approved assessor temporary appointment and claim forms to HR before this upload.' %}
+      {% else %}
+      {% set upload_capstone_reason = '' %}
+      {% endif %}
+      {% set capstone_upload_prerequisites_ready = jbs1_program_manager_signed_value and combined_declaration_docs and assessor_hr_stage_complete %}
       {% set can_request_moodle_submission = can_request_moodle_manuscript_submission(project) %}
       {% if student_dissertation_doc %}
       {% set moodle_submission_request_reason = 'The Capstone Manuscript has already been uploaded from Moodle.' %}
@@ -514,8 +558,7 @@
       {% elif not project.jbs5_hdc_approved_at %}
       {% set moodle_submission_request_reason = 'HDC must approve JBS5 before the Capstone Manuscript is requested.' %}
       {% elif not student_assessor_prerequisites_ready %}
-      {% set moodle_submission_request_reason = 'JBS10 and Intent to Submit must be on file before requesting the
-      Capstone Manuscript.' %}
+      {% set moodle_submission_request_reason = 'JBS10 and Intent to Submit must be signed by the supervisor before requesting the Capstone Manuscript.' %}
       {% elif not assessor_hr_stage_complete %}
       {% set moodle_submission_request_reason = 'Send the approved assessor temporary appointment and claim forms to HR before requesting the Capstone Manuscript.' %}
       {% else %}
@@ -548,7 +591,15 @@
       {% elif nominations_approved_by_hdc and not assessor_hr_stage_complete %}
       {% set next_step = 'Send Assessor HR Docs' %}
       {% elif project.jbs5_hdc_approved_at and not student_assessor_prerequisites_ready %}
-      {% set next_step = 'Await Student JBS10 and Intent' %}
+      {% if not student_jbs10_docs %}
+      {% set next_step = 'Await Student JBS10' %}
+      {% elif not jbs10_signed_by_supervisor %}
+      {% set next_step = 'Await Supervisor-Signed JBS10' %}
+      {% elif not student_intent_docs %}
+      {% set next_step = 'Await Student Intent' %}
+      {% else %}
+      {% set next_step = 'Await Supervisor-Signed Intent' %}
+      {% endif %}
       {% elif nominations_approved_by_hdc and not project.dissertation_released_to_assessors %}
       {% set next_step = 'Upload Capstone Manuscript' if not student_dissertation_doc else 'Release Manuscript to Assessors' %}
       {% elif project.project_status == 'results_submitted_to_hdc' %}
@@ -574,6 +625,8 @@
       {% set next_step_note = 'The nomination form has been generated. Send or resend it to the supervisor for signature.' %}
       {% elif can_forward_nominations_to_hdc %}
       {% set next_step_note = 'The accepted assessor nominations can now be sent to HDC.' %}
+      {% elif project.jbs5_hdc_approved_at and not student_assessor_prerequisites_ready %}
+      {% set next_step_note = invite_selected_assessors_reason %}
       {% elif nominations_approved_by_hdc and not assessor_hr_stage_complete %}
       {% set next_step_note = 'HDC has approved the assessors. Send the temporary appointment and remuneration/temporary claim forms to HR before moving to the manuscript stage.' %}
       {% elif nominations_approved_by_hdc and not project.dissertation_released_to_assessors %}
@@ -870,7 +923,17 @@
                   <button class="primary-button small-button" name="action" value="forward_jbs5_to_hdc" type="submit" {%
                     if not can_forward_jbs5_to_hdc %}disabled{% endif %}>Send</button>
                   {% endcall %}
+                  {% call button_tooltip(return_jbs5_reason) %}
+                  <button class="secondary-button small-button" name="action" value="return_jbs5_to_student" type="submit" {%
+                    if not can_return_jbs5_to_student %}disabled{% endif %}>Return to Student</button>
+                  {% endcall %}
                 </div>
+                {% if can_return_jbs5_to_student %}
+                <label class="admin-field-group module-verification-request">
+                  <span>Return reason</span>
+                  <textarea name="jbs5_return_comment" rows="2" placeholder="Tell the student what must be amended before resubmission"></textarea>
+                </label>
+                {% endif %}
                 {% endif %}
               </div>
             </section>
@@ -884,8 +947,8 @@
                 </div>
                 <div class="admin-redesign-stage__body admin-redesign-assessors">
                   {% if not student_assessor_prerequisites_ready %}
-                  <span>JBS10: {{ 'Submitted' if student_jbs10_docs else 'Missing' }}</span>
-                  <span>Intent to Submit: {{ 'Submitted' if student_intent_docs else 'Missing' }}</span>
+                  <span>JBS10: {{ 'Supervisor signed' if jbs10_signed_by_supervisor else ('Returned for amendment' if jbs10_return_pending else ('Awaiting supervisor signature' if student_jbs10_docs else 'Missing')) }}</span>
+                  <span>Intent to Submit: {{ 'Supervisor signed' if intent_signed_by_supervisor else ('Awaiting supervisor signature' if student_intent_docs else 'Missing') }}</span>
                   {% else %}
                   <span>Assessor 1: {{ person_name(project.assessor_1, 'Not selected') }}{% if assessor_1_hdc_decision %} ({{ assessor_hdc_decision_alert_label(assessor_1_hdc_decision) }}){% endif %}</span>
                   <span>Assessor 2: {{ person_name(project.assessor_2, 'Not selected') }}{% if assessor_2_hdc_decision %} ({{ assessor_hdc_decision_alert_label(assessor_2_hdc_decision) }}){% endif %}</span>
@@ -1047,12 +1110,13 @@
               <div class="admin-redesign-stage__marker">4</div>
               <div class="admin-redesign-stage__content">
                 <div class="admin-redesign-stage__head">
-                  <h4>HDC Nomination &amp; JBS10</h4>
+                  <h4>HDC Nomination Documents</h4>
                   <span class="admin-redesign-badge">{{ workflow_nomination_status }}</span>
                 </div>
                 <div class="admin-redesign-stage__body admin-redesign-stage__checks">
                   <span>Accepted assessors: {{ accepted_assessor_count }}/2</span>
-                  <span>JBS10: {{ 'Submitted' if student_jbs10_docs else 'Missing' }}</span>
+                  <span>JBS10: {{ 'Supervisor signed' if jbs10_signed_by_supervisor else ('Returned for amendment' if jbs10_return_pending else ('Awaiting supervisor signature' if student_jbs10_docs else 'Missing')) }}</span>
+                  <span>Intent: {{ 'Supervisor signed' if intent_signed_by_supervisor else ('Awaiting supervisor signature' if student_intent_docs else 'Missing') }}</span>
                   <span>Nomination form: {{ 'Supervisor signed' if external_nomination_signed else ('Generated' if external_nomination_doc else 'Pending') }}</span>
                   <span>HR documents: {{ 'Sent' if assessor_hr_docs_sent else ('Complete' if workflow_already_beyond_nomination else ('Ready to send' if nominations_approved_by_hdc else 'Waiting')) }}</span>
                   {% if assessor_hr_docs_sent_to_value %}
@@ -1061,10 +1125,10 @@
                 </div>
                 {% if workflow_nominations_current %}
                 <div class="admin-stage-actions admin-redesign-actions">
-                  {% if nominations_approved_by_hdc and not assessor_hr_stage_complete %}
+                  {% if nominations_approved_by_hdc %}
                     <label class="admin-field-group admin-stage-email-field">
                       <span>HR email</span>
-                      <input type="email" name="assessor_hr_email" placeholder="hr@example.com" class="admin-filter-input">
+                      <input type="email" name="assessor_hr_email" value="{{ assessor_hr_docs_sent_to_value }}" placeholder="hr@example.com" class="admin-filter-input">
                     </label>
                     <button class="primary-button small-button" name="action" value="send_assessor_hr_documents_to_hr" type="submit">Send to HR</button>
                   {% else %}
@@ -1095,25 +1159,31 @@
                 </div>
                 <div class="admin-redesign-stage__body admin-redesign-stage__checks">
                   <span>Moodle request: {{ 'Sent' if project.dissertation_moodle_request_sent_at else 'Not sent' }}</span>
+                  <span>JBS 1: {{ 'Program Manager signed' if jbs1_program_manager_signed_value else ('Awaiting Admin signature' if jbs1_supervisor_signed_value else ('Awaiting supervisor signature' if jbs1_declaration_docs else 'Missing')) }}</span>
                   <span>Manuscript: {{ 'Uploaded' if student_dissertation_doc else 'Missing' }}</span>
                   <span>Assessor access: {{ 'Released' if project.dissertation_released_to_assessors else 'Not released' }}</span>
                 </div>
-                {% if workflow_manuscript_current %}
+                {% if workflow_manuscript_current or (jbs1_supervisor_signed_value and not jbs1_program_manager_signed_value) %}
                 <div class="admin-stage-actions admin-redesign-actions">
+                  {% if jbs1_supervisor_signed_value and not jbs1_program_manager_signed_value %}
+                    <a href="{{ url_for('mba.admin_sign_jbs1_declaration', project_id=project.id) }}" class="primary-button small-button">Sign JBS 1</a>
+                  {% endif %}
                   {% call button_tooltip(moodle_submission_request_reason) %}
                   <button class="secondary-button small-button" name="action"
                     value="request_moodle_manuscript_submission" type="submit" {% if not can_request_moodle_submission
                     %}disabled{% endif %}>Request Moodle</button>
                   {% endcall %}
-                  <label class="admin-stage-file-button {% if not combined_declaration_docs %}is-disabled{% endif %}"
-                    {% if not combined_declaration_docs %}title="{{ upload_capstone_reason }}"{% endif %}>
-                    <span class="secondary-button small-button">Choose PDF</span>
+                  <label class="admin-stage-file-button {% if not capstone_upload_prerequisites_ready %}is-disabled{% endif %}"
+                    {% if not capstone_upload_prerequisites_ready %}title="{{ upload_capstone_reason }}"{% endif %}>
+                    <span class="secondary-button small-button">Choose Manuscript PDF</span>
                     <input type="file" name="capstone_file" accept=".pdf,application/pdf" required
-                      form="{{ capstone_upload_form_id }}" {% if not combined_declaration_docs %}disabled{% endif %}>
+                      form="{{ capstone_upload_form_id }}" data-file-name-target="project-{{ project.id }}-capstone-file-name"
+                      {% if not capstone_upload_prerequisites_ready %}disabled{% endif %}>
                   </label>
+                  <span class="admin-stage-file-name" id="project-{{ project.id }}-capstone-file-name">No file selected</span>
                   {% call button_tooltip(upload_capstone_reason) %}
                   <button class="secondary-button small-button" type="submit" form="{{ capstone_upload_form_id }}" {%
-                    if not combined_declaration_docs %}disabled{% endif %}>Upload</button>
+                    if not capstone_upload_prerequisites_ready %}disabled{% endif %}>Upload</button>
                   {% endcall %}
                   {% call button_tooltip(release_dissertation_reason) %}
                   <button class="primary-button small-button" name="action" value="release_dissertation_to_assessors"
@@ -1584,6 +1654,22 @@
 
   <script src="{{ url_for('static', filename='js/admin_student_number_autocomplete.js') }}"></script>
   <script>
+    document.querySelectorAll('input[type="file"][data-file-name-target]').forEach(function (input) {
+      var target = document.getElementById(input.dataset.fileNameTarget || '');
+      if (!target) {
+        return;
+      }
+
+      function updateFileName() {
+        var fileName = input.files && input.files.length ? input.files[0].name : '';
+        target.textContent = fileName || 'No file selected';
+        target.classList.toggle('has-file', Boolean(fileName));
+      }
+
+      input.addEventListener('change', updateFileName);
+      updateFileName();
+    });
+
     document.querySelectorAll('form.compact-form').forEach(function (form) {
       var assessorSelects = Array.from(form.querySelectorAll('select.assessor-select'));
       var supervisorSelects = Array.from(form.querySelectorAll('select.supervisor-selection-select'));

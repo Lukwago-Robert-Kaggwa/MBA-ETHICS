@@ -1,6 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
 import base64
+import hashlib
 from html.parser import HTMLParser
 from io import BytesIO
 import mimetypes
@@ -17,6 +18,7 @@ from xml.sax.saxutils import escape as xml_escape
 import xml.etree.ElementTree as ET
 import zipfile
 
+from cryptography.fernet import Fernet, InvalidToken
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
@@ -25,6 +27,7 @@ from werkzeug.utils import secure_filename
 from ..extensions import db
 from ..models import (
     MbaDiscipline,
+    MbaDocumentTemplate,
     MbaForm,
     MbaProject,
     MbaProjectDocument,
@@ -32,6 +35,7 @@ from ..models import (
     MbaReminderState,
     MbaRole,
     MbaScholarRole,
+    MbaUserSignature,
     MbaUser,
     ProjectStatus,
 )
@@ -47,6 +51,49 @@ DASHBOARD_PAGE_SIZE_OPTIONS = (5, 10, 20, 50)
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 SIGNATURE_MAX_BYTES = 2 * 1024 * 1024
 SIGNATURE_UPLOAD_EXTENSIONS = {"png", "jpg", "jpeg"}
+USER_SIGNATURE_PRIMARY = "primary"
+USER_SIGNATURE_HEAD_OF_DEPARTMENT = "head_of_department"
+USER_SIGNATURE_EXECUTIVE_DEAN = "executive_dean"
+USER_SIGNATURE_DIRECTOR_OF_SCHOOL = "director_of_school"
+USER_SIGNATURE_TYPES = {
+    USER_SIGNATURE_PRIMARY,
+    USER_SIGNATURE_HEAD_OF_DEPARTMENT,
+    USER_SIGNATURE_EXECUTIVE_DEAN,
+    USER_SIGNATURE_DIRECTOR_OF_SCHOOL,
+}
+USER_SIGNATURE_LABELS = {
+    USER_SIGNATURE_PRIMARY: "Saved signature",
+    USER_SIGNATURE_HEAD_OF_DEPARTMENT: "Head of Department signature",
+    USER_SIGNATURE_EXECUTIVE_DEAN: "Executive Dean signature",
+    USER_SIGNATURE_DIRECTOR_OF_SCHOOL: "Director of School signature",
+}
+SIGNATURE_FIELD_TYPE_MAP = {
+    "head_of_department_signature": USER_SIGNATURE_HEAD_OF_DEPARTMENT,
+    "hod_signature": USER_SIGNATURE_HEAD_OF_DEPARTMENT,
+    "hod_signature_name": USER_SIGNATURE_HEAD_OF_DEPARTMENT,
+    "director_signature": USER_SIGNATURE_DIRECTOR_OF_SCHOOL,
+    "director_signature_name": USER_SIGNATURE_DIRECTOR_OF_SCHOOL,
+    "executive_dean_signature_name": USER_SIGNATURE_EXECUTIVE_DEAN,
+}
+SENSITIVE_FORM_FIELD_NAMES = {
+    "income_tax_number",
+    "bank_changed",
+    "bank_account_holder",
+    "bank_name",
+    "bank_branch_name",
+    "bank_branch_code",
+    "bank_account_number",
+    "bank_account_type",
+    "bank_account_ownership",
+}
+SENSITIVE_DOCUMENT_TYPE_PREFIXES = (
+    "assessor_banking_",
+    "assessor_temp_appointment_",
+    "assessor_temp_claim_",
+)
+ENCRYPTED_PAYLOAD_MARKER = "mba_sensitive_v1"
+ENCRYPTED_DOCUMENT_PREFIX = b"MBAENC1:"
+_SENSITIVE_DATA_KEY_WARNING_EMITTED = False
 SUPERVISOR_SUGGESTION_LIMIT = SUPERVISOR_RECOMMENDATION_LIMIT
 ASSESSOR_SLOTS = ("assessor_1", "assessor_2")
 PRIMARY_ASSESSOR_SLOTS = ASSESSOR_SLOTS
@@ -237,6 +284,7 @@ PUBLIC_PROJECT_STATUS_BADGE_CLASSES = {
 
 ADDITIONAL_ASSESSMENT_STATUS_LABELS = {
     "needs_assignment": "Needs Third Assessor",
+    "awaiting_nomination": "Awaiting Additional Nomination Approval",
     "awaiting_acceptance": "Awaiting Third Assessor Acceptance",
     "awaiting_result": "Awaiting Third Assessor Result",
     "completed": "Additional Assessment Complete",
@@ -443,6 +491,90 @@ def hdc_assessor_nomination_review_complete(project):
     )
 
 
+HDC_DOCUMENT_SIGNATURE_REQUIREMENTS = {
+    "jbs5": (
+        (("head_of_department_signature",), "Head of Department signature"),
+        (("head_of_department_signature_date",), "Head of Department signature date"),
+        (("jbs_hdc_signature",), "JBS HDC signature"),
+        (("jbs_hdc_signature_date",), "JBS HDC signature date"),
+    ),
+    "jbs10": (
+        (("head_of_department_signature",), "Head of Department signature"),
+        (("head_of_department_signature_date",), "Head of Department signature date"),
+        (("jbs_hdc_signature",), "JBS HDC signature"),
+        (("jbs_hdc_signature_date",), "JBS HDC signature date"),
+    ),
+    "intent_to_submit": (
+        (("hod_signature",), "Head of Department signature"),
+        (("hod_signature_date",), "Head of Department signature date"),
+        (("director_signature",), "Director of School signature"),
+        (("director_signature_date",), "Director of School signature date"),
+    ),
+    "external_examiner_nomination": (
+        (("hod_signature_name",), "Head of Department signature"),
+        (("hod_signature_date",), "Head of Department signature date"),
+        (("executive_dean_signature_name",), "Executive Dean signature"),
+        (("executive_dean_signature_date",), "Executive Dean signature date"),
+    ),
+    "additional_external_examiner_nomination": (
+        (("hod_signature_name",), "Head of Department signature"),
+        (("hod_signature_date",), "Head of Department signature date"),
+        (("executive_dean_signature_name",), "Executive Dean signature"),
+        (("executive_dean_signature_date",), "Executive Dean signature date"),
+    ),
+    "assessment_summary": (
+        (("hod_signature_name",), "Head of Department signature"),
+        (("hod_signature_date",), "Head of Department signature date"),
+        (("chair_fhdc_signature_name", "hdc_signature_name"), "Chair of FHDC signature"),
+        (("chair_fhdc_signature_date", "hdc_signature_date"), "Chair of FHDC signature date"),
+    ),
+}
+
+
+def _project_form_payload(project, form_type, form=None):
+    if form and getattr(form, "form_type", None) == form_type and isinstance(getattr(form, "payload", None), dict):
+        return form.payload
+    matched_form = next(
+        (
+            project_form
+            for project_form in getattr(project, "forms", []) or []
+            if project_form.form_type == form_type
+        ),
+        None,
+    )
+    if not matched_form and getattr(project, "id", None):
+        matched_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
+    return matched_form.payload if matched_form and isinstance(matched_form.payload, dict) else {}
+
+
+def hdc_document_signature_status(project, doc_type, form=None):
+    form_type = str(doc_type or "")
+    requirements = HDC_DOCUMENT_SIGNATURE_REQUIREMENTS.get(form_type)
+    if not requirements:
+        return None
+    payload = _project_form_payload(project, form_type, form)
+    missing = []
+    completed_count = 0
+    for field_names, label in requirements:
+        if any(payload.get(field_name) for field_name in field_names):
+            completed_count += 1
+        else:
+            missing.append(label)
+    complete = not missing
+    if complete:
+        label = "Signed"
+    elif completed_count:
+        label = "Partially signed"
+    else:
+        label = "Not signed yet"
+    return {
+        "complete": complete,
+        "label": label,
+        "badge": "accepted" if complete else "pending",
+        "missing": missing,
+    }
+
+
 def hdc_jbs10_signature_complete(project):
     if not project:
         return False
@@ -468,6 +600,92 @@ def hdc_jbs10_signature_complete(project):
     )
 
 
+def hdc_intent_to_submit_signature_complete(project):
+    if not project:
+        return False
+    intent_form = next(
+        (
+            form
+            for form in getattr(project, "forms", []) or []
+            if form.form_type == "intent_to_submit"
+        ),
+        None,
+    )
+    if not intent_form and getattr(project, "id", None):
+        intent_form = MbaForm.query.filter_by(project_id=project.id, form_type="intent_to_submit").first()
+    payload = intent_form.payload if intent_form and isinstance(intent_form.payload, dict) else {}
+    return all(
+        payload.get(field)
+        for field in (
+            "hod_signature",
+            "hod_signature_date",
+            "director_signature",
+            "director_signature_date",
+        )
+    )
+
+
+def hdc_external_examiner_nomination_signature_complete(project):
+    if not project:
+        return False
+    form = next(
+        (
+            form
+            for form in getattr(project, "forms", []) or []
+            if form.form_type == "external_examiner_nomination"
+        ),
+        None,
+    )
+    if not form and getattr(project, "id", None):
+        form = MbaForm.query.filter_by(project_id=project.id, form_type="external_examiner_nomination").first()
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return all(
+        payload.get(field)
+        for field in (
+            "hod_signature_name",
+            "hod_signature_date",
+            "executive_dean_signature_name",
+            "executive_dean_signature_date",
+        )
+    )
+
+
+def hdc_additional_external_examiner_nomination_signature_complete(project):
+    if not project:
+        return False
+    form = next(
+        (
+            form
+            for form in getattr(project, "forms", []) or []
+            if form.form_type == "additional_external_examiner_nomination"
+        ),
+        None,
+    )
+    if not form and getattr(project, "id", None):
+        form = MbaForm.query.filter_by(
+            project_id=project.id,
+            form_type="additional_external_examiner_nomination",
+        ).first()
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return all(
+        payload.get(field)
+        for field in (
+            "hod_signature_name",
+            "hod_signature_date",
+            "executive_dean_signature_name",
+            "executive_dean_signature_date",
+        )
+    )
+
+
+def hdc_nomination_signature_documents_complete(project):
+    return (
+        hdc_jbs10_signature_complete(project)
+        and hdc_intent_to_submit_signature_complete(project)
+        and hdc_external_examiner_nomination_signature_complete(project)
+    )
+
+
 def sync_hdc_assessor_nomination_status(project):
     decisions = hdc_assessor_nomination_decisions(project)
     if not hdc_assessor_nomination_review_complete(project):
@@ -478,7 +696,7 @@ def sync_hdc_assessor_nomination_status(project):
 
     has_declined = any(decision == HDC_ASSESSOR_DECLINED for decision in decisions.values())
     if has_declined:
-        if not hdc_jbs10_signature_complete(project):
+        if not hdc_nomination_signature_documents_complete(project):
             project.nomination_form_approved = False
             project.project_status = ProjectStatus.ADMIN_APPROVED.value
             return "signature_pending_declined"
@@ -487,7 +705,7 @@ def sync_hdc_assessor_nomination_status(project):
         return "declined"
 
     if all(decision == HDC_ASSESSOR_APPROVED for decision in decisions.values()):
-        if not hdc_jbs10_signature_complete(project):
+        if not hdc_nomination_signature_documents_complete(project):
             project.nomination_form_approved = False
             project.project_status = ProjectStatus.ADMIN_APPROVED.value
             return "signature_pending"
@@ -575,9 +793,10 @@ def _uploads_dir():
     return os.path.join(current_app.root_path, "..", "uploads", "mba_forms")
 
 
-def _signature_upload_dir():
+def _signature_upload_dir(create=True):
     signature_dir = Path(current_app.root_path).parent / "uploads" / "mba_signatures"
-    signature_dir.mkdir(parents=True, exist_ok=True)
+    if create:
+        signature_dir.mkdir(parents=True, exist_ok=True)
     return signature_dir
 
 
@@ -598,10 +817,110 @@ def _signature_mime_from_extension(extension):
     return "application/octet-stream"
 
 
+def _signature_sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def normalize_user_signature_type(signature_type):
+    signature_type = str(signature_type or USER_SIGNATURE_PRIMARY).strip() or USER_SIGNATURE_PRIMARY
+    return signature_type if signature_type in USER_SIGNATURE_TYPES else USER_SIGNATURE_PRIMARY
+
+
+def user_signature_type_label(signature_type):
+    return USER_SIGNATURE_LABELS.get(normalize_user_signature_type(signature_type), USER_SIGNATURE_LABELS[USER_SIGNATURE_PRIMARY])
+
+
+def signature_type_for_form_field(field):
+    return SIGNATURE_FIELD_TYPE_MAP.get(str(field or ""), USER_SIGNATURE_PRIMARY)
+
+
+def active_user_signature_record(user, signature_type=USER_SIGNATURE_PRIMARY):
+    if not user or not getattr(user, "id", None):
+        return None
+    signature_type = normalize_user_signature_type(signature_type)
+    try:
+        return (
+            MbaUserSignature.query.filter_by(user_id=user.id, signature_type=signature_type, is_active=True)
+            .order_by(MbaUserSignature.updated_at.desc(), MbaUserSignature.id.desc())
+            .first()
+        )
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning("Could not load DB signature for MBA user %s", getattr(user, "id", None), exc_info=True)
+        return None
+
+
+def user_signature_path(user, signature_type=USER_SIGNATURE_PRIMARY):
+    if not user or not getattr(user, "id", None):
+        return None
+    signature_type = normalize_user_signature_type(signature_type)
+    if signature_type != USER_SIGNATURE_PRIMARY:
+        return None
+    signature_dir = _signature_upload_dir(create=False)
+    if not signature_dir.exists():
+        return None
+    for extension in ("png", "jpg", "jpeg"):
+        path = signature_dir / f"user_{user.id}.{extension}"
+        if path.exists():
+            return path
+    return None
+
+
+def user_has_signature(user, signature_type=USER_SIGNATURE_PRIMARY):
+    return bool(active_user_signature_record(user, signature_type) or user_signature_path(user, signature_type))
+
+
+def user_signature_printed_name(user, signature_type=USER_SIGNATURE_PRIMARY):
+    signature_type = normalize_user_signature_type(signature_type)
+    signature = active_user_signature_record(user, signature_type)
+    printed_name = (getattr(signature, "printed_name", None) or "").strip() if signature else ""
+    if printed_name:
+        return printed_name
+    if signature_type == USER_SIGNATURE_PRIMARY and user and getattr(user, "role", None) != MbaRole.HDC.value:
+        return (
+            f"{getattr(user, 'first_name', '') or ''} {getattr(user, 'last_name', '') or ''}".strip()
+            or getattr(user, "email", "")
+            or ""
+        )
+    return ""
+
+
+def user_signature_bytes(user, signature_type=USER_SIGNATURE_PRIMARY):
+    signature_type = normalize_user_signature_type(signature_type)
+    signature = active_user_signature_record(user, signature_type)
+    if signature:
+        return bytes(signature.file_data or b""), signature.mime_type or "application/octet-stream"
+
+    path = user_signature_path(user, signature_type)
+    if not path:
+        return b"", ""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return b"", ""
+    return data, _signature_mime_from_extension(path.suffix)
+
+
+def user_signature_cache_token(user, signature_type=USER_SIGNATURE_PRIMARY):
+    signature_type = normalize_user_signature_type(signature_type)
+    signature = active_user_signature_record(user, signature_type)
+    if signature:
+        return str(getattr(signature, "updated_at", None) or getattr(signature, "id", "") or "")
+    path = user_signature_path(user, signature_type)
+    if path:
+        try:
+            return str(int(path.stat().st_mtime))
+        except OSError:
+            return "1"
+    return ""
+
+
 def _clear_user_signature_files(user):
     if not user or not getattr(user, "id", None):
         return
-    signature_dir = _signature_upload_dir()
+    signature_dir = _signature_upload_dir(create=False)
+    if not signature_dir.exists():
+        return
     for extension in SIGNATURE_UPLOAD_EXTENSIONS:
         path = signature_dir / f"user_{user.id}.{extension}"
         if path.exists():
@@ -611,41 +930,38 @@ def _clear_user_signature_files(user):
                 current_app.logger.warning("Could not remove signature file %s", path, exc_info=True)
 
 
-def user_signature_path(user):
-    if not user or not getattr(user, "id", None):
-        return None
-    signature_dir = _signature_upload_dir()
-    for extension in ("png", "jpg", "jpeg"):
-        path = signature_dir / f"user_{user.id}.{extension}"
-        if path.exists():
-            return path
-    return None
+def _refresh_user_signature_flag(user):
+    if user:
+        user.has_signature = user_has_signature(user, USER_SIGNATURE_PRIMARY)
 
 
-def user_signature_mime_type(user):
-    path = user_signature_path(user)
+def user_signature_mime_type(user, signature_type=USER_SIGNATURE_PRIMARY):
+    signature_type = normalize_user_signature_type(signature_type)
+    signature = active_user_signature_record(user, signature_type)
+    if signature:
+        return signature.mime_type or "application/octet-stream"
+    path = user_signature_path(user, signature_type)
     if not path:
         return ""
     return _signature_mime_from_extension(path.suffix)
 
 
-def user_signature_data_uri(user):
-    path = user_signature_path(user)
-    if not path:
+def user_signature_data_uri(user, signature_type=USER_SIGNATURE_PRIMARY):
+    data, mime_type = user_signature_bytes(user, signature_type)
+    if not data:
         return ""
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return ""
-    mime_type = _signature_mime_from_extension(path.suffix)
     return f"data:{mime_type};base64,{base64.b64encode(data).decode('ascii')}"
 
 
-def save_user_signature(user, *, uploaded_file=None, signature_data=None):
+def save_user_signature(user, *, uploaded_file=None, signature_data=None, signature_type=USER_SIGNATURE_PRIMARY, printed_name=None):
     if not user or not getattr(user, "id", None):
         raise ValueError("A signed-in MBA user is required.")
+    signature_type = normalize_user_signature_type(signature_type)
+    printed_name = (printed_name or "").strip() or None
     data = b""
+    source = "uploaded"
     if signature_data:
+        source = "drawn"
         match = re.match(
             r"^data:image/(?P<subtype>png|jpeg|jpg);base64,(?P<data>[A-Za-z0-9+/=\s]+)$",
             str(signature_data).strip(),
@@ -660,11 +976,22 @@ def save_user_signature(user, *, uploaded_file=None, signature_data=None):
     elif uploaded_file and getattr(uploaded_file, "filename", ""):
         data = uploaded_file.read()
     else:
-        existing_path = user_signature_path(user)
+        existing_signature = active_user_signature_record(user, signature_type)
+        if existing_signature:
+            if printed_name is not None:
+                existing_signature.printed_name = printed_name
+                existing_signature.updated_at = datetime.utcnow()
+            _refresh_user_signature_flag(user)
+            return existing_signature
+        existing_path = user_signature_path(user, signature_type)
         if existing_path:
-            user.has_signature = True
-            return existing_path
-        raise ValueError("Upload or draw a signature before saving.")
+            try:
+                data = existing_path.read_bytes()
+                source = "filesystem_import"
+            except OSError:
+                data = b""
+        if not data:
+            raise ValueError("Upload or draw a signature before saving.")
 
     if not data:
         raise ValueError("The signature file is empty.")
@@ -675,17 +1002,50 @@ def save_user_signature(user, *, uploaded_file=None, signature_data=None):
     if extension not in SIGNATURE_UPLOAD_EXTENSIONS:
         raise ValueError("Use a PNG or JPG signature image.")
 
+    digest = _signature_sha256(data)
+    existing_active = active_user_signature_record(user, signature_type)
+    if existing_active and existing_active.sha256 == digest:
+        existing_active.mime_type = _signature_mime_from_extension(extension)
+        existing_active.file_size = len(data)
+        existing_active.source = source
+        if printed_name is not None:
+            existing_active.printed_name = printed_name
+        existing_active.updated_at = datetime.utcnow()
+        _refresh_user_signature_flag(user)
+        _clear_user_signature_files(user)
+        return existing_active
+
+    MbaUserSignature.query.filter_by(user_id=user.id, signature_type=signature_type, is_active=True).update(
+        {"is_active": False, "updated_at": datetime.utcnow()},
+        synchronize_session=False,
+    )
+    signature = MbaUserSignature(
+        user_id=user.id,
+        file_data=data,
+        mime_type=_signature_mime_from_extension(extension),
+        file_size=len(data),
+        sha256=digest,
+        source=source,
+        signature_type=signature_type,
+        printed_name=printed_name,
+        is_active=True,
+    )
+    db.session.add(signature)
     _clear_user_signature_files(user)
-    path = _signature_upload_dir() / f"user_{user.id}.{extension}"
-    path.write_bytes(data)
-    user.has_signature = True
-    return path
+    _refresh_user_signature_flag(user)
+    return signature
 
 
-def delete_user_signature(user):
-    _clear_user_signature_files(user)
-    if user:
-        user.has_signature = False
+def delete_user_signature(user, signature_type=USER_SIGNATURE_PRIMARY):
+    signature_type = normalize_user_signature_type(signature_type)
+    if user and getattr(user, "id", None):
+        MbaUserSignature.query.filter_by(user_id=user.id, signature_type=signature_type, is_active=True).update(
+            {"is_active": False, "updated_at": datetime.utcnow()},
+            synchronize_session=False,
+        )
+    if signature_type == USER_SIGNATURE_PRIMARY:
+        _clear_user_signature_files(user)
+    _refresh_user_signature_flag(user)
 
 
 SIGNATURE_SNAPSHOT_SUFFIXES = ("_image", "_image_source", "_image_user_id", "_image_email")
@@ -714,14 +1074,23 @@ def copy_signature_snapshots(payload, source_payload, signature_fields):
     return payload
 
 
-def apply_saved_signature_snapshot(payload, signature_fields, user=None):
+def apply_saved_signature_snapshot(payload, signature_fields, user=None, signature_type_by_field=None):
     user = user or current_user
-    data_uri = user_signature_data_uri(user)
-    if not data_uri:
-        return payload
+    signature_type_by_field = signature_type_by_field or {}
+    data_uri_cache = {}
     for field in signature_fields:
-        if not payload.get(field):
+        signature_type = normalize_user_signature_type(
+            signature_type_by_field.get(field) or signature_type_for_form_field(field)
+        )
+        if signature_type not in data_uri_cache:
+            data_uri_cache[signature_type] = user_signature_data_uri(user, signature_type)
+        data_uri = data_uri_cache[signature_type]
+        if not data_uri:
             continue
+        if not payload.get(field):
+            printed_name = user_signature_printed_name(user, signature_type)
+            if printed_name:
+                payload[field] = printed_name
         payload[f"{field}_image"] = data_uri
         payload[f"{field}_image_source"] = "saved_profile_signature"
         payload[f"{field}_image_user_id"] = str(getattr(user, "id", "") or "")
@@ -729,9 +1098,9 @@ def apply_saved_signature_snapshot(payload, signature_fields, user=None):
     return payload
 
 
-def refresh_saved_signature_snapshot(payload, signature_fields, user=None):
+def refresh_saved_signature_snapshot(payload, signature_fields, user=None, signature_type_by_field=None):
     clear_signature_snapshots(payload, signature_fields)
-    return apply_saved_signature_snapshot(payload, signature_fields, user)
+    return apply_saved_signature_snapshot(payload, signature_fields, user, signature_type_by_field)
 
 
 def _validate_uploaded_pdf(uploaded_file):
@@ -771,6 +1140,140 @@ def _uploaded_file_bytes(uploaded_file):
     data = uploaded_file.read()
     uploaded_file.seek(0)
     return data
+
+
+def _sensitive_data_key_material():
+    global _SENSITIVE_DATA_KEY_WARNING_EMITTED
+    configured = (
+        current_app.config.get("MBA_DATA_ENCRYPTION_KEY")
+        or os.getenv("MBA_DATA_ENCRYPTION_KEY")
+        or ""
+    )
+    if configured:
+        return str(configured).strip(), "mba_data_encryption_key"
+    fallback = current_app.config.get("SECRET_KEY") or os.getenv("SECRET_KEY") or ""
+    if fallback:
+        if not _SENSITIVE_DATA_KEY_WARNING_EMITTED:
+            current_app.logger.warning(
+                "MBA_DATA_ENCRYPTION_KEY is not set; falling back to SECRET_KEY for sensitive MBA form encryption."
+            )
+            _SENSITIVE_DATA_KEY_WARNING_EMITTED = True
+        derived = base64.urlsafe_b64encode(hashlib.sha256(str(fallback).encode("utf-8")).digest()).decode("ascii")
+        return derived, "secret_key_fallback"
+    raise RuntimeError("MBA_DATA_ENCRYPTION_KEY must be configured before storing sensitive banking details.")
+
+
+def _sensitive_data_fernet():
+    key, _source = _sensitive_data_key_material()
+    try:
+        return Fernet(key.encode("ascii"))
+    except Exception:
+        derived = base64.urlsafe_b64encode(hashlib.sha256(key.encode("utf-8")).digest())
+        return Fernet(derived)
+
+
+def _sensitive_key_version():
+    _key, source = _sensitive_data_key_material()
+    return source
+
+
+def is_encrypted_sensitive_value(value):
+    return isinstance(value, dict) and value.get("__encrypted__") == ENCRYPTED_PAYLOAD_MARKER and bool(value.get("ciphertext"))
+
+
+def encrypt_sensitive_value(value):
+    if is_encrypted_sensitive_value(value):
+        return value
+    if value is None or str(value).strip() == "":
+        return value
+    ciphertext = _sensitive_data_fernet().encrypt(str(value).encode("utf-8")).decode("ascii")
+    return {
+        "__encrypted__": ENCRYPTED_PAYLOAD_MARKER,
+        "alg": "fernet",
+        "key_version": _sensitive_key_version(),
+        "ciphertext": ciphertext,
+    }
+
+
+def decrypt_sensitive_value(value):
+    if not is_encrypted_sensitive_value(value):
+        return "" if value is None else str(value)
+    try:
+        return _sensitive_data_fernet().decrypt(str(value.get("ciphertext") or "").encode("ascii")).decode("utf-8")
+    except InvalidToken as exc:
+        raise RuntimeError("Sensitive banking data could not be decrypted with the configured key.") from exc
+
+
+def _mask_account_number(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    digits = re.sub(r"\D", "", text)
+    if len(digits) >= 4:
+        return f"{'*' * max(4, len(digits) - 4)}{digits[-4:]}"
+    if len(text) <= 4:
+        return "*" * len(text)
+    return f"{'*' * (len(text) - 4)}{text[-4:]}"
+
+
+def mask_sensitive_field_value(field_name, value):
+    text = "" if value is None else str(value)
+    if not text.strip():
+        return ""
+    if field_name in {"bank_account_number", "income_tax_number"}:
+        return _mask_account_number(text)
+    if field_name in {"bank_branch_code"}:
+        return "****"
+    return "********"
+
+
+def encrypt_sensitive_payload_fields(payload):
+    payload = dict(payload or {})
+    for field_name in SENSITIVE_FORM_FIELD_NAMES:
+        if field_name in payload and str(payload.get(field_name) or "").strip():
+            payload[field_name] = encrypt_sensitive_value(payload[field_name])
+    return payload
+
+
+def decrypt_sensitive_payload_fields(payload, *, mask=False, blank=False):
+    payload = dict(payload or {})
+    for field_name in SENSITIVE_FORM_FIELD_NAMES:
+        if field_name not in payload:
+            continue
+        if blank:
+            payload[field_name] = ""
+            continue
+        value = decrypt_sensitive_value(payload[field_name])
+        payload[field_name] = mask_sensitive_field_value(field_name, value) if mask else value
+    return payload
+
+
+def strip_sensitive_payload_fields(payload):
+    return decrypt_sensitive_payload_fields(payload, blank=True)
+
+
+def sensitive_document_type(doc_type):
+    doc_type = str(doc_type or "")
+    return doc_type.startswith(SENSITIVE_DOCUMENT_TYPE_PREFIXES)
+
+
+def encrypted_document_bytes(data):
+    return bool(data and bytes(data[: len(ENCRYPTED_DOCUMENT_PREFIX)]) == ENCRYPTED_DOCUMENT_PREFIX)
+
+
+def encrypt_sensitive_document_bytes(doc_type, data):
+    if not sensitive_document_type(doc_type) or not data or encrypted_document_bytes(data):
+        return data
+    return ENCRYPTED_DOCUMENT_PREFIX + _sensitive_data_fernet().encrypt(bytes(data))
+
+
+def decrypt_sensitive_document_bytes(data):
+    if not encrypted_document_bytes(data):
+        return data
+    try:
+        return _sensitive_data_fernet().decrypt(bytes(data[len(ENCRYPTED_DOCUMENT_PREFIX) :]))
+    except InvalidToken as exc:
+        raise RuntimeError("Sensitive document data could not be decrypted with the configured key.") from exc
 
 
 def append_comment(existing, comment):
@@ -884,6 +1387,48 @@ _DOCX_NS = {
 }
 for _docx_prefix, _docx_uri in _DOCX_NS.items():
     ET.register_namespace(_docx_prefix, _docx_uri)
+
+
+def _word_template_key_for_path(template_path):
+    if not template_path:
+        return ""
+    path = Path(template_path)
+    try:
+        relative_path = path.resolve().relative_to(Path(current_app.root_path).resolve())
+    except Exception:
+        relative_path = Path(str(template_path))
+    return str(relative_path).replace("\\", "/")
+
+
+def active_document_template_record(template_path_or_key):
+    template_key = str(template_path_or_key or "")
+    if template_key.lower().endswith(".docx") or "\\" in template_key:
+        template_key = _word_template_key_for_path(template_path_or_key)
+    if not template_key:
+        return None
+    try:
+        return (
+            MbaDocumentTemplate.query.filter_by(template_key=template_key, is_active=True)
+            .order_by(MbaDocumentTemplate.version.desc(), MbaDocumentTemplate.uploaded_at.desc(), MbaDocumentTemplate.id.desc())
+            .first()
+        )
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning("Could not load DB document template %s", template_key, exc_info=True)
+        return None
+
+
+def document_template_bytes(template_path):
+    template = active_document_template_record(template_path)
+    if template and template.file_data:
+        return bytes(template.file_data)
+    if template_path and Path(template_path).exists():
+        return Path(template_path).read_bytes()
+    return b""
+
+
+def _docx_template_exists(template_path):
+    return bool(document_template_bytes(template_path))
 
 
 def _browser_pdf_executables():
@@ -2687,7 +3232,10 @@ def _docx_set_checkbox(root, field_name, checked):
 
 
 def _docx_read_template(template_path):
-    with zipfile.ZipFile(template_path, "r") as template:
+    template_bytes = document_template_bytes(template_path)
+    if not template_bytes:
+        raise FileNotFoundError(f"Word template is not available: {template_path}")
+    with zipfile.ZipFile(BytesIO(template_bytes), "r") as template:
         entries = template.infolist()
         contents = {entry.filename: template.read(entry.filename) for entry in entries}
     root = ET.fromstring(contents["word/document.xml"])
@@ -2889,7 +3437,7 @@ def _jbs10_study_type_checks(payload):
 
 def _generate_jbs5_template_word_bytes(project, payload):
     template_path = _jbs5_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -2899,11 +3447,7 @@ def _generate_jbs5_template_word_bytes(project, payload):
     amend_title = _docx_truthy(payload.get("amend_title"))
     amend_supervisors = _docx_truthy(payload.get("amend_supervisors"))
 
-    with zipfile.ZipFile(template_path, "r") as template:
-        entries = template.infolist()
-        contents = {entry.filename: template.read(entry.filename) for entry in entries}
-
-    root = ET.fromstring(contents["word/document.xml"])
+    entries, contents, root = _docx_read_template(template_path)
     checkbox_values = {
         "Check1": register_title,
         "Check2": amend_title,
@@ -3177,7 +3721,7 @@ def _supervisor_agreement_signature_line(payload, prefix, default_name=""):
 
 def _generate_supervisor_agreement_template_word_bytes(project, payload):
     template_path = _supervisor_agreement_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _supervisor_agreement_payload(project, payload)
@@ -3247,7 +3791,7 @@ def _generate_supervisor_agreement_template_word_bytes(project, payload):
 
 def _generate_jbs10_template_word_bytes(project, payload):
     template_path = _jbs10_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3255,7 +3799,8 @@ def _generate_jbs10_template_word_bytes(project, payload):
     supervisor = _docx_supervisor_payload(project, payload)
 
     def user_staff_number(user):
-        return getattr(user, "staff_number", "") if user else ""
+        profile = getattr(user, "scholar_profile", None) if user else None
+        return getattr(profile, "staff_number", "") if profile else ""
 
     def assessor_name_line(slot):
         assessor = _docx_assessor_payload(project, payload, slot)
@@ -3327,9 +3872,9 @@ def _generate_jbs10_template_word_bytes(project, payload):
         (2, 17, 3, _docx_first_value(payload, "amended_external_assessor_3_staff_number")),
         (2, 18, 1, _docx_first_value(payload, "amended_external_assessor_3_qualification")),
         (2, 18, 3, _docx_first_value(payload, "amended_external_assessor_3_email")),
-        (3, 0, 1, _docx_first_value(payload, "supervisor_signature") or supervisor["name"]),
+        (3, 0, 1, _docx_first_value(payload, "supervisor_signature")),
         (3, 0, 3, _docx_format_date(_docx_first_value(payload, "supervisor_signature_date"))),
-        (3, 1, 1, _docx_first_value(payload, "co_supervisor_signature", "co_supervisor_1")),
+        (3, 1, 1, _docx_first_value(payload, "co_supervisor_signature")),
         (3, 1, 3, _docx_format_date(_docx_first_value(payload, "co_supervisor_signature_date"))),
         (4, 0, 1, _docx_first_value(payload, "head_of_department_signature")),
         (4, 0, 3, _docx_format_date(_docx_first_value(payload, "head_of_department_signature_date"))),
@@ -3372,7 +3917,7 @@ def _intent_signature_line(payload, signature_key, date_key):
 
 def _generate_intent_to_submit_template_word_bytes(project, payload):
     template_path = _intent_to_submit_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3458,7 +4003,7 @@ def _corrections_response_rows(payload):
 
 def _generate_corrections_response_template_word_bytes(project, payload):
     template_path = _corrections_response_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3513,7 +4058,7 @@ def _generate_corrections_response_template_word_bytes(project, payload):
 
 def _generate_jbs1_template_word_bytes(project, payload):
     template_path = _jbs1_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3548,12 +4093,13 @@ def _generate_jbs1_template_word_bytes(project, payload):
     _docx_set_cell_signature_image(root, contents, 3, 0, 1, payload, "signature_name")
     _docx_set_cell_signature_image(root, contents, 4, 0, 1, payload, "supervisor_signature")
     _docx_set_cell_signature_image(root, contents, 4, 1, 1, payload, "co_supervisor_signature")
+    _docx_set_cell_signature_image(root, contents, 6, 0, 1, payload, "office_program_manager")
     return _docx_write_template(entries, contents, root)
 
 
 def _generate_affidavit_template_word_bytes(project, payload):
     template_path = _affidavit_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3617,7 +4163,7 @@ def _generate_plagiarism_template_word_bytes(project, payload):
 
 def _generate_tii_ai_template_word_bytes(project, payload):
     template_path = _tii_ai_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3672,7 +4218,7 @@ def _grade_bucket_row(grade):
 
 def _generate_capstone_evaluation_template_word_bytes(project, payload):
     template_path = _capstone_evaluation_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3723,7 +4269,7 @@ def _docx_append_cell_paragraph_text(root, table_index, row_index, cell_index, v
 
 def _generate_capstone_assessor_report_form_1_template_word_bytes(project, payload):
     template_path = _capstone_assessor_report_form_1_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = _jbs5_payload(project, payload)
@@ -3766,7 +4312,7 @@ def _generate_capstone_assessor_report_form_1_template_word_bytes(project, paylo
 
 def _generate_assessment_summary_template_word_bytes(project, payload):
     template_path = _summary_assessment_report_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     payload = build_assessment_summary_payload(project, payload)
@@ -3866,7 +4412,7 @@ def _generate_assessment_summary_template_word_bytes(project, payload):
 
 def _generate_assessor_temp_appointment_template_word_bytes(project, payload):
     template_path = _assessor_temp_appointment_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     entries, contents, root = _docx_read_template(template_path)
@@ -3966,7 +4512,7 @@ def _generate_assessor_temp_appointment_template_word_bytes(project, payload):
 
 def _generate_assessor_temp_claim_template_word_bytes(project, payload):
     template_path = _assessor_temp_claim_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     entries, contents, root = _docx_read_template(template_path)
@@ -4020,7 +4566,7 @@ def _generate_assessor_temp_claim_template_word_bytes(project, payload):
 
 def _generate_external_examiner_nomination_template_word_bytes(project, payload):
     template_path = _external_examiner_nomination_word_template_path()
-    if not template_path.exists():
+    if not _docx_template_exists(template_path):
         return None
 
     source_payload = dict(payload or {})
@@ -4231,6 +4777,7 @@ def _generate_external_examiner_nomination_template_word_bytes(project, payload)
 
 
 def generate_form_submission_word_bytes(project, form_type, payload):
+    payload = decrypt_sensitive_payload_fields(payload)
     if str(form_type or "") == "jbs5":
         template_bytes = _generate_jbs5_template_word_bytes(project, payload)
         if template_bytes:
@@ -4858,7 +5405,7 @@ FORM_PDF_DEFINITIONS = {
             },
             {
                 "title": "Supervisor and Office Use",
-                "paragraph": "The supervisor declaration and office-use sections on the original JBS 1 form are completed outside this student submission step.",
+                "paragraph": "After student submission, JBS 1 is routed to the supervisor for signature and then to MBA Admin for the Program Manager signature.",
             },
         ],
     },
@@ -5732,6 +6279,7 @@ def generate_form_submission_pdf_bytes(form_type, payload):
 
 
 def generate_form_submission_document_bytes(project, form_type, payload, *, allow_plain_fallback=True):
+    payload = decrypt_sensitive_payload_fields(payload)
     try:
         html_pdf_bytes = _render_html_form_pdf_bytes(project, form_type, payload)
         if html_pdf_bytes:
@@ -5744,8 +6292,9 @@ def generate_form_submission_document_bytes(project, form_type, payload, *, allo
 
 
 def generate_form_submission_download_bytes(project, form_type, payload):
+    payload = decrypt_sensitive_payload_fields(payload)
     template_path = _native_word_template_path_for_form(form_type)
-    if template_path and template_path.exists():
+    if template_path and _docx_template_exists(template_path):
         return generate_form_submission_word_bytes(project, form_type, payload), FORM_WORD_EXTENSION, FORM_WORD_MIME_TYPE
     try:
         return (
@@ -5851,15 +6400,11 @@ def project_activity_entries(activity_text):
 
 def _store_project_document(project, doc_key, uploaded_file, replace_existing=True):
     project_dir = os.path.join(_uploads_dir(), str(project.id))
-    os.makedirs(project_dir, exist_ok=True)
 
     safe_original = secure_filename(uploaded_file.filename)
     file_bytes = _uploaded_file_bytes(uploaded_file)
     mime_type = uploaded_file.mimetype or document_mime_type(safe_original)
     unique_name = f"{doc_key}_{uuid.uuid4().hex[:8]}_{safe_original}"
-    dest_path = os.path.join(project_dir, unique_name)
-    with open(dest_path, "wb") as fh:
-        fh.write(file_bytes)
 
     existing_doc = None
     if replace_existing:
@@ -6395,14 +6940,41 @@ def build_assessment_summary_payload(project, existing_payload=None, forms_by_pr
     return payload
 
 
-def additional_external_examiner_nomination_ready(project):
-    if not additional_assessment_required(project):
-        return False
-    if not getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None):
-        return False
-    if getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_invitation_status", None) != INVITATION_ACCEPTED:
-        return False
-    return assessor_acceptance_pack_complete(project, ADDITIONAL_ASSESSOR_SLOT)
+def additional_external_examiner_nomination_can_generate(project):
+    return bool(
+        project
+        and additional_assessment_required(project)
+        and getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None)
+    )
+
+
+def additional_external_examiner_nomination_form(project):
+    if not project:
+        return None
+    return MbaForm.query.filter_by(
+        project_id=project.id,
+        form_type=additional_external_examiner_nomination_doc_type(),
+    ).first()
+
+
+def additional_external_examiner_nomination_supervisor_signed(project):
+    form = additional_external_examiner_nomination_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, additional_external_examiner_nomination_doc_type())
+        and form
+        and (
+            form.supervisor_signed
+            or (payload.get("supervisor_signature_name") and payload.get("supervisor_signature_date"))
+        )
+    )
+
+
+def additional_assessor_nomination_fully_approved(project):
+    return bool(
+        additional_external_examiner_nomination_supervisor_signed(project)
+        and hdc_additional_external_examiner_nomination_signature_complete(project)
+    )
 
 
 def external_examiner_nomination_form(project):
@@ -6796,7 +7368,11 @@ def clear_additional_assessment(project):
 
 
 def additional_assessment_complete(project):
-    return additional_assessment_required(project) and assessment_result_pack_complete(project, ADDITIONAL_ASSESSOR_SLOT)
+    return (
+        additional_assessment_required(project)
+        and assessment_result_pack_complete(project, ADDITIONAL_ASSESSOR_SLOT)
+        and additional_assessor_nomination_fully_approved(project)
+    )
 
 
 def additional_assessment_pending(project, forms_by_project=None):
@@ -6807,9 +7383,11 @@ def additional_assessment_stage(project, forms_by_project=None):
     if not additional_assessment_required(project, forms_by_project=forms_by_project):
         return "none"
     if assessment_result_pack_complete(project, ADDITIONAL_ASSESSOR_SLOT):
-        return "completed"
+        return "completed" if additional_assessor_nomination_fully_approved(project) else "awaiting_nomination"
     if not getattr(project, "assessor_3_id", None):
         return "needs_assignment"
+    if not additional_assessor_nomination_fully_approved(project):
+        return "awaiting_nomination"
     if getattr(project, "assessor_3_invitation_status", None) != INVITATION_ACCEPTED:
         return "awaiting_acceptance"
     return "awaiting_result"
@@ -6844,6 +7422,97 @@ def uploaded_doc_for(project, doc_key):
     return next((doc for doc in project.documents if doc.doc_type == doc_key), None)
 
 
+def jbs10_form(project):
+    if not project:
+        return None
+    return MbaForm.query.filter_by(project_id=project.id, form_type="jbs10").first()
+
+
+def jbs10_supervisor_signed(project):
+    form = jbs10_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, "jbs10")
+        and form
+        and (
+            form.supervisor_signed
+            or (payload.get("supervisor_signature") and payload.get("supervisor_signature_date"))
+        )
+    )
+
+
+def jbs10_supervisor_return_pending(project):
+    form = jbs10_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        form
+        and not form.supervisor_signed
+        and payload.get("_supervisor_return_requested_at")
+        and not payload.get("_supervisor_return_resolved_at")
+    )
+
+
+def jbs1_declaration_form(project):
+    if not project:
+        return None
+    return MbaForm.query.filter_by(project_id=project.id, form_type="jbs1_declaration").first()
+
+
+def jbs1_supervisor_signed(project):
+    form = jbs1_declaration_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, "jbs1_declaration")
+        and form
+        and (
+            form.supervisor_signed
+            or (payload.get("supervisor_signature") and payload.get("supervisor_signature_date"))
+        )
+    )
+
+
+def jbs1_program_manager_signed(project):
+    form = jbs1_declaration_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, "jbs1_declaration")
+        and form
+        and payload.get("office_program_manager")
+        and payload.get("office_program_manager_date")
+    )
+
+
+def jbs1_declaration_complete(project):
+    form = jbs1_declaration_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, "jbs1_declaration")
+        and form
+        and (form.student_signed or (payload.get("signature_name") and payload.get("signature_date")))
+        and jbs1_supervisor_signed(project)
+        and jbs1_program_manager_signed(project)
+    )
+
+
+def intent_to_submit_form(project):
+    if not project:
+        return None
+    return MbaForm.query.filter_by(project_id=project.id, form_type="intent_to_submit").first()
+
+
+def intent_to_submit_supervisor_signed(project):
+    form = intent_to_submit_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(
+        uploaded_doc_for(project, "intent_to_submit")
+        and form
+        and (
+            form.supervisor_signed
+            or payload.get("supervisor_agree_signature")
+        )
+    )
+
+
 def hdc_can_access_document(project, doc_type):
     if not project or project.project_status not in HDC_DOCUMENT_ALLOWED_STATUSES:
         return False
@@ -6866,7 +7535,7 @@ def hdc_can_access_document(project, doc_type):
         ProjectStatus.GRADUATED.value,
     }
 
-    if doc_type == "jbs10":
+    if doc_type in {"jbs10", "intent_to_submit"}:
         return project.project_status in nomination_stage_statuses or project.project_status in results_stage_statuses
 
     if doc_type in {external_examiner_nomination_doc_type(), additional_external_examiner_nomination_doc_type()}:
@@ -6916,8 +7585,8 @@ def student_has_uploaded_doc(project, doc_key):
 def student_submitted_assessor_prerequisite_docs(project):
     return (
         bool(project and project.jbs5_hdc_approved_at)
-        and student_has_uploaded_doc(project, "jbs10")
-        and student_has_uploaded_doc(project, "intent_to_submit")
+        and jbs10_supervisor_signed(project)
+        and intent_to_submit_supervisor_signed(project)
     )
 
 
@@ -6954,7 +7623,7 @@ def all_assessor_acceptance_packs_complete(project):
 
 
 def apply_assessor_suggestions_if_ready(project):
-    """Fill missing assessor slots after HDC-approved JBS5 and student JBS10/Intent submissions."""
+    """Fill missing assessor slots after HDC-approved JBS5 and supervisor-signed JBS10/Intent submissions."""
     if not project or project.assessors_confirmed:
         return []
     if not (project.supervisor_confirmed or project.supervisor_accepted_at):
@@ -6999,7 +7668,7 @@ def apply_assessor_suggestions_if_ready(project):
         assessor_emails = ", ".join(assessor.email for assessor in applied_assessors)
         project.comments = append_comment(
             project.comments,
-            f"System suggested assessors after student submitted JBS10 and Intent to Submit: {assessor_emails}",
+            f"System suggested assessors after supervisor-signed JBS10 and Intent to Submit were ready: {assessor_emails}",
         )
 
     return applied_assessors
@@ -7210,23 +7879,165 @@ def role_landing_url():
     return url_for("mba.dashboard")
 
 
+def _profile_missing_labels(fields):
+    return [label for label, value in fields if not str(value or "").strip()]
+
+
+def mba_profile_requires_academic_fields(user):
+    return getattr(user, "role", None) in {MbaRole.SCHOLAR.value, MbaRole.EXAMINER.value}
+
+
+def mba_profile_is_committee(user):
+    return getattr(user, "role", None) == MbaRole.HDC.value
+
+
+def mba_required_signature_types(user):
+    role = getattr(user, "role", None)
+    if role == MbaRole.HDC.value:
+        return (
+            USER_SIGNATURE_PRIMARY,
+            USER_SIGNATURE_HEAD_OF_DEPARTMENT,
+            USER_SIGNATURE_DIRECTOR_OF_SCHOOL,
+            USER_SIGNATURE_EXECUTIVE_DEAN,
+        )
+    if role in {MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}:
+        return (USER_SIGNATURE_PRIMARY,)
+    if role in {
+        MbaRole.STUDENT.value,
+        MbaRole.SCHOLAR.value,
+        MbaRole.EXAMINER.value,
+    }:
+        return (USER_SIGNATURE_PRIMARY,)
+    return ()
+
+
+def mba_profile_requires_signature(user):
+    return bool(mba_required_signature_types(user))
+
+
+def mba_profile_signature_label(user, signature_type):
+    role = getattr(user, "role", None)
+    signature_type = normalize_user_signature_type(signature_type)
+    if signature_type == USER_SIGNATURE_PRIMARY and role == MbaRole.HDC.value:
+        return "HDC / Committee Chair signature"
+    if signature_type == USER_SIGNATURE_PRIMARY and role in {MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}:
+        return "Program Manager signature"
+    return user_signature_type_label(signature_type)
+
+
+def mba_profile_signature_slots(user):
+    slots = []
+    for signature_type in mba_required_signature_types(user):
+        label = mba_profile_signature_label(user, signature_type)
+        slots.append(
+            {
+                "type": signature_type,
+                "label": label,
+                "required": True,
+            }
+        )
+    return slots
+
+
+def mba_profile_missing_fields(user, *, profile=None, submitted_student_number=None, include_signature=True):
+    if getattr(user, "system_name", None) != "mba":
+        return []
+
+    role = getattr(user, "role", None)
+    if role == MbaRole.STUDENT.value:
+        profile = profile or getattr(user, "student_profile", None)
+        missing = _profile_missing_labels(
+            [
+                ("title", getattr(profile, "title", None)),
+                ("first name", getattr(profile, "name", None) or getattr(user, "first_name", None)),
+                ("surname", getattr(profile, "surname", None) or getattr(user, "last_name", None)),
+                ("contact number", getattr(profile, "contact", None)),
+                ("student number", submitted_student_number if submitted_student_number is not None else getattr(profile, "student_number", None)),
+                ("ID / passport number", getattr(profile, "id_passport_number", None)),
+                ("module", getattr(profile, "module", None)),
+                ("block", getattr(profile, "block_id", None)),
+                ("degree", getattr(profile, "degree", None)),
+                ("address", getattr(profile, "address", None)),
+                ("postal code", getattr(profile, "postal_code", None)),
+                ("default signing location", getattr(profile, "default_signing_location", None)),
+            ]
+        )
+    elif role in {
+        MbaRole.MAIN_ADMIN.value,
+        MbaRole.ADMIN.value,
+        MbaRole.SCHOLAR.value,
+        MbaRole.EXAMINER.value,
+        MbaRole.HDC.value,
+    }:
+        profile = profile or getattr(user, "scholar_profile", None)
+        if role == MbaRole.HDC.value:
+            fields = [
+                ("committee name", getattr(profile, "name", None)),
+                ("committee contact number", getattr(profile, "contact", None)),
+                ("department", getattr(profile, "department", None)),
+                ("affiliation", getattr(profile, "affiliation", None)),
+                ("office address", getattr(profile, "address", None)),
+                ("postal code", getattr(profile, "postal_code", None)),
+                ("default signing location", getattr(profile, "default_signing_location", None)),
+            ]
+        else:
+            fields = [
+                ("title", getattr(profile, "title", None)),
+                ("first name", getattr(profile, "name", None) or getattr(user, "first_name", None)),
+                ("surname", getattr(profile, "surname", None) or getattr(user, "last_name", None)),
+                ("contact number", getattr(profile, "contact", None)),
+                ("department", getattr(profile, "department", None)),
+                ("position", getattr(profile, "position", None)),
+                ("affiliation", getattr(profile, "affiliation", None)),
+                ("address", getattr(profile, "address", None)),
+                ("postal code", getattr(profile, "postal_code", None)),
+                ("default signing location", getattr(profile, "default_signing_location", None)),
+            ]
+        if mba_profile_requires_academic_fields(user):
+            fields.extend(
+                [
+                    ("ID / passport number", getattr(profile, "id_passport_number", None)),
+                    ("highest qualification", getattr(profile, "qualification", None)),
+                    ("areas of expertise", getattr(profile, "skills", None)),
+                    ("research themes", getattr(profile, "research_themes", None)),
+                    ("research interests", getattr(profile, "research_interests", None)),
+                    ("research disciplines", getattr(profile, "research_disciplines", None)),
+                ]
+            )
+        missing = _profile_missing_labels(fields)
+    else:
+        missing = []
+
+    if include_signature and mba_profile_requires_signature(user):
+        for signature_type in mba_required_signature_types(user):
+            label = mba_profile_signature_label(user, signature_type)
+            if user_has_signature(user, signature_type):
+                if (
+                    (signature_type != USER_SIGNATURE_PRIMARY or role == MbaRole.HDC.value)
+                    and not user_signature_printed_name(user, signature_type)
+                ):
+                    missing.append(f"{label} printed name")
+                continue
+            missing.append(label)
+    return missing
+
+
 def mba_user_requires_profile_completion(user):
-    return (
-        getattr(user, "system_name", None) == "mba"
-        and getattr(user, "role", None) in {MbaRole.STUDENT.value, MbaRole.SCHOLAR.value, MbaRole.EXAMINER.value}
-        and not getattr(user, "has_profile", False)
-    )
+    return bool(mba_profile_missing_fields(user))
 
 
 @mba_bp.before_request
 def require_profile_completion_before_workspace_access():
     if not current_user.is_authenticated:
         return None
-    if request.endpoint in {"mba.profile"}:
+    if request.endpoint in {"mba.profile", "mba.profile_signature_image"}:
         return None
-    if not mba_user_requires_profile_completion(current_user):
+    missing_fields = mba_profile_missing_fields(current_user)
+    if not missing_fields:
         return None
-    flash("Complete your profile before opening your MBA dashboard.", "info")
+    preview = ", ".join(missing_fields[:6])
+    suffix = "..." if len(missing_fields) > 6 else ""
+    flash(f"Complete your MBA profile before opening your dashboard: {preview}{suffix}.", "info")
     return redirect(url_for("mba.profile"))
 
 
@@ -7312,6 +8123,8 @@ def profile_role_label(user):
         return "Student"
     if user.role in {MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}:
         return "Admin"
+    if user.role == MbaRole.HDC.value:
+        return "Higher Degree Committee"
     if user.is_supervisor_role() and user.is_examiner_role():
         return "Supervisor and Assessor"
     if user.is_supervisor_role():
@@ -7601,13 +8414,10 @@ def _refresh_existing_form_document(project, doc_type, form_type, payload, uploa
         return
 
     project_dir = os.path.join(_uploads_dir(), str(project.id))
-    os.makedirs(project_dir, exist_ok=True)
     file_bytes, file_extension, mime_type = generate_form_submission_download_bytes(project, form_type, payload)
+    stored_file_bytes = encrypt_sensitive_document_bytes(doc_type, file_bytes)
     original_name = f"{doc_type}_form.{file_extension}"
     unique_name = f"{doc_type}_{uuid.uuid4().hex[:8]}_form.{file_extension}"
-    dest_path = os.path.join(project_dir, unique_name)
-    with open(dest_path, "wb") as fh:
-        fh.write(file_bytes)
 
     old_path = os.path.join(project_dir, existing_doc.stored_name or "")
     if existing_doc.stored_name and os.path.exists(old_path):
@@ -7617,7 +8427,7 @@ def _refresh_existing_form_document(project, doc_type, form_type, payload, uploa
             pass
     existing_doc.original_name = original_name
     existing_doc.stored_name = unique_name
-    existing_doc.file_data = file_bytes
+    existing_doc.file_data = stored_file_bytes
     existing_doc.mime_type = mime_type
     existing_doc.file_size = len(file_bytes)
     existing_doc.uploaded_by_id = uploaded_by_id or existing_doc.uploaded_by_id or project.student_id
@@ -7656,12 +8466,18 @@ def reset_jbs5_review_state(project, *, clear_supervisor_signature=True, clear_h
         jbs10_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs10").first()
         if jbs10_form and isinstance(jbs10_form.payload, dict):
             payload = dict(jbs10_form.payload or {})
+            payload.pop("supervisor_signature", None)
+            payload.pop("supervisor_signature_date", None)
+            payload.pop("supervisor_signature_user_id", None)
+            payload.pop("supervisor_signature_email", None)
+            clear_signature_snapshots(payload, ("supervisor_signature",))
             payload.pop("jbs_hdc_signature", None)
             payload.pop("jbs_hdc_signature_date", None)
             payload.pop("head_of_department_signature", None)
             payload.pop("head_of_department_signature_date", None)
             clear_signature_snapshots(payload, ("jbs_hdc_signature", "head_of_department_signature"))
             jbs10_form.payload = payload
+            jbs10_form.supervisor_signed = False
             _refresh_existing_form_document(
                 project,
                 "jbs10",
@@ -7786,6 +8602,140 @@ def sign_student_jbs5_as_supervisor(project, supervisor_name, signature_date=Non
         f"Supervisor signed the student-submitted JBS5 form ({supervisor_name})",
     )
     return jbs5_form
+
+
+def sign_student_jbs10_as_supervisor(project, supervisor_name, signature_date=None, supervisor_user=None):
+    form = jbs10_form(project)
+    if not form or not isinstance(form.payload, dict):
+        raise ValueError("The student must submit JBS10 before the supervisor can sign it.")
+
+    signature_date = signature_date or datetime.utcnow().strftime("%Y-%m-%d")
+    payload = dict(form.payload or {})
+    payload["supervisor_signature"] = supervisor_name
+    payload["supervisor_signature_date"] = signature_date
+    payload.pop("_supervisor_return_requested_at", None)
+    payload.pop("_supervisor_return_request", None)
+    payload["_supervisor_return_resolved_at"] = datetime.utcnow().isoformat()
+    if supervisor_user is not None:
+        payload["supervisor_signature_user_id"] = str(getattr(supervisor_user, "id", "") or "")
+        payload["supervisor_signature_email"] = getattr(supervisor_user, "email", "") or ""
+        refresh_saved_signature_snapshot(payload, ("supervisor_signature",), supervisor_user)
+    form.payload = payload
+    form.supervisor_signed = True
+    _refresh_existing_form_document(
+        project,
+        "jbs10",
+        "jbs10",
+        payload,
+        uploaded_by_id=getattr(project, "student_id", None),
+    )
+    project.comments = append_comment(
+        project.comments,
+        f"Supervisor signed the student-submitted JBS10 form ({supervisor_name})",
+    )
+    return form
+
+
+def sign_jbs1_declaration_as_supervisor(project, supervisor_name, signature_date=None, supervisor_user=None):
+    form = jbs1_declaration_form(project)
+    if not form or not isinstance(form.payload, dict):
+        raise ValueError("The student must submit JBS 1 Declaration before the supervisor can sign it.")
+
+    signature_date = signature_date or datetime.utcnow().strftime("%Y-%m-%d")
+    payload = dict(form.payload or {})
+    payload["supervisor_signature"] = supervisor_name
+    payload["supervisor_signature_date"] = signature_date
+    if supervisor_user is not None:
+        payload["supervisor_signature_user_id"] = str(getattr(supervisor_user, "id", "") or "")
+        payload["supervisor_signature_email"] = getattr(supervisor_user, "email", "") or ""
+        refresh_saved_signature_snapshot(payload, ("supervisor_signature",), supervisor_user)
+    form.payload = payload
+    form.supervisor_signed = True
+    _refresh_existing_form_document(
+        project,
+        "jbs1_declaration",
+        "jbs1_declaration",
+        payload,
+        uploaded_by_id=getattr(project, "student_id", None),
+    )
+    project.comments = append_comment(
+        project.comments,
+        f"Supervisor signed the student-submitted JBS 1 Declaration ({supervisor_name})",
+    )
+    return form
+
+
+def sign_jbs1_declaration_as_program_manager(project, program_manager_name, signature_date=None, admin_user=None, office_values=None):
+    form = jbs1_declaration_form(project)
+    if not form or not isinstance(form.payload, dict):
+        raise ValueError("The student must submit JBS 1 Declaration before Admin can sign it.")
+    if not jbs1_supervisor_signed(project):
+        raise ValueError("The supervisor must sign JBS 1 Declaration before Admin signs as Program Manager.")
+
+    signature_date = signature_date or datetime.utcnow().strftime("%Y-%m-%d")
+    payload = dict(form.payload or {})
+    for field, value in (office_values or {}).items():
+        payload[field] = value
+    payload["office_program_manager"] = program_manager_name
+    payload["office_program_manager_date"] = signature_date
+    if admin_user is not None:
+        payload["office_program_manager_user_id"] = str(getattr(admin_user, "id", "") or "")
+        payload["office_program_manager_email"] = getattr(admin_user, "email", "") or ""
+        refresh_saved_signature_snapshot(payload, ("office_program_manager",), admin_user)
+    form.payload = payload
+    _refresh_existing_form_document(
+        project,
+        "jbs1_declaration",
+        "jbs1_declaration",
+        payload,
+        uploaded_by_id=getattr(project, "student_id", None),
+    )
+    project.comments = append_comment(
+        project.comments,
+        f"MBA Admin signed JBS 1 Declaration as Program Manager ({program_manager_name})",
+    )
+    return form
+
+
+def sign_intent_to_submit_as_supervisor(project, supervisor_name, supervisor_user=None):
+    form = intent_to_submit_form(project)
+    if not form or not isinstance(form.payload, dict):
+        raise ValueError("The student must submit Intent to Submit before the supervisor can sign it.")
+
+    payload = dict(form.payload or {})
+    payload["supervisor_agree_signature"] = supervisor_name
+    payload.pop("supervisor_disagree_signature", None)
+    payload.pop("co_supervisor_agree_signature", None)
+    payload.pop("co_supervisor_disagree_signature", None)
+    payload.pop("disagree_reasons", None)
+    payload.pop("disagree_reasons_date", None)
+    clear_signature_snapshots(
+        payload,
+        (
+            "supervisor_agree_signature",
+            "supervisor_disagree_signature",
+            "co_supervisor_agree_signature",
+            "co_supervisor_disagree_signature",
+        ),
+    )
+    if supervisor_user is not None:
+        payload["supervisor_agree_signature_user_id"] = str(getattr(supervisor_user, "id", "") or "")
+        payload["supervisor_agree_signature_email"] = getattr(supervisor_user, "email", "") or ""
+        refresh_saved_signature_snapshot(payload, ("supervisor_agree_signature",), supervisor_user)
+    form.payload = payload
+    form.supervisor_signed = True
+    _refresh_existing_form_document(
+        project,
+        "intent_to_submit",
+        "intent_to_submit",
+        payload,
+        uploaded_by_id=getattr(project, "student_id", None),
+    )
+    project.comments = append_comment(
+        project.comments,
+        f"Supervisor signed the student-submitted Intent to Submit form ({supervisor_name})",
+    )
+    return form
 
 
 def invitation_status_for_user(project, user_id):

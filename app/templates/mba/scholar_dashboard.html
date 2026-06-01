@@ -181,6 +181,38 @@
               </div>
             </section>
           {% endif %}
+          {% set additional_nomination_form = project.forms | selectattr('form_type', 'equalto', additional_external_examiner_nomination_doc_type()) | list | first %}
+          {% set additional_nomination_payload = additional_nomination_form.payload if additional_nomination_form and additional_nomination_form.payload else {} %}
+          {% set additional_nomination_docs = project.documents | selectattr('doc_type', 'equalto', additional_external_examiner_nomination_doc_type()) | list %}
+          {% set additional_nomination_doc = additional_nomination_docs|last if additional_nomination_docs else none %}
+          {% set additional_nomination_forwarded = additional_nomination_payload.get('nomination_forwarded_to_supervisor_at') %}
+          {% set additional_nomination_signed = additional_external_examiner_nomination_supervisor_signed(project) %}
+          {% if additional_nomination_forwarded or additional_nomination_signed %}
+            <section class="response-section">
+              <strong>Additional Assessor Nomination</strong>
+              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                {% if additional_nomination_signed %}
+                  You have signed the additional assessor nomination form.
+                {% else %}
+                  MBA Admin sent the additional assessor nomination form for your signature.
+                {% endif %}
+              </p>
+              <div class="invitation-action-row">
+                {% if additional_nomination_doc %}
+                  <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=additional_nomination_doc.id) }}" class="secondary-button small-button">View Nomination</a>
+                  <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=additional_nomination_doc.id) }}" class="secondary-button small-button">Download Word</a>
+                {% endif %}
+                {% if not additional_nomination_signed %}
+                  <a href="{{ url_for('mba.supervisor_sign_additional_external_examiner_nomination', project_id=project.id) }}" class="primary-button small-button">Sign Additional Nomination</a>
+                {% else %}
+                  <span class="status-pill status-pill--accepted">Nomination Signed</span>
+                {% endif %}
+                {% if hdc_additional_external_examiner_nomination_signature_complete(project) %}
+                  <span class="status-pill status-pill--accepted">HDC Signed</span>
+                {% endif %}
+              </div>
+            </section>
+          {% endif %}
           <details class="response-section" open>
             <summary>JBS5 Review</summary>
             {% set accepted_jbs5_form = project.forms | selectattr('form_type', 'equalto', 'jbs5') | list | first %}
@@ -239,6 +271,90 @@
               </form>
             {% endif %}
           </details>
+          {% set jbs10_form = project.forms | selectattr('form_type', 'equalto', 'jbs10') | list | first %}
+          {% set jbs10_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs10') | list %}
+          {% set latest_jbs10 = jbs10_docs|last if jbs10_docs else None %}
+          {% set jbs10_signed = jbs10_supervisor_signed(project) if jbs10_supervisor_signed is defined else (jbs10_form and jbs10_form.supervisor_signed) %}
+          {% set jbs10_return_waiting = jbs10_supervisor_return_pending(project) if jbs10_supervisor_return_pending is defined else false %}
+          {% if project.jbs5_hdc_approved_at and (jbs10_form or latest_jbs10) %}
+            <details class="response-section" {% if not jbs10_signed and not jbs10_return_waiting %}open{% endif %}>
+              <summary>JBS10 Review</summary>
+              <div class="invitation-action-row" style="margin-top:0.75rem;">
+                {% if latest_jbs10 %}
+                  <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=latest_jbs10.id) }}" class="secondary-button small-button">View JBS10</a>
+                {% endif %}
+                {% if jbs10_signed %}
+                  <span class="status-pill status-pill--accepted">JBS10 Signed</span>
+                {% elif jbs10_return_waiting %}
+                  <span class="muted" style="display:inline-flex;align-items:center;">Returned to student. Wait for amendment and resubmission.</span>
+                {% elif jbs10_form %}
+                  <a href="{{ url_for('mba.supervisor_sign_jbs10', project_id=project.id) }}" class="primary-button small-button">Review / Sign JBS10</a>
+                {% endif %}
+              </div>
+              {% if jbs10_form and jbs10_form.payload and jbs10_form.payload.get('_supervisor_return_request') %}
+                <p class="muted" style="margin:0.75rem 0 0;">
+                  Latest amendment request: {{ jbs10_form.payload.get('_supervisor_return_request') }}
+                </p>
+              {% elif not jbs10_signed %}
+                <p class="muted" style="margin:0.75rem 0 0;">
+                  JBS10 must be reviewed by the supervisor before MBA Admin can continue with assessor nomination.
+                </p>
+              {% endif %}
+            </details>
+          {% endif %}
+          {% set intent_form = project.forms | selectattr('form_type', 'equalto', 'intent_to_submit') | list | first %}
+          {% set intent_docs = project.documents | selectattr('doc_type', 'equalto', 'intent_to_submit') | list %}
+          {% set latest_intent = intent_docs|last if intent_docs else None %}
+          {% set intent_signed = intent_to_submit_supervisor_signed(project) if intent_to_submit_supervisor_signed is defined else (intent_form and intent_form.supervisor_signed) %}
+          {% if project.jbs5_hdc_approved_at and (intent_form or latest_intent) %}
+            <details class="response-section" {% if not intent_signed %}open{% endif %}>
+              <summary>Intent to Submit Review</summary>
+              <div class="invitation-action-row" style="margin-top:0.75rem;">
+                {% if latest_intent %}
+                  <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=latest_intent.id) }}" class="secondary-button small-button">View Intent</a>
+                {% endif %}
+                {% if intent_signed %}
+                  <span class="status-pill status-pill--accepted">Intent Signed</span>
+                {% elif intent_form %}
+                  <a href="{{ url_for('mba.supervisor_sign_intent_to_submit', project_id=project.id) }}" class="primary-button small-button">Review / Sign Intent</a>
+                {% endif %}
+              </div>
+              {% if not intent_signed %}
+                <p class="muted" style="margin:0.75rem 0 0;">
+                  Intent to Submit must be signed by the supervisor before MBA Admin can continue with assessor nomination.
+                </p>
+              {% endif %}
+            </details>
+          {% endif %}
+          {% set jbs1_form = project.forms | selectattr('form_type', 'equalto', 'jbs1_declaration') | list | first %}
+          {% set jbs1_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs1_declaration') | list %}
+          {% set latest_jbs1 = jbs1_docs|last if jbs1_docs else none %}
+          {% set jbs1_signed_by_supervisor = jbs1_supervisor_signed(project) if jbs1_supervisor_signed is defined else (jbs1_form and jbs1_form.supervisor_signed) %}
+          {% set jbs1_signed_by_program_manager = jbs1_program_manager_signed(project) if jbs1_program_manager_signed is defined else (jbs1_form and jbs1_form.payload and jbs1_form.payload.get('office_program_manager') and jbs1_form.payload.get('office_program_manager_date')) %}
+          {% if jbs1_form or latest_jbs1 %}
+            <details class="response-section" {% if not jbs1_signed_by_supervisor %}open{% endif %}>
+              <summary>JBS 1 Declaration Review</summary>
+              <div class="invitation-action-row" style="margin-top:0.75rem;">
+                {% if latest_jbs1 %}
+                  <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=latest_jbs1.id) }}" class="secondary-button small-button">View JBS 1</a>
+                  <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=latest_jbs1.id) }}" class="secondary-button small-button">Download Word</a>
+                {% endif %}
+                {% if jbs1_signed_by_supervisor %}
+                  <span class="status-pill status-pill--accepted">Supervisor Signed</span>
+                {% elif jbs1_form %}
+                  <a href="{{ url_for('mba.supervisor_sign_jbs1_declaration', project_id=project.id) }}" class="primary-button small-button">Review / Sign JBS 1</a>
+                {% endif %}
+                {% if jbs1_signed_by_program_manager %}
+                  <span class="status-pill status-pill--accepted">Program Manager Signed</span>
+                {% endif %}
+              </div>
+              {% if not jbs1_signed_by_supervisor %}
+                <p class="muted" style="margin:0.75rem 0 0;">
+                  JBS 1 Declaration must be signed by the supervisor before MBA Admin signs the Program Manager section.
+                </p>
+              {% endif %}
+            </details>
+          {% endif %}
           {% set forwarded_assessment_summary = assessment_results_forwarded_to_supervisor(project) if assessment_results_forwarded_to_supervisor is defined else false %}
           {% set active_result_corrections = project_has_active_corrections(project) if project_has_active_corrections is defined else false %}
           {% set hdc_results_released = results_released_to_supervisor(project) if results_released_to_supervisor is defined else false %}

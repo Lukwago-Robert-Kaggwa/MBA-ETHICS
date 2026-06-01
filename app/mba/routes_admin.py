@@ -782,6 +782,11 @@ def admin_dashboard():
         hdc_rejection_without_slot_decisions_requires_replacement=hdc_rejection_without_slot_decisions_requires_replacement,
         external_examiner_nomination_doc_type=external_examiner_nomination_doc_type,
         external_examiner_nomination_supervisor_signed=external_examiner_nomination_supervisor_signed,
+        jbs10_supervisor_signed=jbs10_supervisor_signed,
+        jbs10_supervisor_return_pending=jbs10_supervisor_return_pending,
+        intent_to_submit_supervisor_signed=intent_to_submit_supervisor_signed,
+        jbs1_supervisor_signed=jbs1_supervisor_signed,
+        jbs1_program_manager_signed=jbs1_program_manager_signed,
         assessor_hr_documents_sent=assessor_hr_documents_sent,
         assessor_hr_documents_sent_to=assessor_hr_documents_sent_to,
         supervisor_pool_release_count=len(supervisor_pool_release_candidates),
@@ -1277,7 +1282,7 @@ def admin_additional_assessment():
     if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
         return redirect(role_landing_url())
     assessment_status = (request.args.get("assessment_status") or "all").strip().lower()
-    allowed_statuses = {"all", "needs_assignment", "awaiting_acceptance", "awaiting_result"}
+    allowed_statuses = {"all", "needs_assignment", "awaiting_nomination", "awaiting_acceptance", "awaiting_result"}
     if assessment_status not in allowed_statuses:
         assessment_status = "all"
     student_number = (request.args.get("student_number") or "").strip()
@@ -1307,7 +1312,7 @@ def admin_additional_assessment():
 
     updated_additional_nomination_docs = False
     for project in projects:
-        if not additional_external_examiner_nomination_ready(project):
+        if not additional_external_examiner_nomination_can_generate(project):
             continue
         nomination_form = MbaForm.query.filter_by(
             project_id=project.id,
@@ -1360,6 +1365,11 @@ def admin_additional_assessment():
             for project in filtered_projects
             if additional_assessment_stage(project, forms_by_project=forms_by_project) == "needs_assignment"
         ),
+        "awaiting_nomination": sum(
+            1
+            for project in filtered_projects
+            if additional_assessment_stage(project, forms_by_project=forms_by_project) == "awaiting_nomination"
+        ),
         "awaiting_acceptance": sum(
             1
             for project in filtered_projects
@@ -1390,7 +1400,8 @@ def admin_additional_assessment():
         additional_assessment_required=additional_assessment_required,
         additional_assessment_blocks_hdc_submission=additional_assessment_blocks_hdc_submission,
         additional_external_examiner_nomination_doc_type=additional_external_examiner_nomination_doc_type,
-        assessor_acceptance_pack_complete=assessor_acceptance_pack_complete,
+        additional_external_examiner_nomination_supervisor_signed=additional_external_examiner_nomination_supervisor_signed,
+        hdc_additional_external_examiner_nomination_signature_complete=hdc_additional_external_examiner_nomination_signature_complete,
         assessment_result_pack_complete=assessment_result_pack_complete,
         assessor_grade_for_slot=assessor_grade_for_slot,
         uploaded_doc_for=uploaded_doc_for,

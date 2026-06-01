@@ -5,24 +5,93 @@
 {% block page_subheading %}Keep your {{ role_label }} details and signing profile up to date{% endblock %}
 
 {% block body %}
+{% set profile_display_name = (profile.name if is_hdc_committee_profile and profile and profile.name else 'Higher Degree Committee') if is_hdc_committee_profile else (((profile.title or '') ~ ' ' if profile and profile.title else '') ~ (current_user.first_name or current_user.email)) %}
+{% set saved_signature_count = signature_slots | selectattr('has_signature') | list | length %}
 <div class="mba-page-stack mba-profile-page">
   <section class="profile-hero">
     <div>
       <p class="eyebrow">MBA {{ role_label }}</p>
-      <h1>{{ ((profile.title or '') ~ ' ' if profile and profile.title else '') ~ (current_user.first_name or current_user.email) }}</h1>
+      <h1>{{ profile_display_name }}</h1>
       <p>{{ current_user.email }}</p>
     </div>
     <div class="profile-hero__status">
-      <span class="profile-status-chip {{ 'is-complete' if current_user.has_profile else '' }}">{{ 'Profile complete' if current_user.has_profile else 'Profile incomplete' }}</span>
-      <span class="profile-status-chip {{ 'is-complete' if current_user.has_signature else '' }}">{{ 'Signature saved' if current_user.has_signature else 'No signature saved' }}</span>
+      <span class="profile-status-chip {{ 'is-complete' if profile_is_complete else '' }}">{{ 'Profile complete' if profile_is_complete else 'Profile incomplete' }}</span>
+      {% if is_hdc_committee_profile %}
+        <span class="profile-status-chip {{ 'is-complete' if saved_signature_count == (signature_slots | length) else '' }}">{{ saved_signature_count }}/{{ signature_slots | length }} signatures saved</span>
+      {% else %}
+        <span class="profile-status-chip {{ 'is-complete' if current_user.has_signature else '' }}">{{ 'Signature saved' if current_user.has_signature else 'No signature saved' }}</span>
+      {% endif %}
     </div>
   </section>
 
-  <div class="profile-layout">
+  {% if profile_missing_fields %}
+    <section class="profile-required-alert ethics-panel">
+      <strong>Required before dashboard access:</strong>
+      <span>{{ profile_missing_fields | join(', ') }}</span>
+    </section>
+  {% endif %}
+
+  {% if is_hdc_committee_profile %}
+    <section class="ethics-panel profile-panel profile-signature-console" aria-labelledby="hdc-signature-console-title">
+      <div class="panel-heading">
+        <h2 id="hdc-signature-console-title">Signature Console</h2>
+        <span>{{ saved_signature_count }}/{{ signature_slots | length }} ready</span>
+      </div>
+      <div class="profile-signature-grid">
+        {% for slot in signature_slots %}
+          <section class="profile-signature-card {{ 'is-complete' if slot.has_signature else '' }}">
+            <div class="profile-signature-card__head">
+              <div>
+                <h3>{{ slot.label }}</h3>
+                <p>{{ 'Ready for form signing' if slot.has_signature else 'Signature required before dashboard access' }}</p>
+              </div>
+              <span class="profile-status-chip {{ 'is-complete' if slot.has_signature else '' }}">{{ 'Saved' if slot.has_signature else 'Missing' }}</span>
+            </div>
+            <form action="{{ url_for('mba.profile') }}" method="post" enctype="multipart/form-data" class="signature-profile-form signature-profile-form--compact" data-signature-profile-form>
+              <input type="hidden" name="action" value="save_signature">
+              <input type="hidden" name="signature_type" value="{{ slot.type }}">
+              <input type="hidden" name="signature_data" data-signature-data>
+              <label>Printed name
+                <input name="signature_printed_name" value="{{ slot.printed_name or '' }}" placeholder="Name attached to this signature" required>
+              </label>
+              <div class="signature-preview-box">
+                {% if slot.preview_url %}
+                  <img src="{{ slot.preview_url }}" alt="{{ slot.label }} preview">
+                {% else %}
+                  <span>No saved signature</span>
+                {% endif %}
+              </div>
+              <div class="profile-signature-card__actions">
+                <label class="secondary-button small-button">
+                  Upload Image
+                  <input type="file" name="signature_file" accept="image/png,image/jpeg" data-signature-file>
+                </label>
+                <button class="primary-button small-button" type="submit">Save</button>
+              </div>
+              <details class="signature-draw-panel">
+                <summary>Draw signature</summary>
+                <canvas class="signature-pad" width="520" height="180" data-signature-pad></canvas>
+                <button class="secondary-button small-button" type="button" data-signature-clear>Clear Pad</button>
+              </details>
+            </form>
+            {% if slot.has_signature %}
+              <form action="{{ url_for('mba.profile') }}" method="post" class="signature-delete-form">
+                <input type="hidden" name="action" value="delete_signature">
+                <input type="hidden" name="signature_type" value="{{ slot.type }}">
+                <button class="text-button" type="submit">Remove saved signature</button>
+              </form>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <div class="profile-layout {% if is_hdc_committee_profile %}profile-layout--hdc{% endif %}">
     <section class="ethics-panel profile-panel">
       <div class="panel-heading">
         <h2>{{ role_label }} Details</h2>
-        <span>{{ 'Student details' if is_student else 'Staff details' }}</span>
+        <span>{{ 'Student details' if is_student else ('Committee details' if is_hdc_committee_profile else 'Staff details') }}</span>
       </div>
 
       {% if is_student %}
@@ -34,7 +103,7 @@
             <input name="surname" value="{{ profile.surname or current_user.last_name or '' }}" required>
           </label>
           <label>Title
-            <input name="title" value="{{ profile.title or '' }}" placeholder="Mr, Ms, Dr">
+            <input name="title" value="{{ profile.title or '' }}" placeholder="Mr, Ms, Dr" required>
           </label>
           <label>Contact number
             <input name="contact" value="{{ profile.contact or '' }}" placeholder="e.g. 0720000000" required>
@@ -45,6 +114,9 @@
           <label>Secondary email
             <input type="email" name="secondary_email" value="{{ profile.secondary_email or '' }}" placeholder="Optional non-UJ email">
           </label>
+          <label>ID / passport number
+            <input name="id_passport_number" value="{{ profile.id_passport_number or '' }}" required>
+          </label>
           <label>Module
             <input name="module" value="{{ profile.module or '' }}" placeholder="Current MBA module" required>
           </label>
@@ -54,89 +126,126 @@
           <label>Degree
             <input name="degree" value="{{ profile.degree or 'MBA' }}" required>
           </label>
-          <label class="profile-form__wide">Address
-            <textarea name="address" rows="3">{{ profile.address or '' }}</textarea>
+          <label class="profile-form__wide">{{ 'Office address' if is_hdc_committee_profile else 'Address' }}
+            <textarea name="address" rows="3" required>{{ profile.address or '' }}</textarea>
+          </label>
+          <label>Postal code
+            <input name="postal_code" value="{{ profile.postal_code or '' }}" required>
+          </label>
+          <label>Default signing location
+            <input name="default_signing_location" value="{{ profile.default_signing_location or '' }}" placeholder="e.g. Johannesburg" required>
           </label>
           <div class="profile-form__actions">
             <button class="primary-button" type="submit">Save Profile</button>
-            {% if current_user.has_profile %}
+            {% if profile_is_complete %}
               <a href="{{ url_for('mba.dashboard') }}" class="secondary-button">Dashboard</a>
             {% endif %}
           </div>
         </form>
       {% else %}
         <form action="{{ url_for('mba.profile') }}" method="post" class="profile-form">
-          <label>First name
-            <input name="name" value="{{ profile.name or current_user.first_name or '' }}" required>
-          </label>
-          <label>Surname
-            <input name="surname" value="{{ profile.surname or current_user.last_name or '' }}" required>
-          </label>
-          <label>Title
-            <input name="title" value="{{ profile.title or '' }}" placeholder="Prof, Dr, Mr, Ms">
-          </label>
-          <label>Contact number
-            <input name="contact" value="{{ profile.contact or '' }}" placeholder="e.g. 0110000000" required>
-          </label>
-          <label>Department
-            <input name="department" value="{{ profile.department or '' }}" required>
-          </label>
-          <label>Position
-            <input name="position" value="{{ profile.position or '' }}" placeholder="Senior Lecturer, Admin Officer" required>
-          </label>
-          <label>Highest qualification
-            <input name="qualification" value="{{ profile.qualification or '' }}" required>
-          </label>
-          <label>Affiliation
-            <input name="affiliation" value="{{ profile.affiliation or '' }}" placeholder="University or partner institution" required>
-          </label>
-          <label class="profile-form__wide">Areas of expertise
-            <textarea name="skills" rows="3" required>{{ profile.skills or '' }}</textarea>
-          </label>
-          <label>Research themes
-            <textarea name="research_themes" rows="2" required>{{ profile.research_themes or '' }}</textarea>
-          </label>
-          <label>Research interests
-            <textarea name="research_interests" rows="2" required>{{ profile.research_interests or '' }}</textarea>
-          </label>
-          <label>Research disciplines
-            <textarea name="research_disciplines" rows="2" required>{{ profile.research_disciplines or '' }}</textarea>
-          </label>
-          <label>Students supervised to completion
-            <input type="number" min="0" name="students_supervised_total" value="{{ profile.students_supervised_total or 0 }}">
-          </label>
-          <label>Students assessed / examined
-            <input type="number" min="0" name="students_assessed_total" value="{{ profile.students_assessed_total or 0 }}">
-          </label>
-          <label>Publication count
-            <input type="number" min="0" name="publication_count" value="{{ profile.publication_count or 0 }}">
-          </label>
-          <label>Number of active students
-            <input type="number" min="0" name="students" value="{{ profile.students or 0 }}">
-          </label>
-          <label>Academic experience (years)
-            <input type="number" min="0" name="academic_experience" value="{{ profile.academic_experience or 0 }}">
-          </label>
-          <label class="profile-form__wide">Selected publications
-            <textarea name="selected_publications" rows="4">{{ profile.selected_publications or '' }}</textarea>
-          </label>
-          <label class="profile-form__wide">ORCID / Google Scholar / Research links
-            <textarea name="scholarly_profile_links" rows="3">{{ profile.scholarly_profile_links or '' }}</textarea>
-          </label>
+          {% if is_hdc_committee_profile %}
+            <label>Committee name
+              <input name="name" value="{{ profile.name or 'Higher Degree Committee' }}" required>
+            </label>
+            <label>Committee contact number
+              <input name="contact" value="{{ profile.contact or '' }}" placeholder="e.g. 0110000000" required>
+            </label>
+            <label>Department / School
+              <input name="department" value="{{ profile.department or '' }}" placeholder="Johannesburg Business School" required>
+            </label>
+            <label>Affiliation
+              <input name="affiliation" value="{{ profile.affiliation or '' }}" placeholder="University of Johannesburg" required>
+            </label>
+          {% else %}
+            <label>First name
+              <input name="name" value="{{ profile.name or current_user.first_name or '' }}" required>
+            </label>
+            <label>Surname
+              <input name="surname" value="{{ profile.surname or current_user.last_name or '' }}" required>
+            </label>
+            <label>Title
+              <input name="title" value="{{ profile.title or '' }}" placeholder="Prof, Dr, Mr, Ms" required>
+            </label>
+            <label>Contact number
+              <input name="contact" value="{{ profile.contact or '' }}" placeholder="e.g. 0110000000" required>
+            </label>
+            <label>Department
+              <input name="department" value="{{ profile.department or '' }}" required>
+            </label>
+            <label>Position
+              <input name="position" value="{{ profile.position or '' }}" placeholder="Senior Lecturer, Admin Officer" required>
+            </label>
+            <label>Affiliation
+              <input name="affiliation" value="{{ profile.affiliation or '' }}" placeholder="University or partner institution" required>
+            </label>
+            <label>Staff / employee number
+              <input name="staff_number" value="{{ profile.staff_number or '' }}" placeholder="Optional">
+            </label>
+          {% endif %}
+          {% if requires_academic_profile %}
+            <label>Highest qualification
+              <input name="qualification" value="{{ profile.qualification or '' }}" required>
+            </label>
+            <label>ID / passport number
+              <input name="id_passport_number" value="{{ profile.id_passport_number or '' }}" required>
+            </label>
+            <label class="profile-form__wide">Areas of expertise
+              <textarea name="skills" rows="3" required>{{ profile.skills or '' }}</textarea>
+            </label>
+            <label>Research themes
+              <textarea name="research_themes" rows="2" required>{{ profile.research_themes or '' }}</textarea>
+            </label>
+            <label>Research interests
+              <textarea name="research_interests" rows="2" required>{{ profile.research_interests or '' }}</textarea>
+            </label>
+            <label>Research disciplines
+              <textarea name="research_disciplines" rows="2" required>{{ profile.research_disciplines or '' }}</textarea>
+            </label>
+            <label>Students supervised to completion
+              <input type="number" min="0" name="students_supervised_total" value="{{ profile.students_supervised_total or 0 }}">
+            </label>
+            <label>Students assessed / examined
+              <input type="number" min="0" name="students_assessed_total" value="{{ profile.students_assessed_total or 0 }}">
+            </label>
+            <label>Publication count
+              <input type="number" min="0" name="publication_count" value="{{ profile.publication_count or 0 }}">
+            </label>
+            <label>Number of active students
+              <input type="number" min="0" name="students" value="{{ profile.students or 0 }}">
+            </label>
+            <label>Academic experience (years)
+              <input type="number" min="0" name="academic_experience" value="{{ profile.academic_experience or 0 }}">
+            </label>
+            <label class="profile-form__wide">Selected publications
+              <textarea name="selected_publications" rows="4">{{ profile.selected_publications or '' }}</textarea>
+            </label>
+            <label class="profile-form__wide">ORCID / Google Scholar / Research links
+              <textarea name="scholarly_profile_links" rows="3">{{ profile.scholarly_profile_links or '' }}</textarea>
+            </label>
+          {% endif %}
           <label class="profile-form__wide">Address
-            <textarea name="address" rows="3">{{ profile.address or '' }}</textarea>
+            <textarea name="address" rows="3" required>{{ profile.address or '' }}</textarea>
           </label>
-          <label class="profile-checkline">
-            <input type="checkbox" name="approved_before" {% if profile.approved_before %}checked{% endif %}>
-            <span>Approved MBA Capstone Projects before</span>
+          <label>Postal code
+            <input name="postal_code" value="{{ profile.postal_code or '' }}" required>
           </label>
-          <label class="profile-checkline">
-            <input type="checkbox" name="international_assessor" {% if profile.international_assessor %}checked{% endif %}>
-            <span>Available for international assessment</span>
+          <label>Default signing location
+            <input name="default_signing_location" value="{{ profile.default_signing_location or '' }}" placeholder="e.g. Johannesburg" required>
           </label>
+          {% if requires_academic_profile %}
+            <label class="profile-checkline">
+              <input type="checkbox" name="approved_before" {% if profile.approved_before %}checked{% endif %}>
+              <span>Approved MBA Capstone Projects before</span>
+            </label>
+            <label class="profile-checkline">
+              <input type="checkbox" name="international_assessor" {% if profile.international_assessor %}checked{% endif %}>
+              <span>Available for international assessment</span>
+            </label>
+          {% endif %}
           <div class="profile-form__actions">
             <button class="primary-button" type="submit">Save Profile</button>
-            {% if current_user.has_profile %}
+            {% if profile_is_complete %}
               <a href="{{ url_for('mba.dashboard') }}" class="secondary-button">Dashboard</a>
             {% endif %}
           </div>
@@ -145,38 +254,47 @@
     </section>
 
     <aside class="profile-side-stack">
-      <section class="ethics-panel profile-panel">
-        <div class="panel-heading">
-          <h2>Saved Signature</h2>
-          <span>Used when you sign forms</span>
-        </div>
-        <form action="{{ url_for('mba.profile') }}" method="post" enctype="multipart/form-data" class="signature-profile-form" data-signature-profile-form>
-          <input type="hidden" name="action" value="save_signature">
-          <input type="hidden" name="signature_data" data-signature-data>
-          <div class="signature-preview-box">
-            {% if signature_preview_url %}
-              <img src="{{ signature_preview_url }}" alt="Saved signature preview">
-            {% else %}
-              <span>No saved signature</span>
+      {% if not is_hdc_committee_profile %}
+        {% for slot in signature_slots %}
+          <section class="ethics-panel profile-panel">
+            <div class="panel-heading">
+              <h2>{{ slot.label }}</h2>
+              <span>{{ 'Required for this role' if slot.required else 'Optional' }}</span>
+            </div>
+            <form action="{{ url_for('mba.profile') }}" method="post" enctype="multipart/form-data" class="signature-profile-form" data-signature-profile-form>
+              <input type="hidden" name="action" value="save_signature">
+              <input type="hidden" name="signature_type" value="{{ slot.type }}">
+              <input type="hidden" name="signature_data" data-signature-data>
+              <label>Printed name
+                <input name="signature_printed_name" value="{{ slot.printed_name or '' }}" placeholder="Name attached to this signature" {% if slot.required %}required{% endif %}>
+              </label>
+              <div class="signature-preview-box">
+                {% if slot.preview_url %}
+                  <img src="{{ slot.preview_url }}" alt="{{ slot.label }} preview">
+                {% else %}
+                  <span>No saved signature</span>
+                {% endif %}
+              </div>
+              <canvas class="signature-pad" width="520" height="180" data-signature-pad></canvas>
+              <div class="signature-tools">
+                <label class="secondary-button small-button">
+                  Upload
+                  <input type="file" name="signature_file" accept="image/png,image/jpeg" data-signature-file>
+                </label>
+                <button class="secondary-button small-button" type="button" data-signature-clear>Clear Pad</button>
+                <button class="primary-button small-button" type="submit">Save Signature</button>
+              </div>
+            </form>
+            {% if slot.has_signature %}
+              <form action="{{ url_for('mba.profile') }}" method="post" class="signature-delete-form">
+                <input type="hidden" name="action" value="delete_signature">
+                <input type="hidden" name="signature_type" value="{{ slot.type }}">
+                <button class="text-button" type="submit">Remove saved signature</button>
+              </form>
             {% endif %}
-          </div>
-          <canvas class="signature-pad" width="520" height="180" data-signature-pad></canvas>
-          <div class="signature-tools">
-            <label class="secondary-button small-button">
-              Upload
-              <input type="file" name="signature_file" accept="image/png,image/jpeg" data-signature-file>
-            </label>
-            <button class="secondary-button small-button" type="button" data-signature-clear>Clear Pad</button>
-            <button class="primary-button small-button" type="submit">Save Signature</button>
-          </div>
-        </form>
-        {% if current_user.has_signature %}
-          <form action="{{ url_for('mba.profile') }}" method="post" class="signature-delete-form">
-            <input type="hidden" name="action" value="delete_signature">
-            <button class="text-button" type="submit">Remove saved signature</button>
-          </form>
-        {% endif %}
-      </section>
+          </section>
+        {% endfor %}
+      {% endif %}
 
       <section class="ethics-panel profile-panel">
         <div class="panel-heading">
@@ -205,85 +323,100 @@
 
 <script>
   (function () {
-    const form = document.querySelector('[data-signature-profile-form]');
-    if (!form) return;
-    const canvas = form.querySelector('[data-signature-pad]');
-    const hidden = form.querySelector('[data-signature-data]');
-    const fileInput = form.querySelector('[data-signature-file]');
-    const clearButton = form.querySelector('[data-signature-clear]');
-    const ctx = canvas.getContext('2d');
-    let drawing = false;
-    let hasInk = false;
+    const forms = document.querySelectorAll('[data-signature-profile-form]');
+    if (!forms.length) return;
 
-    const resizeForDisplay = () => {
-      const rect = canvas.getBoundingClientRect();
-      const ratio = window.devicePixelRatio || 1;
-      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
-      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
-      ctx.putImageData(image, 0, 0);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 2.4 * ratio;
-      ctx.strokeStyle = '#111827';
-    };
+    forms.forEach((form) => {
+      const canvas = form.querySelector('[data-signature-pad]');
+      const hidden = form.querySelector('[data-signature-data]');
+      const fileInput = form.querySelector('[data-signature-file]');
+      const clearButton = form.querySelector('[data-signature-clear]');
+      const drawPanel = canvas.closest('details');
+      if (!canvas || !hidden || !fileInput || !clearButton) return;
 
-    const pointFromEvent = (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const source = event.touches ? event.touches[0] : event;
-      return {
-        x: (source.clientX - rect.left) * (canvas.width / rect.width),
-        y: (source.clientY - rect.top) * (canvas.height / rect.height),
+      const ctx = canvas.getContext('2d');
+      let drawing = false;
+      let hasInk = false;
+
+      const resizeForDisplay = () => {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+        canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+        ctx.putImageData(image, 0, 0);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 2.4 * ratio;
+        ctx.strokeStyle = '#111827';
       };
-    };
 
-    const start = (event) => {
-      drawing = true;
-      hasInk = true;
-      fileInput.value = '';
-      const point = pointFromEvent(event);
-      ctx.beginPath();
-      ctx.moveTo(point.x, point.y);
-      event.preventDefault();
-    };
-    const move = (event) => {
-      if (!drawing) return;
-      const point = pointFromEvent(event);
-      ctx.lineTo(point.x, point.y);
-      ctx.stroke();
-      event.preventDefault();
-    };
-    const stop = () => {
-      drawing = false;
-    };
+      const pointFromEvent = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const source = event.touches ? event.touches[0] : event;
+        return {
+          x: (source.clientX - rect.left) * (canvas.width / rect.width),
+          y: (source.clientY - rect.top) * (canvas.height / rect.height),
+        };
+      };
 
-    canvas.addEventListener('mousedown', start);
-    canvas.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', stop);
-    canvas.addEventListener('touchstart', start, { passive: false });
-    canvas.addEventListener('touchmove', move, { passive: false });
-    window.addEventListener('touchend', stop);
-    window.addEventListener('resize', resizeForDisplay);
-    resizeForDisplay();
+      const start = (event) => {
+        drawing = true;
+        hasInk = true;
+        fileInput.value = '';
+        const point = pointFromEvent(event);
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y);
+        event.preventDefault();
+      };
 
-    clearButton.addEventListener('click', () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      hidden.value = '';
-      hasInk = false;
-    });
+      const move = (event) => {
+        if (!drawing) return;
+        const point = pointFromEvent(event);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+        event.preventDefault();
+      };
 
-    fileInput.addEventListener('change', () => {
-      if (fileInput.files.length) {
+      const stop = () => {
+        drawing = false;
+      };
+
+      canvas.addEventListener('mousedown', start);
+      canvas.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', stop);
+      canvas.addEventListener('touchstart', start, { passive: false });
+      canvas.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', stop);
+      window.addEventListener('resize', resizeForDisplay);
+      if (drawPanel) {
+        drawPanel.addEventListener('toggle', () => {
+          if (drawPanel.open) {
+            window.setTimeout(resizeForDisplay, 0);
+          }
+        });
+      }
+      resizeForDisplay();
+
+      clearButton.addEventListener('click', () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         hidden.value = '';
         hasInk = false;
-      }
-    });
+      });
 
-    form.addEventListener('submit', () => {
-      if (hasInk && !fileInput.files.length) {
-        hidden.value = canvas.toDataURL('image/png');
-      }
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files.length) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          hidden.value = '';
+          hasInk = false;
+        }
+      });
+
+      form.addEventListener('submit', () => {
+        if (hasInk && !fileInput.files.length) {
+          hidden.value = canvas.toDataURL('image/png');
+        }
+      });
     });
   })();
 </script>

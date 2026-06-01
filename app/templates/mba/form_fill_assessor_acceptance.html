@@ -206,7 +206,7 @@
           <tr>
             <td class="mba-doc-label">Banking Details Changed</td>
             <td>
-              <select class="mba-doc-select" name="bank_changed">
+              <select class="mba-doc-select" name="bank_changed" required>
                 <option value="">Select</option>
                 {% for option in yes_no_options %}
                   <option value="{{ option }}" {% if prefill.get('bank_changed') == option %}selected{% endif %}>{{ option }}</option>
@@ -240,7 +240,7 @@
             </td>
             <td class="mba-doc-label">Account Ownership</td>
             <td>
-              <select class="mba-doc-select" name="bank_account_ownership">
+              <select class="mba-doc-select" name="bank_account_ownership" required>
                 <option value="">Select</option>
                 {% for option in account_ownership_options %}
                   <option value="{{ option }}" {% if prefill.get('bank_account_ownership') == option %}selected{% endif %}>{{ option }}</option>

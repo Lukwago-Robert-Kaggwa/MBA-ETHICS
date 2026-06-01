@@ -18,6 +18,7 @@ def _env_float(name, default):
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
+    MBA_DATA_ENCRYPTION_KEY = os.getenv("MBA_DATA_ENCRYPTION_KEY")
     PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "").rstrip("/")
     PREFERRED_URL_SCHEME = os.getenv("PREFERRED_URL_SCHEME", "https")
     SQLALCHEMY_DATABASE_URI = os.getenv(

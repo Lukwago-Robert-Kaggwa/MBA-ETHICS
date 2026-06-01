@@ -123,11 +123,18 @@
                   {% set proj_forms = forms_by_project.get(project.id, {}) %}
                   {% set form = proj_forms.get(doc.doc_type) %}
                   {% set is_result_summary_doc = doc.doc_type == 'assessment_summary' %}
-                  {% set native_word_doc = doc.doc_type in ['assessment_summary', 'external_examiner_nomination', 'additional_external_examiner_nomination'] or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_temp_appointment_') or doc.doc_type.startswith('assessor_temp_claim_') %}
-                  {% set hdc_signature_editable_doc = (doc.doc_type == 'jbs5' and project.project_status == 'jbs5_submitted_to_hdc') or (doc.doc_type == 'jbs10' and project.project_status == 'admin_approved') or (doc.doc_type == 'assessment_summary' and project.project_status == 'results_submitted_to_hdc') or doc.doc_type in ['external_examiner_nomination', 'additional_external_examiner_nomination'] %}
+                  {% set native_word_doc = doc.doc_type in ['assessment_summary', 'external_examiner_nomination', 'additional_external_examiner_nomination', 'intent_to_submit'] or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_temp_appointment_') or doc.doc_type.startswith('assessor_temp_claim_') %}
+                  {% set hdc_signature_editable_doc = (doc.doc_type == 'jbs5' and project.project_status == 'jbs5_submitted_to_hdc') or (doc.doc_type in ['jbs10', 'intent_to_submit'] and project.project_status == 'admin_approved') or (doc.doc_type == 'assessment_summary' and project.project_status == 'results_submitted_to_hdc') or doc.doc_type in ['external_examiner_nomination', 'additional_external_examiner_nomination'] %}
+                  {% set hdc_signature_status = hdc_document_signature_status(project, doc.doc_type, form) if hdc_document_signature_status is defined else none %}
                   <tr>
                     <td>
                       <strong>{{ document_label(doc.doc_type) }}</strong>
+                      {% if hdc_signature_status %}
+                        <span class="document-signature-status invite-badge invite-badge--{{ hdc_signature_status.badge }}">{{ hdc_signature_status.label }}</span>
+                        {% if hdc_signature_status.missing %}
+                          <small class="document-signature-missing">Missing: {{ hdc_signature_status.missing|join(', ') }}</small>
+                        {% endif %}
+                      {% endif %}
                       <small>{{ doc.original_name }}</small>
                     </td>
                     <td class="admin-table__date">{{ doc.uploaded_at.strftime('%d %b %Y') }}</td>
@@ -155,7 +162,7 @@
                            class="secondary-button small-button">{{ 'Download Word' if native_word_doc else 'Download' }}</a>
                         {% if hdc_signature_editable_doc %}
                           <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type=doc.doc_type) }}"
-                             class="secondary-button small-button">{{ 'Open for Decision' if doc.doc_type == 'assessment_summary' else 'Edit' }}</a>
+                             class="secondary-button small-button">{{ 'Sign & Decide' if doc.doc_type == 'assessment_summary' else 'Sign Form' }}</a>
                         {% endif %}
                       </div>
                     </td>
@@ -213,18 +220,8 @@
           </p>
         {% elif project.project_status == 'admin_approved' %}
           {% set nomination_supervisor_signed = external_examiner_nomination_supervisor_signed(project) %}
-          {% set external_nomination_docs = proj_docs | selectattr('doc_type', 'equalto', 'external_examiner_nomination') | list %}
-          {% set external_nomination_doc = external_nomination_docs|last if external_nomination_docs else none %}
-          {% set jbs10_docs = proj_docs | selectattr('doc_type', 'equalto', 'jbs10') | list %}
-          {% set jbs10_doc = jbs10_docs|last if jbs10_docs else none %}
           <form action="{{ url_for('mba.hdc_project_action', project_id=project.id) }}" method="post" class="form-stack compact-form">
             <label>HDC nomination comment <textarea name="comment" rows="2"></textarea></label>
-            {% if jbs10_doc %}
-              <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='jbs10') }}" class="primary-button small-button" style="align-self:flex-start;">Open JBS10 for HDC Signatures</a>
-            {% endif %}
-            {% if external_nomination_doc %}
-              <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='external_examiner_nomination') }}" class="secondary-button small-button" style="align-self:flex-start;">Open Nomination Form for HOD/Dean Signatures</a>
-            {% endif %}
             <div class="invite-list">
               {% for slot, slot_label, assessor in [('assessor_1', 'Assessor 1', project.assessor_1), ('assessor_2', 'Assessor 2', project.assessor_2)] %}
                 {% set hdc_decision = assessor_hdc_decision(project, slot) %}
@@ -250,16 +247,33 @@
             </div>
             <p class="muted" style="margin:0.5rem 0 0;">
               {% if nomination_supervisor_signed %}
-                Use the assessor buttons for individual nomination decisions. You may approve one assessor and reject the other, or reject both.
+                Use the assessor buttons for individual nomination decisions. Use the document table above to sign each form, then finish the review here.
               {% else %}
                 The amended external examiner nomination form must be signed by the supervisor before HDC decisions can be recorded.
               {% endif %}
             </p>
+            <div class="card-actions">
+              <button class="primary-button small-button" name="action" value="finish_nomination_review" type="submit">Finish Review</button>
+            </div>
           </form>
         {% elif project.project_status == 'hdc_declined' %}
           <p class="muted">
             Assessor nominations were returned with HDC feedback. Wait for MBA Admin to replace any declined assessor and resubmit the nomination set before recording another HDC decision.
           </p>
+        {% elif project.project_status in ['hdc_verified', 'results_declined'] and additional_external_examiner_nomination_supervisor_signed(project) and not hdc_additional_external_examiner_nomination_signature_complete(project) %}
+          {% set additional_nomination_docs = proj_docs | selectattr('doc_type', 'equalto', additional_external_examiner_nomination_doc_type()) | list %}
+          {% set additional_nomination_doc = additional_nomination_docs|last if additional_nomination_docs else none %}
+          <section class="response-section">
+            <strong>Additional Assessor Nomination Review</strong>
+            <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              The additional assessor nomination has been signed by the supervisor. Open the live nomination form and complete the HDC signature fields before MBA Admin can invite the third assessor.
+            </p>
+            {% if additional_nomination_doc %}
+              <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type=additional_external_examiner_nomination_doc_type()) }}" class="primary-button small-button" style="align-self:flex-start;">Open Additional Nomination</a>
+            {% else %}
+              <p class="muted">The additional assessor nomination document is not available yet.</p>
+            {% endif %}
+          </section>
         {% elif project.project_status == 'results_submitted_to_hdc' %}
           {% set assessment_summary_docs = proj_docs | selectattr('doc_type', 'equalto', 'assessment_summary') | list %}
           {% set assessment_summary_doc = assessment_summary_docs|last if assessment_summary_docs else none %}

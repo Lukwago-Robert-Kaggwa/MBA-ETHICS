@@ -2,8 +2,9 @@ from datetime import datetime
 from html import escape
 import secrets
 
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, logout_user
+from sqlalchemy.orm.attributes import flag_modified
 
 from ..extensions import db
 from ..mail import send_bulk_emails
@@ -159,11 +160,17 @@ def _assessor_hr_document_attachments(project):
             if not doc or not getattr(doc, "file_data", None) or (assessor and doc.uploaded_by_id != assessor.id):
                 missing.append(f"{document_label(doc_type)} for {assessor_name}")
                 continue
+            try:
+                attachment_content = decrypt_sensitive_document_bytes(doc.file_data)
+            except RuntimeError:
+                current_app.logger.exception("Could not decrypt HR attachment document %s", getattr(doc, "id", None))
+                missing.append(f"{document_label(doc_type)} for {assessor_name} could not be decrypted")
+                continue
             filename = _email_safe_filename(f"{assessor_name} - {document_label(doc_type)}.docx")
             attachments.append(
                 {
                     "filename": filename,
-                    "content": doc.file_data,
+                    "content": attachment_content,
                     "mime_type": doc.mime_type
                     or "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 }
@@ -813,7 +820,7 @@ def admin_project_action(project_id):
         if not project.jbs5_hdc_approved_at:
             return "HDC must approve JBS5 before assessor invitations can be sent."
         if not student_submitted_assessor_prerequisite_docs(project):
-            return "Both JBS10 and Intent to Submit must be submitted by the student before sending assessor invitations."
+            return "JBS10 and Intent to Submit must be signed by the supervisor before sending assessor invitations."
         if not (project.supervisor_confirmed or project.supervisor_accepted_at):
             return "Supervisor must be confirmed before assigning assessors."
         return None
@@ -1133,7 +1140,70 @@ def admin_project_action(project_id):
             "suggested assessor(s)",
         )
 
-    if action == "forward_jbs5_to_hdc":
+    if action == "return_jbs5_to_student":
+        return_comment = (request.form.get("jbs5_return_comment") or comment).strip()
+        if project.jbs5_hdc_approved_at:
+            flash("JBS5 has already been approved by HDC and cannot be returned by MBA Admin.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if project.project_status == ProjectStatus.JBS5_SUBMITTED_TO_HDC.value:
+            flash("JBS5 is already with HDC. HDC must return it from the HDC review form if changes are needed.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if project.project_status not in {
+            ProjectStatus.ADMIN_SUBMITTED.value,
+            ProjectStatus.SUPERVISOR_ACCEPTED.value,
+            ProjectStatus.ADMIN_DECLINED.value,
+        }:
+            flash("JBS5 can only be returned while it is still in the MBA Admin review path.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if not project_has_jbs5_document(project):
+            flash("The student JBS5 document is not available to return.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if not return_comment:
+            flash("Add a return reason before sending JBS5 back to the student.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects", _anchor=f"project-{project.id}"))
+
+        reset_jbs5_review_state(project, clear_supervisor_signature=True, clear_hdc_signature=True)
+        project.project_status = ProjectStatus.ADMIN_DECLINED.value
+        project.comments = append_comment(
+            project.comments,
+            f"{current_user.email}: returned JBS5 to the student for amendment. Reason: {return_comment}",
+        )
+        messages = []
+        if project.student and project.student.email:
+            cc_recipients = [
+                email
+                for email in dict.fromkeys([*project_supervisor_notification_emails(project), *mba_admin_notification_emails()])
+                if email and email.lower() != project.student.email.lower()
+            ]
+            messages.append(
+                {
+                    "recipient": project.student.email,
+                    "cc": cc_recipients,
+                    "subject": f"JBS5 Returned for Amendment: {project.project_title}",
+                    "body": (
+                        f"MBA Admin has returned your JBS5 form for amendment.\n\n"
+                        f"Project: {project.project_title}\n\n"
+                        f"Reason:\n{return_comment}\n\n"
+                        "Please sign in, update JBS5, and submit it again."
+                    ),
+                }
+            )
+        if messages:
+            email_result = send_bulk_emails(messages)
+            project.comments = append_comment(
+                project.comments,
+                (
+                    "System: JBS5 admin return email result: "
+                    f"delivered={len(email_result['delivered'])}, failed={len(email_result['failed'])}"
+                ),
+            )
+        else:
+            project.comments = append_comment(
+                project.comments,
+                "System: JBS5 returned by MBA Admin; no student email recipient is configured.",
+            )
+        message = "JBS5 returned to the student for amendment."
+    elif action == "forward_jbs5_to_hdc":
         if project.jbs5_hdc_approved_at:
             flash("JBS5 has already been approved by HDC.", "info")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
@@ -1210,7 +1280,7 @@ def admin_project_action(project_id):
             flash("Forward JBS5 to HDC and wait for HDC approval before forwarding assessor nominations.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if not student_submitted_assessor_prerequisite_docs(project):
-            flash("JBS10 and Intent to Submit must be submitted by the student before nominations can be forwarded to HDC.", "error")
+            flash("JBS10 and Intent to Submit must be signed by the supervisor before nominations can be forwarded to HDC.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         declined_hdc_slots = hdc_declined_assessor_slots(project)
         if declined_hdc_slots:
@@ -1256,6 +1326,9 @@ def admin_project_action(project_id):
         if project.project_status not in hdc_approved_statuses:
             flash("Send the assessor HR documents only after HDC has approved the nominated assessors.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if assessor_hr_documents_sent(project):
+            flash("The approved assessor HR documents have already been sent to HR. Stage 4 is complete.", "info")
+            return redirect(url_for("mba.admin_dashboard", panel="projects", _anchor=f"project-{project.id}"))
         hr_email = normalize_email(request.form.get("assessor_hr_email"))
         if not _looks_like_email(hr_email):
             flash("Enter a valid HR email address before sending the assessor documents.", "error")
@@ -1309,6 +1382,7 @@ def admin_project_action(project_id):
         payload["assessor_hr_documents_sent_by"] = current_user.email or ""
         payload["assessor_hr_documents_sent_count"] = len(attachments)
         nomination_form.payload = payload
+        flag_modified(nomination_form, "payload")
         project.comments = append_comment(
             project.comments,
             (
@@ -1328,7 +1402,7 @@ def admin_project_action(project_id):
             flash("Send the approved assessor temporary appointment and claim forms to HR before requesting the Capstone Manuscript.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if not student_submitted_assessor_prerequisite_docs(project):
-            flash("Ask the student to submit the Capstone Manuscript only after JBS10 and Intent to Submit are on file and JBS5 is approved by HDC.", "error")
+            flash("Ask the student to submit the Capstone Manuscript only after JBS10 and Intent to Submit are signed by the supervisor, and JBS5 is approved by HDC.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
         project.dissertation_moodle_request_sent_at = datetime.utcnow()
@@ -1408,16 +1482,101 @@ def admin_project_action(project_id):
 
         suggested_assessor = suggested_additional_assessor(project, examiners_query().all())
         previous_additional_assessor_id = project.assessor_3_id
+        current_additional_status = project.assessor_3_invitation_status
+        if previous_additional_assessor_id == additional_assessor_id and current_additional_status in {
+            INVITATION_PENDING,
+            INVITATION_ACCEPTED,
+        }:
+            flash("The selected additional assessor has already been invited or has accepted the invitation.", "info")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if previous_additional_assessor_id == additional_assessor_id and current_additional_status == INVITATION_DECLINED:
+            flash("Choose a replacement for the declined additional assessor.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
         if previous_additional_assessor_id and previous_additional_assessor_id != additional_assessor_id:
             reset_assessor_slot_artifacts(project, ADDITIONAL_ASSESSOR_SLOT)
 
         activate_additional_assessment(project)
         project.assessor_3_id = additional_assessor_id
-        project.assessor_3_invitation_status = INVITATION_PENDING
-        mark_assessor_invitations_sent(project, slots=[ADDITIONAL_ASSESSOR_SLOT])
+        project.assessor_3_invitation_status = None
+        project.assessor_3_invited_at = None
+        project.assessor_3_reminder_sent_at = None
 
         additional_assessor = db.session.get(MbaUser, additional_assessor_id)
         was_override = bool(suggested_assessor and suggested_assessor.id != additional_assessor_id)
+        nomination_form = _routes_forms.refresh_additional_external_examiner_nomination_if_ready(project)
+        delivered_count = 0
+        failed_count = 0
+        supervisor = project.primary_supervisor
+        if nomination_form:
+            payload = dict(nomination_form.payload or {})
+            payload["nomination_forwarded_to_supervisor_at"] = datetime.utcnow().isoformat()
+            payload["nomination_forwarded_to_supervisor_by"] = current_user.email or ""
+            nomination_form.payload = payload
+            flag_modified(nomination_form, "payload")
+        if nomination_form and supervisor and supervisor.email:
+            sign_url = url_for(
+                "mba.supervisor_sign_additional_external_examiner_nomination",
+                project_id=project.id,
+                _external=True,
+            )
+            email_result = send_bulk_emails(
+                [
+                    {
+                        "recipient": supervisor.email,
+                        "subject": f"Additional Assessor Nomination Requires Signature: {project.project_title}",
+                        "body": (
+                            f"The additional assessor nomination form for '{project.project_title}' is ready for your signature.\n\n"
+                            f"Student: {project.student.email if project.student else 'Unknown'}\n"
+                            f"Proposed additional assessor: {_person_name(additional_assessor, 'Not selected')}\n\n"
+                            f"Please sign in and sign the nomination form here:\n{sign_url}"
+                        ),
+                    }
+                ]
+            )
+            delivered_count = len(email_result["delivered"])
+            failed_count = len(email_result["failed"])
+        project.comments = append_comment(
+            project.comments,
+            (
+                f"Admin proposed additional assessor: {additional_assessor.email}; "
+                f"override={'yes' if was_override else 'no'}; supervisor_signature_email_delivered={delivered_count}; "
+                f"failed={failed_count}"
+            ),
+        )
+        if nomination_form and delivered_count and not failed_count:
+            message = "Additional assessor proposed. The nomination form was sent to the supervisor for signature."
+        elif nomination_form and supervisor and supervisor.email:
+            message = "Additional assessor proposed. The nomination form was generated, but the supervisor signature email was not delivered."
+        elif nomination_form:
+            message = "Additional assessor proposed and the nomination form was generated. The supervisor does not have an email address on file."
+        else:
+            message = "Additional assessor proposed, but the nomination form could not be generated yet."
+    elif action == "send_additional_assessor_invitation":
+        if project.project_status not in {ProjectStatus.HDC_VERIFIED.value, ProjectStatus.RESULTS_DECLINED.value}:
+            flash("Additional assessment invitations can only be sent while the results are still with MBA Admin.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not additional_assessment_required(project):
+            flash("This project does not currently require an additional assessment.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not project.assessor_3_id:
+            flash("Select the proposed third assessor before sending the invitation.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if project.assessor_3_invitation_status in {INVITATION_PENDING, INVITATION_ACCEPTED}:
+            flash("The additional assessor invitation has already been sent or accepted.", "info")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not additional_external_examiner_nomination_supervisor_signed(project):
+            flash("The supervisor must sign the additional assessor nomination before the invitation can be sent.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not hdc_additional_external_examiner_nomination_signature_complete(project):
+            flash("HDC must sign the additional assessor nomination before the invitation can be sent.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+
+        additional_assessor = project.assessor_3
+        if not additional_assessor or not additional_assessor.email:
+            flash("The additional assessor does not have an email address on file.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        project.assessor_3_invitation_status = INVITATION_PENDING
+        mark_assessor_invitations_sent(project, slots=[ADDITIONAL_ASSESSOR_SLOT])
         email_result = send_bulk_emails(
             [
                 {
@@ -1438,16 +1597,16 @@ def admin_project_action(project_id):
         project.comments = append_comment(
             project.comments,
             (
-                f"Admin assigned additional assessor: {additional_assessor.email}; "
-                f"override={'yes' if was_override else 'no'}; delivered={delivered_count}; failed={failed_count}"
+                f"{current_user.email}: sent HDC-approved additional assessment invitation to "
+                f"{additional_assessor.email}; delivered={delivered_count}; failed={failed_count}"
             ),
         )
         if delivered_count and not failed_count:
-            message = "Additional assessor assigned and invitation sent."
+            message = "Additional assessor invitation sent."
         elif delivered_count and failed_count:
-            message = f"Additional assessor assigned. Email sent to {delivered_count}; {failed_count} failed."
+            message = f"Additional assessor invitation recorded. Email sent to {delivered_count}; {failed_count} failed."
         else:
-            message = "Additional assessor assigned. Email delivery is not configured or failed."
+            message = "Additional assessor invitation recorded. Email delivery is not configured or failed."
     elif action == "request_module_completion_verification":
         if not can_request_module_completion_verification(project):
             flash("Module completion verification is not available for this Capstone Project right now.", "error")
@@ -1639,7 +1798,7 @@ def hdc_project_action(project_id):
             flash("Open JBS5 and complete the HDC signature section before approving it.", "info")
             return redirect(url_for("mba.hdc_sign_project_form", project_id=project.id, form_type="jbs5"))
         elif project.project_status == ProjectStatus.ADMIN_APPROVED.value:
-            flash("Use the individual assessor nomination buttons to approve or reject the nominated assessors.", "info")
+            flash("Record each assessor nomination decision, sign the required documents, then use Finish Review.", "info")
             return redirect(url_for("mba.hdc_dashboard"))
         elif project.project_status == ProjectStatus.JBS5_HDC_DECLINED.value:
             flash("JBS5 has been returned. Wait for the student, supervisor, and MBA Admin to resubmit it before another HDC decision.", "info")
@@ -1681,21 +1840,54 @@ def hdc_project_action(project_id):
             flash(f"{INVITATION_SLOTS[slot]['label']} is not assigned.", "error")
             return redirect(url_for("mba.hdc_dashboard"))
         set_assessor_hdc_decision(project, slot, decision)
-        review_status = sync_hdc_assessor_nomination_status(project)
-        notify_admin_nomination_decision = True
         assessor_label = INVITATION_SLOTS[slot]["label"]
         decision_label = assessor_hdc_decision_label(decision).lower()
+        message = (
+            f"{assessor_label} nomination {decision_label} recorded. "
+            "Use Finish Review after every assessor decision and required form signature is complete."
+        )
+    elif action == "finish_nomination_review":
+        if project.project_status != ProjectStatus.ADMIN_APPROVED.value:
+            flash("This Capstone Project is not waiting for HDC nomination review.", "error")
+            return redirect(url_for("mba.hdc_dashboard"))
+        missing_items = []
+        if not project.jbs5_hdc_approved_at:
+            missing_items.append("HDC-approved JBS5")
+        if not external_examiner_nomination_supervisor_signed(project):
+            missing_items.append("supervisor-signed nomination form")
+        if not hdc_jbs10_signature_complete(project):
+            missing_items.append("JBS10 Head of Department and JBS HDC signatures")
+        if not hdc_intent_to_submit_signature_complete(project):
+            missing_items.append("Intent to Submit Head of Department and Director of School signatures")
+        if not hdc_external_examiner_nomination_signature_complete(project):
+            missing_items.append("nomination form Head of Department and Executive Dean signatures")
+        unassigned_slots = [
+            INVITATION_SLOTS[slot]["label"]
+            for slot in PRIMARY_ASSESSOR_SLOTS
+            if not getattr(project, f"{slot}_id", None)
+        ]
+        if unassigned_slots:
+            missing_items.append("assigned assessor for " + ", ".join(unassigned_slots))
+        pending_decisions = [
+            INVITATION_SLOTS[slot]["label"]
+            for slot in PRIMARY_ASSESSOR_SLOTS
+            if getattr(project, f"{slot}_id", None)
+            and assessor_hdc_decision(project, slot) not in HDC_ASSESSOR_DECISIONS
+        ]
+        if pending_decisions:
+            missing_items.append("HDC decision for " + ", ".join(pending_decisions))
+        if missing_items:
+            flash("Finish Review is available after: " + "; ".join(missing_items) + ".", "error")
+            return redirect(url_for("mba.hdc_dashboard"))
+        review_status = sync_hdc_assessor_nomination_status(project)
         if review_status == "approved":
-            message = "Both assessor nominations approved by HDC."
+            message = "HDC nomination review finished. All nominated assessors were approved."
         elif review_status == "declined":
-            message = f"{assessor_label} nomination {decision_label} by HDC. Rejected assessor nomination(s) have been returned to MBA Admin."
-        elif review_status in {"signature_pending", "signature_pending_declined"}:
-            message = (
-                f"{assessor_label} nomination {decision_label} by HDC. "
-                "Complete the JBS10 Head of Department and JBS HDC signature fields before finalizing the nomination review."
-            )
+            message = "HDC nomination review finished. Rejected assessor nomination(s) have been returned to MBA Admin."
         else:
-            message = f"{assessor_label} nomination {decision_label} by HDC. Review the remaining assessor nomination."
+            flash("Finish Review is available only after every assessor nomination has an HDC decision.", "error")
+            return redirect(url_for("mba.hdc_dashboard"))
+        notify_admin_nomination_decision = True
     elif action in {"approve_results", "decline_results"}:
         flash("Open the assessment summary, complete the HDC signature fields, then record the results decision.", "info")
         return redirect(url_for("mba.hdc_sign_project_form", project_id=project.id, form_type=assessment_summary_doc_type()))

@@ -223,11 +223,24 @@ def _add_attachments(message, attachments):
         )
 
 
-def build_email_message(recipient, subject, body, attachments=None):
+def _normalize_recipients(value):
+    if not value:
+        return []
+    if isinstance(value, str):
+        values = re.split(r"[;,]", value)
+    else:
+        values = list(value)
+    return [str(item or "").strip() for item in values if str(item or "").strip()]
+
+
+def build_email_message(recipient, subject, body, attachments=None, cc=None):
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = current_app.config["MAIL_DEFAULT_SENDER"]
     message["To"] = recipient
+    cc_recipients = _normalize_recipients(cc)
+    if cc_recipients:
+        message["Cc"] = ", ".join(cc_recipients)
 
     text_body, html_body = _email_body_parts(body)
     plain_footer = "\n\n--\nUniversity of Johannesburg MBA Capstone system"
@@ -285,11 +298,11 @@ def _open_smtp_server():
         raise MailDeliveryError(str(exc)) from exc
 
 
-def send_email(recipient, subject, body, attachments=None):
+def send_email(recipient, subject, body, attachments=None, cc=None):
     if not mail_is_configured():
         return False
 
-    message = build_email_message(recipient, subject, body, attachments=attachments)
+    message = build_email_message(recipient, subject, body, attachments=attachments, cc=cc)
 
     try:
         with _open_smtp_server() as server:
@@ -329,6 +342,7 @@ def send_bulk_emails(messages):
                 message["subject"],
                 message["body"],
                 attachments=message.get("attachments"),
+                cc=message.get("cc"),
             )
             pending.append((message, email_message))
         except Exception as exc:
