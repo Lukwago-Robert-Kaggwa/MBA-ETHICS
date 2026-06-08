@@ -54,7 +54,13 @@ def _temporary_password():
 def _eligible_mba_password_reset_user(user):
     if not user or not user.is_active:
         return False
-    if user.role in {MbaRole.STUDENT.value, MbaRole.EXAMINER.value, MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}:
+    if user.role in {
+        MbaRole.STUDENT.value,
+        MbaRole.EXAMINER.value,
+        MbaRole.HDC.value,
+        MbaRole.ADMIN.value,
+        MbaRole.MAIN_ADMIN.value,
+    }:
         return True
     return user.role == MbaRole.SCHOLAR.value and user.scholar_role in {
         MbaScholarRole.EXAMINER.value,
