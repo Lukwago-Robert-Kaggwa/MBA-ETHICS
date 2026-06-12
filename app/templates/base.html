@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}MBA Ethics{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ethics-shell.css', v=asset_version('css/ethics-shell.css')) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=asset_version('css/app.css')) }}">
   </head>
@@ -27,27 +31,27 @@
           {% set popia_required = current_user.is_authenticated and not current_user.popia_confirmed_at %}
           {% if popia_required %}
             <a href="{{ url_for('auth.popia_notice') }}" class="ethics-sidebar__item is-active">
-              <span class="nav-icon">P</span><span>POPIA Notice</span>
+              <i class="bi bi-shield-exclamation nav-icon" aria-hidden="true"></i><span>POPIA Notice</span>
             </a>
           {% elif current_user.is_authenticated and current_user.system_name == 'mba' %}
             {% set corrections_nav = mba_corrections_nav() %}
             {% set additional_assessment_nav = mba_additional_assessment_nav() %}
             <a href="{{ url_for('mba.dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.dashboard' %}is-active{% endif %}">
-              <span class="nav-icon">M</span><span>MBA Workspace</span>
+              <i class="bi bi-grid-1x2-fill nav-icon" aria-hidden="true"></i><span>MBA Workspace</span>
             </a>
             <a href="{{ mba_profile_url() }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.profile' %}is-active{% endif %}">
-              <span class="nav-icon">U</span><span>My Profile</span>
+              <i class="bi bi-person-circle nav-icon" aria-hidden="true"></i><span>My Profile</span>
             </a>
             {% if current_user.role == 'student' %}
               <a href="{{ url_for('mba.student_dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.student_dashboard' %}is-active{% endif %}">
-                <span class="nav-icon">S</span><span>Student Dashboard</span>
+                <i class="bi bi-mortarboard nav-icon" aria-hidden="true"></i><span>Student Dashboard</span>
               </a>
               <a href="{{ url_for('mba.booking_page') }}" class="ethics-sidebar__item {% if request.endpoint and request.endpoint.startswith('mba.booking') %}is-active{% endif %}">
-                <span class="nav-icon">B</span><span>Panel Bookings</span>
+                <i class="bi bi-calendar2-check nav-icon" aria-hidden="true"></i><span>Panel Bookings</span>
               </a>
               {% if corrections_nav.visible and corrections_nav.url %}
                 <a href="{{ corrections_nav.url }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.student_corrections' %}is-active{% endif %} {% if corrections_nav.has_alert %}has-alert{% endif %}">
-                  <span class="nav-icon">C</span><span class="ethics-sidebar__label">Corrections</span>
+                  <i class="bi bi-pencil-square nav-icon" aria-hidden="true"></i><span class="ethics-sidebar__label">Corrections</span>
                   {% if corrections_nav.pending_count %}
                     <span class="nav-badge">{{ corrections_nav.pending_count }}</span>
                   {% elif corrections_nav.count %}
@@ -57,133 +61,133 @@
               {% endif %}
             {% elif current_user.role == 'scholar' %}
               <a href="{{ url_for('mba.scholar_dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.scholar_dashboard' %}is-active{% endif %}">
-                <span class="nav-icon">P</span><span>Scholar Dashboard</span>
+                <i class="bi bi-journal-bookmark-fill nav-icon" aria-hidden="true"></i><span>Scholar Dashboard</span>
               </a>
               {% if current_user.is_supervisor_role() %}
                 <a href="{{ url_for('mba.booking_page') }}" class="ethics-sidebar__item {% if request.endpoint and request.endpoint.startswith('mba.booking') %}is-active{% endif %}">
-                  <span class="nav-icon">B</span><span>Panel Bookings</span>
+                  <i class="bi bi-calendar2-check nav-icon" aria-hidden="true"></i><span>Panel Bookings</span>
                 </a>
               {% endif %}
               {% if corrections_nav.visible and corrections_nav.url %}
                 <a href="{{ corrections_nav.url }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.scholar_corrections' %}is-active{% endif %}">
-                  <span class="nav-icon">C</span><span>Corrections{% if corrections_nav.count %} ({{ corrections_nav.count }}){% endif %}</span>
+                  <i class="bi bi-pencil-square nav-icon" aria-hidden="true"></i><span>Corrections{% if corrections_nav.count %} ({{ corrections_nav.count }}){% endif %}</span>
                 </a>
               {% endif %}
             {% elif current_user.role == 'examiner' %}
               <a href="{{ url_for('mba.examiner_dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.examiner_dashboard' %}is-active{% endif %}">
-                <span class="nav-icon">X</span><span>Examiner Dashboard</span>
+                <i class="bi bi-clipboard2-check-fill nav-icon" aria-hidden="true"></i><span>Examiner Dashboard</span>
               </a>
             {% elif current_user.role == 'hdc' %}
               {% set hdc_nav = mba_hdc_approval_nav() %}
               <a href="{{ url_for('mba.hdc_dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.hdc_dashboard' and hdc_nav.active == 'overview' %}is-active{% endif %}">
-                <span class="nav-icon">H</span><span>HDC Dashboard{% if hdc_nav.total %} ({{ hdc_nav.total }}){% endif %}</span>
+                <i class="bi bi-speedometer2 nav-icon" aria-hidden="true"></i><span>HDC Dashboard{% if hdc_nav.total %} ({{ hdc_nav.total }}){% endif %}</span>
               </a>
               <p class="ethics-sidebar__section-label">HDC Approvals</p>
               <a href="{{ url_for('mba.hdc_dashboard', approval_set='jbs5', review_status='pending_review') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.hdc_dashboard' and hdc_nav.active == 'jbs5' %}is-active{% endif %}">
-                <span class="nav-icon">J</span><span>JBS5 Approvals{% if hdc_nav.jbs5 %} ({{ hdc_nav.jbs5 }}){% endif %}</span>
+                <i class="bi bi-check-square-fill nav-icon" aria-hidden="true"></i><span>JBS5 Approvals{% if hdc_nav.jbs5 %} ({{ hdc_nav.jbs5 }}){% endif %}</span>
               </a>
               <a href="{{ url_for('mba.hdc_dashboard', approval_set='nominations', review_status='pending_review') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.hdc_dashboard' and hdc_nav.active == 'nominations' %}is-active{% endif %}">
-                <span class="nav-icon">N</span><span>JBS10 &amp; Nomination Approvals{% if hdc_nav.nominations %} ({{ hdc_nav.nominations }}){% endif %}</span>
+                <i class="bi bi-file-person-fill nav-icon" aria-hidden="true"></i><span>JBS10 &amp; Nomination Approvals{% if hdc_nav.nominations %} ({{ hdc_nav.nominations }}){% endif %}</span>
               </a>
               <a href="{{ url_for('mba.hdc_dashboard', approval_set='results', review_status='pending_review') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.hdc_dashboard' and hdc_nav.active == 'results' %}is-active{% endif %}">
-                <span class="nav-icon">R</span><span>Result Approvals{% if hdc_nav.results %} ({{ hdc_nav.results }}){% endif %}</span>
+                <i class="bi bi-award-fill nav-icon" aria-hidden="true"></i><span>Result Approvals{% if hdc_nav.results %} ({{ hdc_nav.results }}){% endif %}</span>
               </a>
             {% elif current_user.role in ['admin', 'main_admin'] %}
               {% set reminders_nav = mba_reminders_nav() %}
               <a href="{{ url_for('mba.admin_dashboard', panel='projects') }}" class="ethics-sidebar__item">
-                <span class="nav-icon">A</span><span>Admin Dashboard</span>
+                <i class="bi bi-shield-check nav-icon" aria-hidden="true"></i><span>Admin Dashboard</span>
               </a>
               <p class="ethics-sidebar__section-label">Admin Menu</p>
               <a href="{{ url_for('mba.admin_dashboard', panel='disciplines', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'disciplines' %}is-active{% endif %}">
-                <span class="nav-icon">D</span><span>Disciplines</span>
+                <i class="bi bi-diagram-3-fill nav-icon" aria-hidden="true"></i><span>Disciplines</span>
               </a>
               <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel', 'projects') == 'projects' %}is-active{% endif %}">
-                <span class="nav-icon">P</span><span>Capstone Projects</span>
+                <i class="bi bi-folder2-open nav-icon" aria-hidden="true"></i><span>Capstone Projects</span>
               </a>
               <a href="{{ url_for('mba.admin_dashboard', panel='assessors', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'assessors' %}is-active{% endif %}">
-                <span class="nav-icon">E</span><span>Assessors</span>
+                <i class="bi bi-person-badge-fill nav-icon" aria-hidden="true"></i><span>Assessors</span>
               </a>
               <a href="{{ url_for('mba.admin_dashboard', panel='supervisors', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'supervisors' %}is-active{% endif %}">
-                <span class="nav-icon">V</span><span>Supervisors</span>
+                <i class="bi bi-people-fill nav-icon" aria-hidden="true"></i><span>Supervisors</span>
               </a>
               <a href="{{ url_for('mba.admin_dashboard', panel='students', view='all') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_dashboard' and request.args.get('panel') == 'students' %}is-active{% endif %}">
-                <span class="nav-icon">S</span><span>Students</span>
+                <i class="bi bi-mortarboard-fill nav-icon" aria-hidden="true"></i><span>Students</span>
               </a>
               <a href="{{ url_for('mba.booking_page') }}" class="ethics-sidebar__item {% if request.endpoint and request.endpoint.startswith('mba.booking') %}is-active{% endif %}">
-                <span class="nav-icon">B</span><span>Panel Bookings</span>
+                <i class="bi bi-calendar2-check-fill nav-icon" aria-hidden="true"></i><span>Panel Bookings</span>
               </a>
               {% if reminders_nav.visible and reminders_nav.url %}
                 <a href="{{ reminders_nav.url }}" class="ethics-sidebar__item {% if reminders_nav.active %}is-active{% endif %}">
-                  <span class="nav-icon">R</span><span>Reminders{% if reminders_nav.count %} ({{ reminders_nav.count }}){% endif %}</span>
+                  <i class="bi bi-bell-fill nav-icon" aria-hidden="true"></i><span>Reminders{% if reminders_nav.count %} ({{ reminders_nav.count }}){% endif %}</span>
                 </a>
               {% endif %}
               {% if corrections_nav.visible and corrections_nav.url %}
                 <a href="{{ corrections_nav.url }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_corrections' %}is-active{% endif %}">
-                  <span class="nav-icon">C</span><span>Corrections{% if corrections_nav.count %} ({{ corrections_nav.count }}){% endif %}</span>
+                  <i class="bi bi-pencil-square nav-icon" aria-hidden="true"></i><span>Corrections{% if corrections_nav.count %} ({{ corrections_nav.count }}){% endif %}</span>
                 </a>
               {% endif %}
               {% if additional_assessment_nav.visible and additional_assessment_nav.url %}
                 <a href="{{ additional_assessment_nav.url }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.admin_additional_assessment' %}is-active{% endif %}">
-                  <span class="nav-icon">T</span><span>Additional Assessment{% if additional_assessment_nav.count %} ({{ additional_assessment_nav.count }}){% endif %}</span>
+                  <i class="bi bi-plus-square-fill nav-icon" aria-hidden="true"></i><span>Additional Assessment{% if additional_assessment_nav.count %} ({{ additional_assessment_nav.count }}){% endif %}</span>
                 </a>
               {% endif %}
             {% endif %}
             <a href="{{ url_for('auth.switch_to_ethics') }}" class="ethics-sidebar__item">
-              <span class="nav-icon">E</span><span>Ethics</span>
+              <i class="bi bi-arrow-left-right nav-icon" aria-hidden="true"></i><span>Ethics</span>
             </a>
           {% elif current_user.is_authenticated and current_user.system_name == 'ethics' %}
             <a href="{{ url_for('ethics.dashboard') }}" class="ethics-sidebar__item {% if request.endpoint == 'ethics.dashboard' %}is-active{% endif %}">
-              <span class="nav-icon">E</span><span>Ethics Workspace</span>
+              <i class="bi bi-grid-1x2-fill nav-icon" aria-hidden="true"></i><span>Ethics Workspace</span>
             </a>
             {% if current_user.role == 'student' %}
               <a href="{{ url_for('ethics.ethics_pack') }}" class="ethics-sidebar__item {% if request.endpoint == 'ethics.ethics_pack' or request.endpoint == 'ethics.new_ethics_form' %}is-active{% endif %}">
-                <span class="nav-icon">A</span><span>Ethics Pack</span>
+                <i class="bi bi-file-earmark-text-fill nav-icon" aria-hidden="true"></i><span>Ethics Pack</span>
               </a>
               <a href="{{ url_for('ethics.student_dashboard') }}#my-submissions" class="ethics-sidebar__item">
-                <span class="nav-icon">S</span><span>Submissions</span>
+                <i class="bi bi-send-check-fill nav-icon" aria-hidden="true"></i><span>Submissions</span>
               </a>
             {% elif current_user.role == 'supervisor' %}
               <a href="{{ url_for('ethics.supervisor_dashboard') }}#supervisor-queue" class="ethics-sidebar__item">
-                <span class="nav-icon">Q</span><span>Supervisor Queue</span>
+                <i class="bi bi-list-check nav-icon" aria-hidden="true"></i><span>Supervisor Queue</span>
               </a>
             {% elif current_user.role in ['admin', 'super_admin'] %}
               <a href="{{ url_for('ethics.chair_landing') }}#admin-queue" class="ethics-sidebar__item">
-                <span class="nav-icon">Q</span><span>Admin Queue</span>
+                <i class="bi bi-inbox-fill nav-icon" aria-hidden="true"></i><span>Admin Queue</span>
               </a>
               <a href="{{ url_for('ethics.monitoring_forms') }}" class="ethics-sidebar__item {% if request.endpoint == 'ethics.monitoring_forms' %}is-active{% endif %}">
-                <span class="nav-icon">M</span><span>Monitoring Forms</span>
+                <i class="bi bi-binoculars-fill nav-icon" aria-hidden="true"></i><span>Monitoring Forms</span>
               </a>
               <a href="{{ url_for('ethics.activity_logs') }}" class="ethics-sidebar__item {% if request.endpoint == 'ethics.activity_logs' %}is-active{% endif %}">
-                <span class="nav-icon">L</span><span>Activity Logs</span>
+                <i class="bi bi-clock-history nav-icon" aria-hidden="true"></i><span>Activity Logs</span>
               </a>
               <a href="{{ url_for('ethics.reassign_reviewers') }}" class="ethics-sidebar__item {% if request.endpoint == 'ethics.reassign_reviewers' %}is-active{% endif %}">
-                <span class="nav-icon">R</span><span>Reassign Reviewers</span>
+                <i class="bi bi-person-fill-gear nav-icon" aria-hidden="true"></i><span>Reassign Reviewers</span>
               </a>
               <a href="{{ url_for('ethics.reassign_supervisors') }}" class="ethics-sidebar__item {% if request.endpoint == 'ethics.reassign_supervisors' %}is-active{% endif %}">
-                <span class="nav-icon">S</span><span>Reassign Supervisor</span>
+                <i class="bi bi-arrow-repeat nav-icon" aria-hidden="true"></i><span>Reassign Supervisor</span>
               </a>
               <a href="{{ url_for('ethics.chair_landing') }}#old-forms" class="ethics-sidebar__item">
-                <span class="nav-icon">C</span><span>Certificates</span>
+                <i class="bi bi-award-fill nav-icon" aria-hidden="true"></i><span>Certificates</span>
               </a>
               {% if current_user.role == 'super_admin' %}
                 <a href="{{ url_for('ethics.analytics') }}" class="ethics-sidebar__item {% if request.endpoint == 'ethics.analytics' %}is-active{% endif %}">
-                  <span class="nav-icon">A</span><span>Analytics</span>
+                  <i class="bi bi-bar-chart-line-fill nav-icon" aria-hidden="true"></i><span>Analytics</span>
                 </a>
               {% endif %}
             {% elif current_user.role == 'dean' %}
               <a href="{{ url_for('ethics.chair_landing') }}#admin-queue" class="ethics-sidebar__item">
-                <span class="nav-icon">Q</span><span>Admin Queue</span>
+                <i class="bi bi-inbox-fill nav-icon" aria-hidden="true"></i><span>Admin Queue</span>
               </a>
               <a href="{{ url_for('ethics.chair_landing') }}#old-forms" class="ethics-sidebar__item">
-                <span class="nav-icon">C</span><span>Certificates</span>
+                <i class="bi bi-award-fill nav-icon" aria-hidden="true"></i><span>Certificates</span>
               </a>
             {% elif current_user.role == 'reviewer' %}
               <a href="{{ url_for('ethics.review_dashboard') }}#reviewer-queue" class="ethics-sidebar__item">
-                <span class="nav-icon">R</span><span>My Reviews</span>
+                <i class="bi bi-search nav-icon" aria-hidden="true"></i><span>My Reviews</span>
               </a>
             {% elif current_user.role == 'rec' %}
               <a href="{{ url_for('ethics.rec_dashboard') }}#rec-queue" class="ethics-sidebar__item">
-                <span class="nav-icon">R</span><span>REC Queue</span>
+                <i class="bi bi-collection-fill nav-icon" aria-hidden="true"></i><span>REC Queue</span>
               </a>
             {% endif %}
           {% endif %}
@@ -192,11 +196,11 @@
         <div class="ethics-sidebar__footer">
           {% if current_user.is_authenticated %}
             <a href="{{ url_for('auth.logout') }}" class="ethics-sidebar__item ethics-sidebar__logout">
-              <span class="nav-icon">X</span><span>Sign out</span>
+              <i class="bi bi-box-arrow-left nav-icon" aria-hidden="true"></i><span>Sign out</span>
             </a>
           {% else %}
             <div class="ethics-sidebar__item ethics-sidebar__logout">
-              <span class="nav-icon">U</span><span>UJ Portal</span>
+              <i class="bi bi-building nav-icon" aria-hidden="true"></i><span>UJ Portal</span>
             </div>
           {% endif %}
         </div>
@@ -215,7 +219,7 @@
                 {% endfor %}
               {% endif %}
             {% endfor %}
-            <span class="ethics-topbar__search-icon" aria-hidden="true">S</span>
+            <i class="bi bi-search ethics-topbar__search-icon" aria-hidden="true"></i>
             <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search projects, students, documents...">
             {% if request.args.get('q') %}
               {% set clear_search_args = request.args.to_dict(flat=False) %}
@@ -226,7 +230,7 @@
           <div class="ethics-topbar__actions">
             {% if topbar_reminders_nav and topbar_reminders_nav.url %}
               <a href="{{ topbar_reminders_nav.url }}" class="ethics-topbar__icon-button" aria-label="Open reminders">
-                <span aria-hidden="true">B</span>
+                <i class="bi bi-bell-fill" aria-hidden="true"></i>
                 {% if topbar_reminders_nav.count %}
                   <span class="ethics-topbar__notification-dot"></span>
                 {% endif %}
@@ -234,7 +238,7 @@
             {% endif %}
             {% if current_user.is_authenticated %}
               <a href="{{ mba_profile_url() if current_user.system_name == 'mba' else url_for('ethics.dashboard') }}" class="ethics-topbar__icon-button" aria-label="Open account settings">
-                <span aria-hidden="true">S</span>
+                <i class="bi bi-person-circle" aria-hidden="true"></i>
               </a>
               <div class="ethics-topbar__user">
                 <span class="ethics-topbar__avatar">{{ (current_user.first_name or current_user.email or 'U')[:1]|upper }}</span>

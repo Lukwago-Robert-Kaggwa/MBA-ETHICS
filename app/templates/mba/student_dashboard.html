@@ -15,7 +15,7 @@
       <strong>{{ projects|length }}</strong>
       <small>Capstone workspace</small>
     </div>
-    <b aria-hidden="true">P</b>
+    <b aria-hidden="true"><i class="bi bi-folder2-open"></i></b>
   </article>
   <article class="dashboard-stat-card dashboard-stat-card--amber">
     <div>
@@ -23,7 +23,7 @@
       <strong>{{ correction_alert_count }}</strong>
       <small>Awaiting response</small>
     </div>
-    <b aria-hidden="true">C</b>
+    <b aria-hidden="true"><i class="bi bi-pencil-square"></i></b>
   </article>
   <article class="dashboard-stat-card dashboard-stat-card--green">
     <div>
@@ -31,7 +31,7 @@
       <strong>{{ projects|selectattr('project_status', 'ne', 'created')|list|length }}</strong>
       <small>Past draft stage</small>
     </div>
-    <b aria-hidden="true">S</b>
+    <b aria-hidden="true"><i class="bi bi-send-check"></i></b>
   </article>
   <article class="dashboard-stat-card dashboard-stat-card--blue">
     <div>
@@ -39,23 +39,23 @@
       <strong>JBS 5</strong>
       <small>Complete and submit</small>
     </div>
-    <b aria-hidden="true">5</b>
+    <b aria-hidden="true"><i class="bi bi-arrow-right-circle"></i></b>
   </article>
 </section>
 
 <section class="quick-action-grid">
   <a href="{{ url_for('mba.download_manuscript_template') }}" class="quick-action-card quick-action-card--orange">
-    <span aria-hidden="true">D</span>
+    <span aria-hidden="true"><i class="bi bi-download"></i></span>
     <strong>Capstone Manuscript Template</strong>
     <small>Download the required manuscript template.</small>
   </a>
   <a href="#create-capstone-project" class="quick-action-card quick-action-card--blue">
-    <span aria-hidden="true">N</span>
+    <span aria-hidden="true"><i class="bi bi-plus-circle"></i></span>
     <strong>New Project</strong>
     <small>Create a capstone project record.</small>
   </a>
   <a href="{{ url_for('mba.student_corrections') }}" class="quick-action-card quick-action-card--green">
-    <span aria-hidden="true">C</span>
+    <span aria-hidden="true"><i class="bi bi-pencil-square"></i></span>
     <strong>Corrections</strong>
     <small>Open response and corrections tasks.</small>
   </a>
@@ -100,9 +100,7 @@
     <form action="{{ url_for('mba.create_project') }}" method="post" enctype="multipart/form-data" class="form-stack compact-form">
       <label>Title
         <input name="project_title" required data-project-title-input>
-        <small style="color:var(--text-muted,#666);font-weight:500;">
-          Use full words only. Acronyms, abbreviations, and special characters except commas and hyphens are not allowed. Keep the title to 12 words where possible; maximum 15 words.
-        </small>
+        <small class="field-hint">Use full words only. Acronyms, abbreviations, and special characters except commas and hyphens are not allowed. Keep the title to 12 words where possible; maximum 15 words.</small>
       </label>
       <label>Discipline
         <select name="discipline_id" required>
@@ -125,16 +123,14 @@
     <div class="record-list mba-student-project-list">
       {% for project in projects %}
         {% call project_disclosure(project, 'project-disclosure--student') %}
-        <div class="mba-student-project-stack" style="margin-bottom:2.5rem;">
-          <div class="project-section-header" style="font-size:1.15rem;font-weight:600;margin-bottom:0.5rem;color:var(--primary,#1a237e);border-left:4px solid var(--primary,#1a237e);padding-left:0.75rem;">
-            {{ project.project_title }}
-          </div>
+        <div class="mba-student-project-stack mba-stack-gap">
+          <div class="project-section-header">{{ project.project_title }}</div>
           {% include "mba/_student_project_card.html" %}
           {% include "mba/_jbs5_hdc_feedback.html" %}
           {% if project.supervisor_title_change_requested_at and not project.supervisor_title_change_resolved_at %}
             <section class="response-section">
               <strong>Supervisor requested title changes</strong>
-              <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+              <p class="help-text">
                 {{ project.supervisor_title_change_request }}
               </p>
             </section>
@@ -161,23 +157,23 @@
               <span>Missing</span>
               <small>Submitting JBS 5 sends the Capstone Project to MBA Admin automatically.</small>
               {% if project.project_status in ['created', 'admin_declined', 'jbs5_hdc_declined'] %}
-                <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button" style="margin-top:0.5rem;display:inline-block;">Fill JBS 5 Form</a>
+                <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button btn-mt">Fill JBS 5 Form</a>
               {% endif %}
             {% endif %}
           </div>
 
           {% if jbs5_supervisor_signed %}
-            <span class="muted" style="display:block;margin-bottom:0.75rem;">JBS5 has been signed by the supervisor and is locked for editing.</span>
+            <span class="form-note" style="margin-bottom:0.75rem;">JBS5 has been signed by the supervisor and is locked for editing.</span>
           {% elif project.supervisor_title_change_requested_at and not project.supervisor_title_change_resolved_at %}
-            <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button" style="margin-bottom:0.75rem;display:inline-block;">Edit JBS 5 Form for Requested Title Changes</a>
+            <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button btn-mt-lg">Edit JBS 5 Form for Requested Title Changes</a>
           {% elif project.project_status in ['created', 'admin_declined', 'jbs5_hdc_declined'] %}
-            <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button" style="margin-bottom:0.75rem;display:inline-block;">Complete JBS 5 and Submit to Admin</a>
+            <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='jbs5') }}" class="secondary-button small-button btn-mt-lg">Complete JBS 5 and Submit to Admin</a>
           {% endif %}
 
           {% if project.supervisor_accepted_at %}
             <details class="response-section" open>
               <summary>Required Forms</summary>
-              <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+              <p class="help-text">
                 Your supervisor has accepted. Submit the supervisor-signed Supervisor Agreement first. Ethics Certificate or Ethics Exemption Form upload appears after the supervisor signs JBS5.
               </p>
               {% set supervisor_docs = project.documents | selectattr('doc_type', 'equalto', 'supervisor_agreement') | list %}
@@ -212,9 +208,9 @@
                 </div>
                 {% if supervisor_docs %}
                   <div class="uploaded-files">
-                    <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                    <span class="upload-status-ok">Uploaded</span>
                     {% for uploaded in supervisor_docs %}
-                      <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                      <span class="upload-file-meta">
                         <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
                         &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
                       </span>
@@ -222,20 +218,20 @@
                   </div>
                 {% endif %}
                 {% if not student_supervisor_submitted %}
-                  <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='supervisor_agreement') }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">Fill Supervisor Agreement</a>
+                  <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='supervisor_agreement') }}" class="primary-button small-button btn-mt">Fill Supervisor Agreement</a>
                 {% endif %}
               </div>
 
               {% if student_supervisor_submitted and not jbs5_supervisor_signed %}
-                <hr style="margin:1.5rem 0;">
-                <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                <hr class="section-divider">
+                <p class="help-text">
                   Wait for your supervisor to complete title review and sign JBS5. Ethics Certificate or Ethics Exemption Form upload will appear after JBS5 is signed.
                 </p>
               {% endif %}
 
               {% if student_supervisor_submitted and jbs5_supervisor_signed %}
-                <hr style="margin:1.5rem 0;">
-                <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                <hr class="section-divider">
+                <p class="help-text">
                   JBS5 is signed by your supervisor. Upload one ethics proof document here. JBS10 and Intent to Submit unlock only after HDC approves JBS5 and the Ethics Certificate or Ethics Exemption Form is on file.
                 </p>
                 {% for doc_key, doc_info in [('ethics_certificate', 'Ethics Certificate'), ('ethics_exemption_form', 'Ethics Exemption Form')] %}
@@ -246,9 +242,9 @@
                     {% set matching_docs = project.documents | selectattr('doc_type', 'equalto', doc_key) | list %}
                     {% if matching_docs %}
                       <div class="uploaded-files">
-                        <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                        <span class="upload-status-ok">Uploaded</span>
                         {% for uploaded in matching_docs %}
-                          <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                          <span class="upload-file-meta">
                             <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
                             &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
                           </span>
@@ -267,15 +263,15 @@
                 {% endfor %}
 
                 {% if has_ethics_support_docs and not jbs5_hdc_approved %}
-                  <hr style="margin:1.5rem 0;">
-                  <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                  <hr class="section-divider">
+                  <p class="help-text">
                     Ethics proof is on file. JBS10 and Intent to Submit will be released after HDC approves JBS5.
                   </p>
                 {% endif %}
 
                 {% if has_ethics_support_docs and jbs5_hdc_approved %}
-                  <hr style="margin:1.5rem 0;">
-                  <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                  <hr class="section-divider">
+                  <p class="help-text">
                     Ethics proof is on file. Submit JBS10 and Intent to Submit here. Both forms will go to your supervisor for signature before MBA Admin can continue assessor nomination.
                   </p>
                   {% for doc_key, doc_info in [('jbs10', 'JBS10 Project Submission Form'), ('intent_to_submit', 'Intent to Submit')] %}
@@ -286,9 +282,9 @@
                       {% set matching_docs = project.documents | selectattr('doc_type', 'equalto', doc_key) | list %}
                       {% if matching_docs %}
                         <div class="uploaded-files">
-                          <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                          <span class="upload-status-ok">Uploaded</span>
                           {% for uploaded in matching_docs %}
-                            <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                            <span class="upload-file-meta">
                               <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
                               &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
                             </span>
@@ -296,11 +292,11 @@
                         </div>
                       {% endif %}
                       {% if doc_key == 'jbs10' and jbs10_signed_by_supervisor %}
-                        <span class="status-pill status-pill--accepted" style="display:inline-flex;margin-top:0.5rem;">Signed by supervisor</span>
+                        <span class="status-pill status-pill--accepted doc-status-signed">Signed by supervisor</span>
                       {% elif doc_key == 'intent_to_submit' and intent_signed_by_supervisor %}
-                        <span class="status-pill status-pill--accepted" style="display:inline-flex;margin-top:0.5rem;">Signed by supervisor</span>
+                        <span class="status-pill status-pill--accepted doc-status-signed">Signed by supervisor</span>
                       {% else %}
-                        <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">
+                        <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button btn-mt">
                           {% if doc_key == 'jbs10' and jbs10_return_pending %}
                             Amend and Resubmit
                           {% elif matching_docs %}
@@ -311,32 +307,29 @@
                         </a>
                       {% endif %}
                       {% if doc_key == 'jbs10' and jbs10_docs and not jbs10_signed_by_supervisor and not jbs10_return_pending %}
-                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Submitted to supervisor for review.</span>
+                        <span class="form-note">Submitted to supervisor for review.</span>
                       {% elif doc_key == 'jbs10' and jbs10_return_pending %}
-                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Supervisor returned JBS10 for amendment.</span>
+                        <span class="form-note">Supervisor returned JBS10 for amendment.</span>
                         {% if jbs10_form and jbs10_form.payload and jbs10_form.payload.get('_supervisor_return_request') %}
-                          <span class="muted" style="display:block;margin-top:0.25rem;font-size:0.84rem;">{{ jbs10_form.payload.get('_supervisor_return_request') }}</span>
+                          <span class="form-note">{{ jbs10_form.payload.get('_supervisor_return_request') }}</span>
                         {% endif %}
                       {% elif doc_key == 'intent_to_submit' and intent_docs and not intent_signed_by_supervisor %}
-                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Submitted to supervisor for signature.</span>
+                        <span class="form-note">Submitted to supervisor for signature.</span>
                       {% endif %}
                     </div>
                   {% endfor %}
                 {% endif %}
 
                 {% if jbs5_hdc_approved and jbs10_signed_by_supervisor and intent_signed_by_supervisor %}
-                  <hr style="margin:1.5rem 0;">
-                  <p style="margin:0.5rem 0 0.75rem;color:var(--text-muted,#666);font-size:0.875rem;">
+                  <hr class="section-divider">
+                  <p class="help-text">
                     JBS10 and Intent to Submit are signed by your supervisor. Submit the Capstone Manuscript through Moodle. On this system, upload only supporting documents, including the Global Document and combined Turnitin-AI report. MBA Admin will upload the Capstone Manuscript here after downloading it from Moodle.
                   </p>
                   {% if project.dissertation_moodle_request_sent_at and not dissertation_docs %}
-                    <div style="margin:0.75rem 0 1rem;padding:0.9rem 1rem;border-left:4px solid var(--accent,#f97316);background:#fff7ed;border-radius:8px;color:var(--text,#1f2937);font-size:0.9rem;line-height:1.55;">
+                    <div class="moodle-alert">
                       <strong>Action required: Submit your Capstone Manuscript on Moodle.</strong>
-                      <p style="margin:0.35rem 0 0;">
-                        MBA Admin requested this Moodle submission on {{ project.dissertation_moodle_request_sent_at.strftime('%d %b %Y %H:%M') }}. Please log in to Moodle and upload your final Capstone Manuscript there as soon as possible.
-                      </p>
-                      <p style="margin:0.35rem 0 0;">
-                        Do not upload the Capstone Manuscript in this MBA system.</p>
+                      <p>MBA Admin requested this Moodle submission on {{ project.dissertation_moodle_request_sent_at.strftime('%d %b %Y %H:%M') }}. Please log in to Moodle and upload your final Capstone Manuscript there as soon as possible.</p>
+                      <p>Do not upload the Capstone Manuscript in this MBA system.</p>
                     </div>
                   {% endif %}
                   {% for doc_key, doc_info in [('jbs1_declaration', 'JBS 1 Declaration'), ('plagiarism_declaration', 'Combined Plagiarism, Turnitin and AI Declaration')] %}
@@ -347,9 +340,9 @@
                       {% set matching_docs = project.documents | selectattr('doc_type', 'equalto', doc_key) | list %}
                       {% if matching_docs %}
                         <div class="uploaded-files">
-                          <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Uploaded</span>
+                          <span class="upload-status-ok">Uploaded</span>
                           {% for uploaded in matching_docs %}
-                            <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                            <span class="upload-file-meta">
                               <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
                               &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
                             </span>
@@ -357,14 +350,14 @@
                         </div>
                       {% endif %}
                       {% if doc_key == 'jbs1_declaration' and jbs1_program_manager_signed_value %}
-                        <span class="status-pill status-pill--accepted" style="display:inline-flex;margin-top:0.5rem;">Signed by supervisor and Admin</span>
+                        <span class="status-pill status-pill--accepted doc-status-signed">Signed by supervisor and Admin</span>
                       {% elif doc_key == 'jbs1_declaration' and jbs1_supervisor_signed_value %}
-                        <span class="status-pill status-pill--awaiting_admin" style="display:inline-flex;margin-top:0.5rem;">Awaiting Admin signature</span>
+                        <span class="status-pill status-pill--awaiting_admin doc-status-signed">Awaiting Admin signature</span>
                       {% else %}
-                        <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
+                        <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type=doc_key) }}" class="primary-button small-button btn-mt">{% if matching_docs %}Edit Form{% else %}Fill Form{% endif %}</a>
                       {% endif %}
                       {% if doc_key == 'jbs1_declaration' and matching_docs and not jbs1_supervisor_signed_value %}
-                        <span class="muted" style="display:block;margin-top:0.35rem;font-size:0.84rem;">Submitted to supervisor for signature.</span>
+                        <span class="form-note">Submitted to supervisor for signature.</span>
                       {% endif %}
                     </div>
                   {% endfor %}
@@ -373,16 +366,15 @@
                     <div class="form-download-info">
                       <strong>JBS 2 Affidavit</strong>
                       {% if affidavit_form and not affidavit_docs %}
-                        <p class="muted" style="margin:0.35rem 0 0;font-size:0.86rem;">
-                          Download the generated affidavit, obtain the Commissioner of Oaths stamp/signature, then upload the stamped PDF here for official submission.
+                        <p class="form-note">Download the generated affidavit, obtain the Commissioner of Oaths stamp/signature, then upload the stamped PDF here for official submission.
                         </p>
                       {% endif %}
                     </div>
                     {% if affidavit_docs %}
                       <div class="uploaded-files">
-                        <span style="font-size:0.8rem;color:var(--success,#2d7a3a);">&#10003; Stamped copy uploaded</span>
+                        <span class="upload-status-ok">Stamped copy uploaded</span>
                         {% for uploaded in affidavit_docs %}
-                          <span style="font-size:0.8rem;color:var(--text-muted,#666);">
+                          <span class="upload-file-meta">
                             <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=uploaded.id) }}" class="text-link">{{ uploaded.original_name }}</a>
                             &mdash; {{ uploaded.uploaded_at.strftime('%d %b %Y') }}
                           </span>
@@ -390,9 +382,9 @@
                       </div>
                     {% endif %}
                     {% if affidavit_form %}
-                      <a href="{{ url_for('mba.download_generated_project_form', project_id=project.id, form_type='affidavit') }}" class="secondary-button small-button" style="display:inline-block;margin-top:0.5rem;">Download for Stamping</a>
+                      <a href="{{ url_for('mba.download_generated_project_form', project_id=project.id, form_type='affidavit') }}" class="secondary-button small-button btn-mt">Download for Stamping</a>
                     {% endif %}
-                    <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='affidavit') }}" class="primary-button small-button" style="display:inline-block;margin-top:0.5rem;">{% if affidavit_form %}Edit Affidavit Details{% else %}Fill Form{% endif %}</a>
+                    <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='affidavit') }}" class="primary-button small-button btn-mt">{% if affidavit_form %}Edit Affidavit Details{% else %}Fill Form{% endif %}</a>
                     {% if affidavit_form %}
                       <form action="{{ url_for('mba.upload_project_form', project_id=project.id) }}" method="post" enctype="multipart/form-data" class="upload-form" style="margin-top:0.5rem;">
                         <input type="hidden" name="doc_type" value="affidavit_stamped">
@@ -405,7 +397,7 @@
                     {% endif %}
                   </div>
 
-                  <hr style="margin:1.5rem 0;">
+                  <hr class="section-divider">
                   <section class="dissertation-pack-panel">
                     <div class="dissertation-pack-panel__header">
                       <div>

@@ -19,37 +19,37 @@
   {% set admin_reminders_nav = mba_reminders_nav() %}
   <nav class="portal-tabs" aria-label="Admin workspace sections">
     <a href="#admin-overview" class="portal-tab portal-tab--overview">
-      <span aria-hidden="true">O</span>
+      <span aria-hidden="true"><i class="bi bi-grid-1x2"></i></span>
       <strong>Overview</strong>
     </a>
     <a href="{{ url_for('mba.admin_dashboard', panel='students', view='all') }}"
       class="portal-tab {% if active_panel == 'students' %}is-active{% endif %}">
-      <span aria-hidden="true">S</span>
+      <span aria-hidden="true"><i class="bi bi-mortarboard-fill"></i></span>
       <strong>Students</strong>
     </a>
     <a href="{{ url_for('mba.admin_dashboard', panel='supervisors', view='all') }}"
       class="portal-tab {% if active_panel == 'supervisors' %}is-active{% endif %}">
-      <span aria-hidden="true">V</span>
+      <span aria-hidden="true"><i class="bi bi-people-fill"></i></span>
       <strong>Supervisors</strong>
     </a>
     <a href="{{ url_for('mba.admin_dashboard', panel='assessors', view='all') }}"
       class="portal-tab {% if active_panel == 'assessors' %}is-active{% endif %}">
-      <span aria-hidden="true">E</span>
+      <span aria-hidden="true"><i class="bi bi-person-badge-fill"></i></span>
       <strong>Assessors</strong>
     </a>
     <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all') }}"
       class="portal-tab {% if active_panel == 'projects' %}is-active{% endif %}">
-      <span aria-hidden="true">P</span>
+      <span aria-hidden="true"><i class="bi bi-folder2-open"></i></span>
       <strong>Projects</strong>
     </a>
     <a href="{{ url_for('mba.admin_dashboard', panel='disciplines', view='all') }}"
       class="portal-tab {% if active_panel == 'disciplines' %}is-active{% endif %}">
-      <span aria-hidden="true">D</span>
+      <span aria-hidden="true"><i class="bi bi-diagram-3-fill"></i></span>
       <strong>Disciplines</strong>
     </a>
     {% if admin_reminders_nav.visible and admin_reminders_nav.url %}
     <a href="{{ admin_reminders_nav.url }}" class="portal-tab">
-      <span aria-hidden="true">R</span>
+      <span aria-hidden="true"><i class="bi bi-bell-fill"></i></span>
       <strong>Reminders{% if admin_reminders_nav.count %} <em>{{ admin_reminders_nav.count }}</em>{% endif %}</strong>
     </a>
     {% endif %}

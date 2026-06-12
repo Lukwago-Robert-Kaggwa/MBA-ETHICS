@@ -112,7 +112,7 @@
             {% if supervisor_invitation.status == 'pending' %}
               {% set jbs5_docs = project.documents | selectattr('doc_type', 'equalto', 'jbs5') | list %}
               {% set latest_jbs5 = jbs5_docs|last if jbs5_docs else None %}
-              <p class="muted" style="margin:0.5rem 0 0;">
+              <p class="muted" style="margin-top:0.5rem;">
                 Accept the invitation first. After acceptance, review JBS5 and either request title changes or sign it.
               </p>
               <div class="invitation-action-row">
@@ -126,7 +126,7 @@
                 <button class="secondary-button small-button" name="decision" value="declined" type="submit">Decline invitation</button>
               </form>
             {% elif supervisor_invitation_expired %}
-              <p class="muted" style="margin:0.5rem 0 0;">
+              <p class="muted" style="margin-top:0.5rem;">
                 This invitation has expired because another supervisor accepted the Capstone Project.
               </p>
             {% endif %}
@@ -161,7 +161,7 @@
           {% if external_nomination_forwarded or external_nomination_signed %}
             <section class="response-section">
               <strong>External Examiner Nomination</strong>
-              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              <p class="muted help-text">
                 {% if external_nomination_signed %}
                   You have signed the amended external examiner nomination form.
                 {% else %}
@@ -190,7 +190,7 @@
           {% if additional_nomination_forwarded or additional_nomination_signed %}
             <section class="response-section">
               <strong>Additional Assessor Nomination</strong>
-              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              <p class="muted help-text">
                 {% if additional_nomination_signed %}
                   You have signed the additional assessor nomination form.
                 {% else %}
@@ -229,35 +229,35 @@
               {% if accepted_jbs5_form and accepted_jbs5_form.supervisor_signed %}
                 <span class="status-pill status-pill--accepted">JBS5 Signed</span>
               {% elif not accepted_jbs5_form %}
-                <span class="muted" style="display:inline-flex;align-items:center;">JBS5 is not available yet.</span>
+                <span class="muted-note">JBS5 is not available yet.</span>
               {% elif accepted_title_change_pending %}
-                <span class="muted" style="display:inline-flex;align-items:center;">Title change request sent. Wait for the student to update JBS5 before signing.</span>
+                <span class="muted-note">Title change request sent. Wait for the student to update JBS5 before signing.</span>
               {% elif not accepted_student_supervisor_agreement_signed %}
-                <span class="muted" style="display:inline-flex;align-items:center;">Waiting for the student to submit the supervisor-signed Supervisor Agreement.</span>
+                <span class="muted-note">Waiting for the student to submit the supervisor-signed Supervisor Agreement.</span>
               {% else %}
                 <a href="{{ url_for('mba.supervisor_sign_jbs5', project_id=project.id) }}" class="primary-button small-button">Sign JBS5</a>
               {% endif %}
             </div>
             {% include "mba/_jbs5_hdc_feedback.html" %}
             {% if accepted_jbs5_form and accepted_jbs5_form.supervisor_signed %}
-              <p class="muted" style="margin:0.5rem 0 0;">
+              <p class="muted" style="margin-top:0.5rem;">
                 JBS5 has been signed by the supervisor and title changes are now locked.
               </p>
             {% elif accepted_title_change_pending %}
-              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              <p class="muted help-text">
                 A title change request is waiting for the student.
               </p>
             {% elif not accepted_jbs5_form %}
-              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              <p class="muted help-text">
                 The student-submitted JBS5 form is not available yet.
               </p>
             {% elif project.supervisor_title_change_resolved_at %}
-              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              <p class="muted help-text">
                 The student has submitted an updated JBS 5 form for the latest title change request.
               </p>
             {% endif %}
             {% if accepted_jbs5_form and not accepted_jbs5_form.supervisor_signed and not accepted_student_supervisor_agreement_signed %}
-              <p class="muted" style="margin:0.5rem 0 0;">
+              <p class="muted" style="margin-top:0.5rem;">
                 The student must sign and submit the supervisor-signed Supervisor Agreement before title changes can be requested or JBS5 can be signed.
               </p>
             {% elif accepted_jbs5_form and not accepted_jbs5_form.supervisor_signed %}
@@ -286,17 +286,17 @@
                 {% if jbs10_signed %}
                   <span class="status-pill status-pill--accepted">JBS10 Signed</span>
                 {% elif jbs10_return_waiting %}
-                  <span class="muted" style="display:inline-flex;align-items:center;">Returned to student. Wait for amendment and resubmission.</span>
+                  <span class="muted-note">Returned to student. Wait for amendment and resubmission.</span>
                 {% elif jbs10_form %}
                   <a href="{{ url_for('mba.supervisor_sign_jbs10', project_id=project.id) }}" class="primary-button small-button">Review / Sign JBS10</a>
                 {% endif %}
               </div>
               {% if jbs10_form and jbs10_form.payload and jbs10_form.payload.get('_supervisor_return_request') %}
-                <p class="muted" style="margin:0.75rem 0 0;">
+                <p class="muted" style="margin-top:0.75rem;">
                   Latest amendment request: {{ jbs10_form.payload.get('_supervisor_return_request') }}
                 </p>
               {% elif not jbs10_signed %}
-                <p class="muted" style="margin:0.75rem 0 0;">
+                <p class="muted" style="margin-top:0.75rem;">
                   JBS10 must be reviewed by the supervisor before MBA Admin can continue with assessor nomination.
                 </p>
               {% endif %}
@@ -320,7 +320,7 @@
                 {% endif %}
               </div>
               {% if not intent_signed %}
-                <p class="muted" style="margin:0.75rem 0 0;">
+                <p class="muted" style="margin-top:0.75rem;">
                   Intent to Submit must be signed by the supervisor before MBA Admin can continue with assessor nomination.
                 </p>
               {% endif %}
@@ -349,7 +349,7 @@
                 {% endif %}
               </div>
               {% if not jbs1_signed_by_supervisor %}
-                <p class="muted" style="margin:0.75rem 0 0;">
+                <p class="muted" style="margin-top:0.75rem;">
                   JBS 1 Declaration must be signed by the supervisor before MBA Admin signs the Program Manager section.
                 </p>
               {% endif %}
@@ -364,7 +364,7 @@
           {% if active_result_corrections and forwarded_assessment_summary %}
             <section class="response-section">
               <strong>Response Workflow</strong>
-              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              <p class="muted help-text">
                 {% if can_sign_assessment_summary %}
                   The response pack is approved. You can now sign the assessment summary.
                 {% elif assessment_summary_signed %}
@@ -378,14 +378,14 @@
                 {% if can_sign_assessment_summary %}
                   <a href="{{ url_for('mba.supervisor_sign_assessment_summary', project_id=project.id) }}" class="primary-button small-button">Sign Assessment Summary</a>
                 {% elif not assessment_summary_signed and assessment_summary_sign_reason %}
-                  <span class="muted" style="display:inline-flex;align-items:center;">{{ assessment_summary_sign_reason }}</span>
+                  <span class="muted-note">{{ assessment_summary_sign_reason }}</span>
                 {% endif %}
               </div>
             </section>
           {% elif forwarded_assessment_summary and not (project.project_status == 'results_approved' and hdc_results_released) %}
             <section class="response-section">
               <strong>Assessment Summary</strong>
-              <p class="muted" style="margin:0.5rem 0 0.75rem;">
+              <p class="muted help-text">
                 MBA Admin forwarded the assessment summary to you{% if project.assessment_results_forwarded_to_supervisor_at %} on {{ project.assessment_results_forwarded_to_supervisor_at.strftime('%d %b %Y %H:%M') }}{% endif %}. No assessor-requested corrections are active for this result.
               </p>
               <div class="invite-list invite-list--documents">
@@ -406,11 +406,11 @@
               </div>
               <div class="inline-action" style="margin-top:0.75rem;">
                 {% if assessment_summary_signed %}
-                  <span class="muted" style="display:inline-flex;align-items:center;">Assessment summary signed.</span>
+                  <span class="muted-note">Assessment summary signed.</span>
                 {% elif can_sign_assessment_summary %}
                   <a href="{{ url_for('mba.supervisor_sign_assessment_summary', project_id=project.id) }}" class="primary-button small-button">Sign Assessment Summary</a>
                 {% elif assessment_summary_sign_reason %}
-                  <span class="muted" style="display:inline-flex;align-items:center;">{{ assessment_summary_sign_reason }}</span>
+                  <span class="muted-note">{{ assessment_summary_sign_reason }}</span>
                 {% endif %}
               </div>
             </section>
@@ -419,7 +419,7 @@
             <section class="response-section">
               <strong>HDC-Approved Results</strong>
               {% if results_released_to_supervisor is defined and results_released_to_supervisor(project) %}
-                <p class="muted" style="margin:0.5rem 0 0.75rem;">
+                <p class="muted help-text">
                   MBA Admin released the HDC-approved assessment results to you{% if project.results_released_to_supervisor_at %} on {{ project.results_released_to_supervisor_at.strftime('%d %b %Y %H:%M') }}{% endif %}.
                 </p>
                 {% if project.results_hdc_approved_mark is not none %}
@@ -459,7 +459,7 @@
                   {% endfor %}
                 </div>
               {% else %}
-                <p class="muted" style="margin:0.5rem 0 0;">
+                <p class="muted" style="margin-top:0.5rem;">
                   HDC approved the assessment results. MBA Admin has not released them to the supervisor yet.
                 </p>
               {% endif %}
@@ -544,15 +544,15 @@
               {% set cv_doc = cv_docs[0] if cv_docs else None %}
               {% set highest_qualification_doc = highest_qualification_docs[0] if highest_qualification_docs else None %}
               {% if slot.status == 'expired' %}
-                <p class="muted" style="margin:0.5rem 0 0;">
+                <p class="muted" style="margin-top:0.5rem;">
                   This assessor invitation has expired.
                 </p>
               {% elif slot.status == 'declined' %}
-                <p class="muted" style="margin:0.5rem 0 0;">
+                <p class="muted" style="margin-top:0.5rem;">
                   You declined this assessor invitation. No further action is available.
                 </p>
               {% elif slot.status != 'accepted' %}
-                <p class="muted" style="margin:0.5rem 0 0;">
+                <p class="muted" style="margin-top:0.5rem;">
                   Complete the temporary appointment and temporary claim forms, and upload your CV and Highest Qualification document to accept this assessor invitation.
                 </p>
                 <div class="invitation-action-row">
@@ -615,7 +615,7 @@
                   </div>
                 </div>
                 <a href="{{ url_for('mba.assessor_acceptance_form', project_id=project.id, slot=slot.slot) }}"
-                   class="secondary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                   class="secondary-button small-button btn-mt-lg">
                   Edit Acceptance Documents
                 </a>
                 {% set result_doc = uploaded_doc_for(project, assessor_report_doc_type(slot.slot)) %}
@@ -652,7 +652,7 @@
                   <p class="muted" style="margin-top:0.5rem;">Assessment results already submitted.</p>
                 {% elif project.project_status in ['hdc_verified', 'results_submitted_to_hdc', 'results_declined'] %}
                   <a href="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot.slot) }}"
-                     class="primary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                     class="primary-button small-button btn-mt-lg">
                     Submit Results
                   </a>
                 {% else %}
@@ -665,7 +665,7 @@
         {% if additional_assessment_required is defined and additional_assessment_required(project) %}
           <section class="response-section">
             <strong>Additional Assessment</strong>
-            <p class="muted" style="margin:0.5rem 0 0;">
+            <p class="muted" style="margin-top:0.5rem;">
               This Capstone Project is in the additional assessment workflow. Current status: {{ additional_assessment_status_label(additional_assessment_stage(project)) }}.
             </p>
           </section>

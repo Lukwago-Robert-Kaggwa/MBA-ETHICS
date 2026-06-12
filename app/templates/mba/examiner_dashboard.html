@@ -35,15 +35,15 @@
               {% set cv_doc = cv_docs[0] if cv_docs else None %}
               {% set highest_qualification_doc = highest_qualification_docs[0] if highest_qualification_docs else None %}
               {% if slot.status == 'expired' %}
-                <p class="muted" style="margin:0.5rem 0 0;">
+                <p class="muted" style="margin-top:0.5rem;">
                   This assessor invitation has expired.
                 </p>
               {% elif slot.status == 'declined' %}
-                <p class="muted" style="margin:0.5rem 0 0;">
+                <p class="muted" style="margin-top:0.5rem;">
                   You declined this assessor invitation. No further action is available.
                 </p>
               {% elif slot.status != 'accepted' %}
-                <p class="muted" style="margin:0.5rem 0 0;">
+                <p class="muted" style="margin-top:0.5rem;">
                   Complete the temporary appointment and temporary claim forms, and upload your CV and Highest Qualification document to accept this assessor invitation.
                 </p>
                 <div class="invitation-action-row">
@@ -106,7 +106,7 @@
                   </div>
                 </div>
                 <a href="{{ url_for('mba.assessor_acceptance_form', project_id=project.id, slot=slot.slot) }}"
-                   class="secondary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                   class="secondary-button small-button btn-mt-lg">
                   Edit Acceptance Documents
                 </a>
                 {% set result_doc = uploaded_doc_for(project, assessor_report_doc_type(slot.slot)) %}
@@ -143,7 +143,7 @@
                   <p class="muted" style="margin-top:0.5rem;">Assessment results already submitted.</p>
                 {% elif project.project_status in ['hdc_verified', 'results_submitted_to_hdc', 'results_declined'] %}
                   <a href="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot.slot) }}"
-                     class="primary-button small-button" style="display:inline-block;margin-top:0.75rem;">
+                     class="primary-button small-button btn-mt-lg">
                     Submit Results
                   </a>
                 {% else %}
@@ -156,7 +156,7 @@
         {% if additional_assessment_required is defined and additional_assessment_required(project) %}
           <section class="response-section">
             <strong>Additional Assessment</strong>
-            <p class="muted" style="margin:0.5rem 0 0;">
+            <p class="muted" style="margin-top:0.5rem;">
               This Capstone Project is under the additional assessment workflow. Current status: {{ additional_assessment_status_label(additional_assessment_stage(project)) }}.
             </p>
           </section>

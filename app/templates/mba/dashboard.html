@@ -35,9 +35,7 @@
     <form action="{{ url_for('mba.create_project') }}" method="post" class="form-stack compact-form">
       <label>Title
         <input name="project_title" required data-project-title-input>
-        <small style="color:var(--text-muted,#666);font-weight:500;">
-          Use full words only. Acronyms, abbreviations, and special characters are not allowed.
-        </small>
+        <small class="field-hint">Use full words only. Acronyms, abbreviations, and special characters are not allowed.</small>
       </label>
       <label>Discipline
         <select name="discipline_id" required>
