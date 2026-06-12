@@ -7618,8 +7618,16 @@ def assessor_acceptance_pack_complete(project, slot):
     return True
 
 
+def assessor_acceptance_packs_complete_for_slots(project, slots):
+    return all(assessor_acceptance_pack_complete(project, slot) for slot in slots)
+
+
 def all_assessor_acceptance_packs_complete(project):
-    return all(assessor_acceptance_pack_complete(project, slot) for slot in ASSESSOR_SLOTS)
+    return assessor_acceptance_packs_complete_for_slots(project, ASSESSOR_SLOTS)
+
+
+def required_assessor_acceptance_packs_complete(project):
+    return assessor_acceptance_packs_complete_for_slots(project, required_assessor_slots(project))
 
 
 def apply_assessor_suggestions_if_ready(project):
@@ -8333,7 +8341,7 @@ def project_has_any_invitation_response(project):
         return True
     return any(
         getattr(project, f"{slot}_invitation_status") in {INVITATION_PENDING, INVITATION_ACCEPTED, INVITATION_DECLINED}
-        for slot in ASSESSOR_SLOTS
+        for slot in ALL_ASSESSOR_SLOTS
     )
 
 
@@ -9183,11 +9191,18 @@ def project_invitation_snapshot(project):
         if project.primary_supervisor_id or supervisor_invitations
         else None
     )
+    assessor_slots = required_assessor_slots(project)
     statuses = {
         "supervisor": supervisor_status if supervisor_status else (invitation_status_or_not_sent(project, "primary_supervisor_invitation_status") if project.primary_supervisor_id else None),
-        "assessor_1": invitation_status_or_not_sent(project, "assessor_1_invitation_status") if project.assessor_1_id else None,
-        "assessor_2": invitation_status_or_not_sent(project, "assessor_2_invitation_status") if project.assessor_2_id else None,
     }
+    statuses.update(
+        {
+            slot: invitation_status_or_not_sent(project, f"{slot}_invitation_status")
+            if getattr(project, f"{slot}_id", None)
+            else None
+            for slot in assessor_slots
+        }
+    )
     supervisor_count_statuses = [
         supervisor_invitation_count_status(project, invitation)
         for invitation in supervisor_invitations
@@ -9196,11 +9211,7 @@ def project_invitation_snapshot(project):
         supervisor_count_statuses = [invitation_status_or_not_sent(project, "primary_supervisor_invitation_status")]
     count_statuses = [
         status
-        for status in (
-            *supervisor_count_statuses,
-            statuses["assessor_1"],
-            statuses["assessor_2"],
-        )
+        for status in (*supervisor_count_statuses, *(statuses.get(slot) for slot in assessor_slots))
         if status
     ]
     pending_count = sum(1 for status in count_statuses if status == INVITATION_PENDING)
@@ -9210,11 +9221,15 @@ def project_invitation_snapshot(project):
     complete_assignment = has_complete_assignment(project)
     primary_assessor_acceptance_count = accepted_assessor_count(project)
     primary_assessors_accepted = primary_assessor_acceptance_count >= len(PRIMARY_ASSESSOR_SLOTS)
-    all_assigned_accepted = complete_assignment and primary_assessors_accepted and (
+    required_assessor_acceptance_count = accepted_assessor_count_for_slots(project, assessor_slots)
+    required_assessors_assigned = all(getattr(project, f"{slot}_id", None) for slot in assessor_slots)
+    all_required_assessors_accepted = required_assessor_acceptance_count >= len(assessor_slots)
+    all_assigned = complete_assignment and required_assessors_assigned
+    all_assigned_accepted = all_assigned and all_required_assessors_accepted and (
         supervisor_status == INVITATION_ACCEPTED
     )
     invitations_sent = project_has_sent_invitations(project)
-    assessor_packs_complete = all_assessor_acceptance_packs_complete(project)
+    assessor_packs_complete = required_assessor_acceptance_packs_complete(project)
     nomination_forwarding_unavailable = project.project_status in NOMINATION_FORWARDING_UNAVAILABLE_STATUSES
 
     return {
@@ -9224,9 +9239,12 @@ def project_invitation_snapshot(project):
         "declined_count": declined_count,
         "accepted_count": accepted_count,
         "statuses": statuses,
-        "all_assigned": complete_assignment,
+        "all_assigned": all_assigned,
         "all_assigned_accepted": all_assigned_accepted,
         "accepted_assessor_count": primary_assessor_acceptance_count,
+        "required_assessor_count": len(assessor_slots),
+        "required_assessor_accepted_count": required_assessor_acceptance_count,
+        "required_assessors_accepted": all_required_assessors_accepted,
         "primary_assessors_accepted": primary_assessors_accepted,
         "assessor_packs_complete": assessor_packs_complete,
         "invitations_sent": invitations_sent,
