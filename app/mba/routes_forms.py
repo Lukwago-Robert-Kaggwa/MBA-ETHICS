@@ -3467,6 +3467,9 @@ def assessor_acceptance_form(project_id, slot):
         abort(403)
 
     current_status = getattr(project, f"{slot}_invitation_status")
+    if not current_status:
+        flash("This assessor invitation has not been sent yet.", "error")
+        return redirect(role_landing_url())
     if current_status not in {INVITATION_PENDING, INVITATION_ACCEPTED}:
         flash("This assessor invitation is no longer available for response.", "error")
         return redirect(role_landing_url())

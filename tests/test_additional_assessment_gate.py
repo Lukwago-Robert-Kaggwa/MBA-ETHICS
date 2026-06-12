@@ -5,6 +5,7 @@ from app.mba.route_support import (
     INVITATION_ACCEPTED,
     INVITATION_PENDING,
     additional_assessment_required,
+    invitation_status_for_user,
     project_has_any_invitation_response,
     project_invitation_snapshot,
     required_assessor_acceptance_packs_complete,
@@ -47,6 +48,20 @@ def _project(additional_status=INVITATION_PENDING, include_additional_docs=False
         project_status=ProjectStatus.HDC_VERIFIED.value,
         documents=docs,
     )
+
+
+def test_unset_third_assessor_invitation_displays_as_not_sent():
+    project = _project(additional_status=None)
+
+    statuses = invitation_status_for_user(project, 203)
+
+    assert statuses == [
+        {
+            "slot": "assessor_3",
+            "label": "Assessor 3",
+            "status": "not_sent",
+        }
+    ]
 
 
 def test_additional_assessment_reopens_invitation_snapshot_for_third_assessor():

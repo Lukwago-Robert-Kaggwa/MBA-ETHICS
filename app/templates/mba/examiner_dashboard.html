@@ -42,7 +42,11 @@
                 <p class="muted" style="margin:0.5rem 0 0;">
                   You declined this assessor invitation. No further action is available.
                 </p>
-              {% elif slot.status != 'accepted' %}
+              {% elif slot.status == 'not_sent' %}
+                <p class="muted" style="margin:0.5rem 0 0;">
+                  This assessor nomination is waiting for MBA Admin to send the invitation.
+                </p>
+              {% elif slot.status == 'pending' %}
                 <p class="muted" style="margin:0.5rem 0 0;">
                   Complete the temporary appointment and temporary claim forms, and upload your CV and Highest Qualification document to accept this assessor invitation.
                 </p>

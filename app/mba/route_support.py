@@ -8750,11 +8750,12 @@ def invitation_status_for_user(project, user_id):
     statuses = []
     for slot, meta in INVITATION_SLOTS.items():
         if getattr(project, meta["id_field"]) == user_id:
+            status = getattr(project, meta["status_field"])
             statuses.append(
                 {
                     "slot": slot,
                     "label": meta["label"],
-                    "status": getattr(project, meta["status_field"]) or INVITATION_PENDING,
+                    "status": status if status else "not_sent",
                 }
             )
     return statuses
