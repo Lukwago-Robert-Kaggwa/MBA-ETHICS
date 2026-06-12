@@ -284,7 +284,7 @@ PUBLIC_PROJECT_STATUS_BADGE_CLASSES = {
 
 ADDITIONAL_ASSESSMENT_STATUS_LABELS = {
     "needs_assignment": "Needs Third Assessor",
-    "awaiting_nomination": "Awaiting Additional Nomination Approval",
+    "awaiting_nomination": "Awaiting Additional Nomination Signature",
     "awaiting_acceptance": "Awaiting Third Assessor Acceptance",
     "awaiting_result": "Awaiting Third Assessor Result",
     "completed": "Additional Assessment Complete",
@@ -6971,10 +6971,7 @@ def additional_external_examiner_nomination_supervisor_signed(project):
 
 
 def additional_assessor_nomination_fully_approved(project):
-    return bool(
-        additional_external_examiner_nomination_supervisor_signed(project)
-        and hdc_additional_external_examiner_nomination_signature_complete(project)
-    )
+    return additional_external_examiner_nomination_supervisor_signed(project)
 
 
 def external_examiner_nomination_form(project):

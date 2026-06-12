@@ -44,7 +44,13 @@
                 </p>
               {% elif slot.status == 'not_sent' %}
                 <p class="muted" style="margin:0.5rem 0 0;">
-                  This assessor nomination is waiting for MBA Admin to send the invitation.
+                  {% if slot.slot == 'assessor_3' and additional_assessment_stage is defined and additional_assessment_stage(project) == 'awaiting_nomination' %}
+                    This additional assessor invitation has not been sent yet because the additional nomination is still awaiting supervisor signature. Next step: the supervisor must sign the additional assessor nomination; the invitation can then be sent without HDC signature.
+                  {% elif slot.slot == 'assessor_3' %}
+                    This additional assessor invitation has not been sent yet. Next step: MBA Admin must send the invitation before you can complete the acceptance documents.
+                  {% else %}
+                    This assessor nomination is waiting for MBA Admin to send the invitation.
+                  {% endif %}
                 </p>
               {% elif slot.status == 'pending' %}
                 <p class="muted" style="margin:0.5rem 0 0;">

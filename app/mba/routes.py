@@ -1602,14 +1602,6 @@ def admin_project_action(project_id):
                 "error",
             )
             return redirect(url_for("mba.admin_additional_assessment"))
-        if not hdc_additional_external_examiner_nomination_signature_complete(project):
-            flash(
-                "Additional assessor invitation was not sent because HDC has not completed the additional nomination "
-                "signature fields. Next step: HDC must open the additional assessor nomination form, complete the "
-                "HOD and Executive Dean signature fields, and save it.",
-                "error",
-            )
-            return redirect(url_for("mba.admin_additional_assessment"))
 
         additional_assessor = project.assessor_3
         if not additional_assessor or not additional_assessor.email:

@@ -2834,6 +2834,17 @@ def _supervisor_sign_nomination_form(project_id, form_type, form_label, admin_ne
                 project.comments,
                 f"{current_user.email}: signed the {form_label} form.",
             )
+            message = f"{form_label.title()} form signed. MBA Admin has been notified."
+            message_category = "success"
+            if form_type == additional_external_examiner_nomination_doc_type():
+                invitation_message, message_category = _send_additional_assessor_invitation_if_ready(
+                    project,
+                    current_user.email,
+                )
+                message = invitation_message or (
+                    "Additional assessor nomination form signed. The third-assessor invitation is already pending "
+                    "or accepted."
+                )
             for admin_email in mba_admin_notification_emails():
                 _send_email_safely(
                     admin_email,
@@ -2854,7 +2865,7 @@ def _supervisor_sign_nomination_form(project_id, form_type, form_label, admin_ne
                 prefill=payload,
                 nomination_doc=uploaded_doc_for(project, form_type),
             )
-        flash(f"{form_label.title()} form signed. MBA Admin has been notified.", "success")
+        flash(message, message_category)
         return redirect(role_landing_url())
 
     return render_template(
@@ -2883,7 +2894,7 @@ def supervisor_sign_additional_external_examiner_nomination(project_id):
         project_id,
         additional_external_examiner_nomination_doc_type(),
         "additional assessor nomination",
-        "HDC must sign the additional nomination before MBA Admin can invite the third assessor.",
+        "The third-assessor invitation is sent after this supervisor signature is saved.",
     )
 
 
@@ -3558,7 +3569,8 @@ def assessor_acceptance_form(project_id, slot):
     if not current_status:
         flash(
             "This assessor invitation has not been sent yet. Next step: MBA Admin must open Additional Assessment "
-            "and click Send Invitation after the additional nomination has been signed by the supervisor and HDC.",
+            "and click Send Invitation after the additional nomination has been signed by the supervisor. "
+            "HDC signature is not required for the additional assessor invitation.",
             "error",
         )
         return redirect(role_landing_url())
