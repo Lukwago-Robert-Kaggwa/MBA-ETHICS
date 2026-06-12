@@ -58,6 +58,18 @@ def _person_name(user, fallback="Unassigned"):
     return name or getattr(user, "email", "") or fallback
 
 
+def _email_failure_reason_text(email_result):
+    failed = email_result.get("failed", []) if isinstance(email_result, dict) else []
+    reasons = {}
+    for item in failed:
+        reason = item.get("reason") if isinstance(item, dict) else None
+        reason = reason or "unknown"
+        if reason == "mail_not_configured":
+            reason = "mail is not configured"
+        reasons[reason] = reasons.get(reason, 0) + 1
+    return "; ".join(f"{reason} ({count})" for reason, count in reasons.items())
+
+
 def _jbs5_form_and_payload(project):
     jbs5_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs5").first()
     payload = jbs5_form.payload if jbs5_form and isinstance(jbs5_form.payload, dict) else {}
@@ -730,6 +742,7 @@ def admin_project_action(project_id):
 
     action = request.form.get("action")
     comment = (request.form.get("comment") or "").strip()
+    message_category = "success"
     retired_admin_actions = {
         "apply_suggestions",
         "send_invitations",
@@ -1575,8 +1588,10 @@ def admin_project_action(project_id):
         if not additional_assessor or not additional_assessor.email:
             flash("The additional assessor does not have an email address on file.", "error")
             return redirect(url_for("mba.admin_additional_assessment"))
+        previous_invitation_status = project.assessor_3_invitation_status or "not_sent"
         project.assessor_3_invitation_status = INVITATION_PENDING
         mark_assessor_invitations_sent(project, slots=[ADDITIONAL_ASSESSOR_SLOT])
+        db.session.flush()
         email_result = send_bulk_emails(
             [
                 {
@@ -1594,19 +1609,28 @@ def admin_project_action(project_id):
         )
         delivered_count = len(email_result["delivered"])
         failed_count = len(email_result["failed"])
+        failure_reasons = _email_failure_reason_text(email_result)
         project.comments = append_comment(
             project.comments,
             (
                 f"{current_user.email}: sent HDC-approved additional assessment invitation to "
-                f"{additional_assessor.email}; delivered={delivered_count}; failed={failed_count}"
+                f"{additional_assessor.email}; status={previous_invitation_status}->{INVITATION_PENDING}; "
+                f"delivered={delivered_count}; failed={failed_count}"
+                + (f"; failure_reason={failure_reasons}" if failure_reasons else "")
             ),
         )
         if delivered_count and not failed_count:
             message = "Additional assessor invitation sent."
         elif delivered_count and failed_count:
             message = f"Additional assessor invitation recorded. Email sent to {delivered_count}; {failed_count} failed."
+            if failure_reasons:
+                message += f" Reason: {failure_reasons}."
+            message_category = "warning"
         else:
             message = "Additional assessor invitation recorded. Email delivery is not configured or failed."
+            if failure_reasons:
+                message += f" Reason: {failure_reasons}."
+            message_category = "warning"
     elif action == "request_module_completion_verification":
         if not can_request_module_completion_verification(project):
             flash("Module completion verification is not available for this Capstone Project right now.", "error")
@@ -1770,7 +1794,7 @@ def admin_project_action(project_id):
     if comment:
         project.comments = append_comment(project.comments, f"{current_user.email}: {comment}")
     db.session.commit()
-    flash(message, "success")
+    flash(message, message_category)
     return redirect(url_for("mba.admin_dashboard", panel="projects", _anchor=f"project-{project.id}"))
 
 
