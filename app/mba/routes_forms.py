@@ -87,6 +87,7 @@ from .route_support import (
     jbs1_supervisor_signed,
     jbs10_supervisor_return_pending,
     jbs10_supervisor_signed,
+    mark_assessor_invitations_sent,
     mba_bp,
     mba_admin_notification_emails,
     project_supervisor_notification_emails,
@@ -296,6 +297,86 @@ PROFILE_DEFAULT_PLACEHOLDERS = {
     "claim_currency": "ZAR",
     "claim_cost_centre_number": "05 05 046904 20 31330",
 }
+
+
+def _email_failure_reason_text(email_result):
+    failed = email_result.get("failed", []) if isinstance(email_result, dict) else []
+    reasons = {}
+    for item in failed:
+        reason = item.get("reason") if isinstance(item, dict) else None
+        reason = reason or "unknown"
+        if reason == "mail_not_configured":
+            reason = "mail is not configured"
+        reasons[reason] = reasons.get(reason, 0) + 1
+    return "; ".join(f"{reason} ({count})" for reason, count in reasons.items())
+
+
+def _send_additional_assessor_invitation_if_ready(project, actor_email):
+    if not project or not project.assessor_3_id:
+        return None, "success"
+    if project.assessor_3_invitation_status in {INVITATION_PENDING, INVITATION_ACCEPTED}:
+        return None, "success"
+
+    additional_assessor = project.assessor_3
+    if not additional_assessor or not additional_assessor.email:
+        project.comments = append_comment(
+            project.comments,
+            f"{actor_email}: additional assessor invitation could not be sent because the assessor has no email address.",
+        )
+        return (
+            "Additional assessor nomination signature fields saved, but the invitation email was not sent because "
+            "the third assessor has no email address. Next step: update the assessor profile with a valid email, "
+            "then MBA Admin must return to Additional Assessment and click Send Invitation."
+        ), "warning"
+
+    previous_status = project.assessor_3_invitation_status or "not_sent"
+    project.assessor_3_invitation_status = INVITATION_PENDING
+    mark_assessor_invitations_sent(project, slots=[ADDITIONAL_ASSESSOR_SLOT])
+    db.session.flush()
+    email_result = send_bulk_emails(
+        [
+            {
+                "recipient": additional_assessor.email,
+                "subject": f"MBA Additional Assessment Invitation: {project.project_title}",
+                "body": (
+                    f"You have been invited to serve as Additional Assessor for the MBA Capstone Project '{project.project_title}'.\n\n"
+                    f"Student: {project.student.email if project.student else 'Unknown'}\n"
+                    f"Discipline: {project.discipline_name}\n\n"
+                    "This additional assessment was requested because the first two assessor outcomes conflict. "
+                    "Please sign in to the MBA system to complete the acceptance documents and submit your assessment."
+                ),
+            }
+        ]
+    )
+    delivered_count = len(email_result["delivered"])
+    failed_count = len(email_result["failed"])
+    failure_reasons = _email_failure_reason_text(email_result)
+    project.comments = append_comment(
+        project.comments,
+        (
+            f"{actor_email}: HDC signature completed and additional assessment invitation recorded for "
+            f"{additional_assessor.email}; status={previous_status}->{INVITATION_PENDING}; "
+            f"delivered={delivered_count}; failed={failed_count}"
+            + (f"; failure_reason={failure_reasons}" if failure_reasons else "")
+        ),
+    )
+    if delivered_count and not failed_count:
+        return (
+            "Additional assessor nomination signature fields saved. The third-assessor invitation is now Pending "
+            "and the email was sent. Next step: the assessor must sign in, complete the acceptance documents, "
+            "then submit the assessment result."
+        ), "success"
+    if failure_reasons:
+        return (
+            "Additional assessor nomination signature fields saved. The third-assessor invitation is now Pending, "
+            f"but email delivery failed. Reason: {failure_reasons}. Next step: check SMTP settings or manually notify "
+            "the assessor to sign in and complete the acceptance documents."
+        ), "warning"
+    return (
+        "Additional assessor nomination signature fields saved. The third-assessor invitation is now Pending, "
+        "but email delivery is not configured or failed. Next step: configure SMTP or manually notify the assessor "
+        "to sign in and complete the acceptance documents."
+    ), "warning"
 
 
 def _has_profile_value(value):
@@ -2009,10 +2090,17 @@ def hdc_sign_project_form(project_id, form_type):
                     payload,
                     uploaded_by_id=project.student_id if form_type in {"intent_to_submit", "jbs10"} else current_user.id,
                 )
+                message_category = "success"
                 if form_type == assessment_summary_doc_type():
                     db.session.flush()
                     db.session.expire(project, ["documents"])
                     message = _record_hdc_results_decision(project, decision_action, comment)
+                elif form_type == additional_external_examiner_nomination_doc_type():
+                    invitation_message, message_category = _send_additional_assessor_invitation_if_ready(
+                        project,
+                        current_user.email,
+                    )
+                    message = invitation_message or f"{document_label(form_type)} signature fields saved."
                 else:
                     message = f"{document_label(form_type)} signature fields saved."
                 project.comments = append_comment(
@@ -2031,7 +2119,7 @@ def hdc_sign_project_form(project_id, form_type):
                 flash("The HDC signature fields could not be saved. Please try again.", "error")
                 template_context["prefill"] = prefill
                 return render_template(template_name, **template_context)
-            flash(message, "success")
+            flash(message, message_category)
             return redirect(url_for("mba.hdc_dashboard"))
 
         return render_template(template_name, **template_context)
@@ -3468,7 +3556,11 @@ def assessor_acceptance_form(project_id, slot):
 
     current_status = getattr(project, f"{slot}_invitation_status")
     if not current_status:
-        flash("This assessor invitation has not been sent yet.", "error")
+        flash(
+            "This assessor invitation has not been sent yet. Next step: MBA Admin must open Additional Assessment "
+            "and click Send Invitation after the additional nomination has been signed by the supervisor and HDC.",
+            "error",
+        )
         return redirect(role_landing_url())
     if current_status not in {INVITATION_PENDING, INVITATION_ACCEPTED}:
         flash("This assessor invitation is no longer available for response.", "error")

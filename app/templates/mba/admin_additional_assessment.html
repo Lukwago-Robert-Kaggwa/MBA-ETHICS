@@ -152,6 +152,22 @@
                         Held until additional nomination is signed by the supervisor and HDC
                       {% endif %}
                     </small>
+                    {% if project.assessor_3_invitation_status in [none, '', 'not_sent'] %}
+                      <small>
+                        Next step:
+                        {% if not additional_nomination_supervisor_signed %}
+                          the supervisor must sign the additional assessor nomination form.
+                        {% elif not additional_nomination_hdc_signed %}
+                          HDC must complete the additional nomination signature fields.
+                        {% else %}
+                          MBA Admin must click Send Invitation. The assessor will then see the acceptance forms.
+                        {% endif %}
+                      </small>
+                    {% elif project.assessor_3_invitation_status == 'pending' %}
+                      <small>Next step: the assessor must sign in and complete the acceptance documents.</small>
+                    {% elif project.assessor_3_invitation_status == 'accepted' %}
+                      <small>Next step: the assessor must submit the assessment result.</small>
+                    {% endif %}
                   </div>
                   {% if additional_nomination_supervisor_signed and additional_nomination_hdc_signed and project.assessor_3_invitation_status not in ['pending', 'accepted'] %}
                     <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="inline-action" style="gap:0.5rem;">

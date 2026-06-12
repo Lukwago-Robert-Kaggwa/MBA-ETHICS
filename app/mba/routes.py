@@ -1566,27 +1566,58 @@ def admin_project_action(project_id):
             message = "Additional assessor proposed, but the nomination form could not be generated yet."
     elif action == "send_additional_assessor_invitation":
         if project.project_status not in {ProjectStatus.HDC_VERIFIED.value, ProjectStatus.RESULTS_DECLINED.value}:
-            flash("Additional assessment invitations can only be sent while the results are still with MBA Admin.", "error")
+            flash(
+                "Additional assessor invitation was not sent. Next step: keep the project in Nominations Approved "
+                "or Results Rejected status while MBA Admin manages the additional assessment.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if not additional_assessment_required(project):
-            flash("This project does not currently require an additional assessment.", "error")
+            flash(
+                "Additional assessor invitation was not sent because this project is not currently in the "
+                "additional assessment workflow. Next step: confirm the first two assessor results conflict "
+                "with one mark below 50 and the other at least 50.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if not project.assessor_3_id:
-            flash("Select the proposed third assessor before sending the invitation.", "error")
+            flash(
+                "Additional assessor invitation was not sent because no third assessor is selected. "
+                "Next step: choose a proposed third assessor, then save the assignment.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if project.assessor_3_invitation_status in {INVITATION_PENDING, INVITATION_ACCEPTED}:
-            flash("The additional assessor invitation has already been sent or accepted.", "info")
+            flash(
+                "No new email was sent because the additional assessor invitation is already "
+                f"{project.assessor_3_invitation_status}. Next step: ask the assessor to sign in and complete "
+                "the acceptance documents if the status is Pending.",
+                "info",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if not additional_external_examiner_nomination_supervisor_signed(project):
-            flash("The supervisor must sign the additional assessor nomination before the invitation can be sent.", "error")
+            flash(
+                "Additional assessor invitation was not sent because the supervisor has not signed the additional "
+                "nomination form. Next step: the supervisor must open the additional assessor nomination form and sign it.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if not hdc_additional_external_examiner_nomination_signature_complete(project):
-            flash("HDC must sign the additional assessor nomination before the invitation can be sent.", "error")
+            flash(
+                "Additional assessor invitation was not sent because HDC has not completed the additional nomination "
+                "signature fields. Next step: HDC must open the additional assessor nomination form, complete the "
+                "HOD and Executive Dean signature fields, and save it.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
 
         additional_assessor = project.assessor_3
         if not additional_assessor or not additional_assessor.email:
-            flash("The additional assessor does not have an email address on file.", "error")
+            flash(
+                "Additional assessor invitation was not sent because the selected assessor has no email address. "
+                "Next step: update the assessor profile with a valid email, then click Send Invitation again.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         previous_invitation_status = project.assessor_3_invitation_status or "not_sent"
         project.assessor_3_invitation_status = INVITATION_PENDING
@@ -1620,16 +1651,24 @@ def admin_project_action(project_id):
             ),
         )
         if delivered_count and not failed_count:
-            message = "Additional assessor invitation sent."
+            message = (
+                "Additional assessor invitation sent. The invitation is now Pending. Next step: the assessor must "
+                "sign in, complete the acceptance documents, then submit the assessment result."
+            )
         elif delivered_count and failed_count:
-            message = f"Additional assessor invitation recorded. Email sent to {delivered_count}; {failed_count} failed."
+            message = (
+                f"Additional assessor invitation recorded as Pending. Email sent to {delivered_count}; "
+                f"{failed_count} failed."
+            )
             if failure_reasons:
                 message += f" Reason: {failure_reasons}."
+            message += " Next step: check SMTP delivery for failed recipients or manually notify the assessor to sign in."
             message_category = "warning"
         else:
-            message = "Additional assessor invitation recorded. Email delivery is not configured or failed."
+            message = "Additional assessor invitation recorded as Pending, but email delivery is not configured or failed."
             if failure_reasons:
                 message += f" Reason: {failure_reasons}."
+            message += " Next step: configure SMTP or manually notify the assessor to sign in."
             message_category = "warning"
     elif action == "request_module_completion_verification":
         if not can_request_module_completion_verification(project):
