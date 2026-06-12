@@ -260,20 +260,6 @@
           <p class="muted">
             Assessor nominations were returned with HDC feedback. Wait for MBA Admin to replace any declined assessor and resubmit the nomination set before recording another HDC decision.
           </p>
-        {% elif project.project_status in ['hdc_verified', 'results_declined'] and additional_external_examiner_nomination_supervisor_signed(project) and not hdc_additional_external_examiner_nomination_signature_complete(project) %}
-          {% set additional_nomination_docs = proj_docs | selectattr('doc_type', 'equalto', additional_external_examiner_nomination_doc_type()) | list %}
-          {% set additional_nomination_doc = additional_nomination_docs|last if additional_nomination_docs else none %}
-          <section class="response-section">
-            <strong>Additional Assessor Nomination Review</strong>
-            <p class="muted" style="margin:0.5rem 0 0.75rem;">
-              The additional assessor nomination has been signed by the supervisor. Open the live nomination form and complete the HDC signature fields before MBA Admin can invite the third assessor.
-            </p>
-            {% if additional_nomination_doc %}
-              <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type=additional_external_examiner_nomination_doc_type()) }}" class="primary-button small-button" style="align-self:flex-start;">Open Additional Nomination</a>
-            {% else %}
-              <p class="muted">The additional assessor nomination document is not available yet.</p>
-            {% endif %}
-          </section>
         {% elif project.project_status == 'results_submitted_to_hdc' %}
           {% set assessment_summary_docs = proj_docs | selectattr('doc_type', 'equalto', 'assessment_summary') | list %}
           {% set assessment_summary_doc = assessment_summary_docs|last if assessment_summary_docs else none %}

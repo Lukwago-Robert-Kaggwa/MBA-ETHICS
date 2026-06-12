@@ -438,7 +438,6 @@ def apply_assessor_csv_row(row):
     if last_name:
         user.last_name = last_name
 
-    user.set_password(temporary_password)
     user.has_profile = False
     _apply_scholar_profile_row(user, row, first_name, last_name)
     return user, temporary_password, created
@@ -484,7 +483,6 @@ def apply_supervisor_csv_row(row):
     if last_name:
         user.last_name = last_name
 
-    user.set_password(temporary_password)
     user.has_profile = False
     _apply_scholar_profile_row(user, row, first_name, last_name)
     _sync_ethics_supervisor_account(user, temporary_password)

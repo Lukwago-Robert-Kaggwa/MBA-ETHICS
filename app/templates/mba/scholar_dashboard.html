@@ -192,9 +192,9 @@
               <strong>Additional Assessor Nomination</strong>
               <p class="muted help-text">
                 {% if additional_nomination_signed %}
-                  You have signed the additional assessor nomination form.
+                  You have signed the additional assessor nomination form. The third-assessor invitation is sent from this supervisor signature step.
                 {% else %}
-                  MBA Admin sent the additional assessor nomination form for your signature.
+                  MBA Admin sent the additional assessor nomination form for your signature. After you sign, the third-assessor invitation can be sent without HDC signature.
                 {% endif %}
               </p>
               <div class="invitation-action-row">
@@ -206,9 +206,6 @@
                   <a href="{{ url_for('mba.supervisor_sign_additional_external_examiner_nomination', project_id=project.id) }}" class="primary-button small-button">Sign Additional Nomination</a>
                 {% else %}
                   <span class="status-pill status-pill--accepted">Nomination Signed</span>
-                {% endif %}
-                {% if hdc_additional_external_examiner_nomination_signature_complete(project) %}
-                  <span class="status-pill status-pill--accepted">HDC Signed</span>
                 {% endif %}
               </div>
             </section>

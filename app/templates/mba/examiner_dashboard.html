@@ -42,7 +42,17 @@
                 <p class="muted" style="margin-top:0.5rem;">
                   You declined this assessor invitation. No further action is available.
                 </p>
-              {% elif slot.status != 'accepted' %}
+              {% elif slot.status == 'not_sent' %}
+                {% if slot.slot == 'assessor_3' %}
+                  <p class="muted" style="margin-top:0.5rem;">
+                    Your nomination as External Assessor is pending. MBA Admin will send your invitation once your nomination has been approved by HDC.
+                  </p>
+                {% else %}
+                  <p class="muted" style="margin-top:0.5rem;">
+                    Your assessor invitation has not been sent yet. Please check back later.
+                  </p>
+                {% endif %}
+              {% elif slot.status == 'pending' %}
                 <p class="muted" style="margin-top:0.5rem;">
                   Complete the temporary appointment and temporary claim forms, and upload your CV and Highest Qualification document to accept this assessor invitation.
                 </p>

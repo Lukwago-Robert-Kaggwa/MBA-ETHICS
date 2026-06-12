@@ -31,7 +31,7 @@ def _is_admin():
 
 
 def _booking_settings():
-    settings = MbaBookingSettings.query.get(1)
+    settings = db.session.get(MbaBookingSettings, 1)
     if settings:
         return settings
     settings = MbaBookingSettings(id=1, is_released=False)

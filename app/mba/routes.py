@@ -58,6 +58,18 @@ def _person_name(user, fallback="Unassigned"):
     return name or getattr(user, "email", "") or fallback
 
 
+def _email_failure_reason_text(email_result):
+    failed = email_result.get("failed", []) if isinstance(email_result, dict) else []
+    reasons = {}
+    for item in failed:
+        reason = item.get("reason") if isinstance(item, dict) else None
+        reason = reason or "unknown"
+        if reason == "mail_not_configured":
+            reason = "mail is not configured"
+        reasons[reason] = reasons.get(reason, 0) + 1
+    return "; ".join(f"{reason} ({count})" for reason, count in reasons.items())
+
+
 def _jbs5_form_and_payload(project):
     jbs5_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs5").first()
     payload = jbs5_form.payload if jbs5_form and isinstance(jbs5_form.payload, dict) else {}
@@ -730,28 +742,7 @@ def admin_project_action(project_id):
 
     action = request.form.get("action")
     comment = (request.form.get("comment") or "").strip()
-    retired_admin_actions = {
-        "apply_suggestions",
-        "send_invitations",
-        "unlock_supervisor",
-        "override_supervisor",
-        "revise_supervisors",
-        "multi_invite_supervisors",
-        "unlock_assessors",
-        "confirm_assessors",
-        "override_assessors",
-        "invite_single_assessor_1",
-        "invite_single_assessor_2",
-        "decline",
-        "reopen_dissertation_submission",
-        "mark_modules_completed",
-        "set_marks_committee_awaiting",
-        "set_marks_committee_response_received",
-    }
-    if action in retired_admin_actions:
-        flash("That older admin action has been retired. Use the visible workflow controls on the project card.", "info")
-        return redirect(url_for("mba.admin_dashboard", panel="projects"))
-
+    message_category = "success"
     supervisor_change_locked = _student_submitted_accepted_supervisor_agreement(project)
     supervisor_change_actions = {
         "invite_selected_supervisors",
@@ -1553,30 +1544,55 @@ def admin_project_action(project_id):
             message = "Additional assessor proposed, but the nomination form could not be generated yet."
     elif action == "send_additional_assessor_invitation":
         if project.project_status not in {ProjectStatus.HDC_VERIFIED.value, ProjectStatus.RESULTS_DECLINED.value}:
-            flash("Additional assessment invitations can only be sent while the results are still with MBA Admin.", "error")
+            flash(
+                "Additional assessor invitation was not sent. Next step: keep the project in Nominations Approved "
+                "or Results Rejected status while MBA Admin manages the additional assessment.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if not additional_assessment_required(project):
-            flash("This project does not currently require an additional assessment.", "error")
+            flash(
+                "Additional assessor invitation was not sent because this project is not currently in the "
+                "additional assessment workflow. Next step: confirm the first two assessor results conflict "
+                "with one mark below 50 and the other at least 50.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if not project.assessor_3_id:
-            flash("Select the proposed third assessor before sending the invitation.", "error")
+            flash(
+                "Additional assessor invitation was not sent because no third assessor is selected. "
+                "Next step: choose a proposed third assessor, then save the assignment.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if project.assessor_3_invitation_status in {INVITATION_PENDING, INVITATION_ACCEPTED}:
-            flash("The additional assessor invitation has already been sent or accepted.", "info")
+            flash(
+                "No new email was sent because the additional assessor invitation is already "
+                f"{project.assessor_3_invitation_status}. Next step: ask the assessor to sign in and complete "
+                "the acceptance documents if the status is Pending.",
+                "info",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
         if not additional_external_examiner_nomination_supervisor_signed(project):
-            flash("The supervisor must sign the additional assessor nomination before the invitation can be sent.", "error")
-            return redirect(url_for("mba.admin_additional_assessment"))
-        if not hdc_additional_external_examiner_nomination_signature_complete(project):
-            flash("HDC must sign the additional assessor nomination before the invitation can be sent.", "error")
+            flash(
+                "Additional assessor invitation was not sent because the supervisor has not signed the additional "
+                "nomination form. Next step: the supervisor must open the additional assessor nomination form and sign it.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
 
         additional_assessor = project.assessor_3
         if not additional_assessor or not additional_assessor.email:
-            flash("The additional assessor does not have an email address on file.", "error")
+            flash(
+                "Additional assessor invitation was not sent because the selected assessor has no email address. "
+                "Next step: update the assessor profile with a valid email, then click Send Invitation again.",
+                "error",
+            )
             return redirect(url_for("mba.admin_additional_assessment"))
+        previous_invitation_status = project.assessor_3_invitation_status or "not_sent"
         project.assessor_3_invitation_status = INVITATION_PENDING
         mark_assessor_invitations_sent(project, slots=[ADDITIONAL_ASSESSOR_SLOT])
+        db.session.flush()
         email_result = send_bulk_emails(
             [
                 {
@@ -1594,19 +1610,36 @@ def admin_project_action(project_id):
         )
         delivered_count = len(email_result["delivered"])
         failed_count = len(email_result["failed"])
+        failure_reasons = _email_failure_reason_text(email_result)
         project.comments = append_comment(
             project.comments,
             (
                 f"{current_user.email}: sent HDC-approved additional assessment invitation to "
-                f"{additional_assessor.email}; delivered={delivered_count}; failed={failed_count}"
+                f"{additional_assessor.email}; status={previous_invitation_status}->{INVITATION_PENDING}; "
+                f"delivered={delivered_count}; failed={failed_count}"
+                + (f"; failure_reason={failure_reasons}" if failure_reasons else "")
             ),
         )
         if delivered_count and not failed_count:
-            message = "Additional assessor invitation sent."
+            message = (
+                "Additional assessor invitation sent. The invitation is now Pending. Next step: the assessor must "
+                "sign in, complete the acceptance documents, then submit the assessment result."
+            )
         elif delivered_count and failed_count:
-            message = f"Additional assessor invitation recorded. Email sent to {delivered_count}; {failed_count} failed."
+            message = (
+                f"Additional assessor invitation recorded as Pending. Email sent to {delivered_count}; "
+                f"{failed_count} failed."
+            )
+            if failure_reasons:
+                message += f" Reason: {failure_reasons}."
+            message += " Next step: check SMTP delivery for failed recipients or manually notify the assessor to sign in."
+            message_category = "warning"
         else:
-            message = "Additional assessor invitation recorded. Email delivery is not configured or failed."
+            message = "Additional assessor invitation recorded as Pending, but email delivery is not configured or failed."
+            if failure_reasons:
+                message += f" Reason: {failure_reasons}."
+            message += " Next step: configure SMTP or manually notify the assessor to sign in."
+            message_category = "warning"
     elif action == "request_module_completion_verification":
         if not can_request_module_completion_verification(project):
             flash("Module completion verification is not available for this Capstone Project right now.", "error")
@@ -1770,7 +1803,7 @@ def admin_project_action(project_id):
     if comment:
         project.comments = append_comment(project.comments, f"{current_user.email}: {comment}")
     db.session.commit()
-    flash(message, "success")
+    flash(message, message_category)
     return redirect(url_for("mba.admin_dashboard", panel="projects", _anchor=f"project-{project.id}"))
 
 
