@@ -8,6 +8,35 @@
 {% from "mba/_project_disclosure.html" import project_disclosure %}
 <div class="mba-page-stack">
 
+<div class="dashboard-stats-grid" style="margin-bottom:0;">
+  {% if current_user.is_supervisor_role() %}
+  <article class="dashboard-stat-card dashboard-stat-card--orange">
+    <div>
+      <span>Available Titles</span>
+      <strong>{{ available_pagination.total }}</strong>
+      <small><a href="#available-supervisor-projects" class="text-link">View pool →</a></small>
+    </div>
+    <b aria-hidden="true"><i class="bi bi-collection-fill"></i></b>
+  </article>
+  {% endif %}
+  <article class="dashboard-stat-card dashboard-stat-card--blue">
+    <div>
+      <span>Supervised Projects</span>
+      <strong>{{ supervisor_filter_counts.accepted }}</strong>
+      <small><a href="#supervisor-projects" class="text-link">View projects →</a></small>
+    </div>
+    <b aria-hidden="true"><i class="bi bi-person-video3"></i></b>
+  </article>
+  <article class="dashboard-stat-card dashboard-stat-card--green">
+    <div>
+      <span>Assessor Projects</span>
+      <strong>{{ assessor_filter_counts.accepted }}</strong>
+      <small><a href="#assessor-projects" class="text-link">View projects →</a></small>
+    </div>
+    <b aria-hidden="true"><i class="bi bi-award-fill"></i></b>
+  </article>
+</div>
+
 {% if current_user.is_supervisor_role() %}
 <section class="ethics-panel" id="available-supervisor-projects">
   <div class="panel-heading">
@@ -634,17 +663,17 @@
                         </div>
                       {% endfor %}
                     {% elif student_dissertation_docs %}
-                      <p class="muted">The Capstone Manuscript is uploaded and waiting for MBA Admin to release it to assessors.</p>
+                      <p class="muted">The Capstone Project is uploaded and waiting for MBA Admin to release it to assessors.</p>
                     {% endif %}
                     {% if not student_dissertation_docs %}
-                      <p class="muted">MBA Admin has not uploaded the Capstone Manuscript from Moodle yet.</p>
+                      <p class="muted">MBA Admin has not uploaded the Capstone Project from Moodle yet.</p>
                     {% endif %}
                   </div>
                 {% else %}
-                  <p class="muted" style="margin-top:0.5rem;">Capstone Manuscript access opens after MBA Admin releases it to assessors.</p>
+                  <p class="muted" style="margin-top:0.5rem;">Capstone Project access opens after MBA Admin releases it to assessors.</p>
                 {% endif %}
                 {% if not assessor_can_view_student_dissertation(project) %}
-                  <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after MBA Admin releases the Capstone Manuscript to assessors.</p>
+                  <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after MBA Admin releases the Capstone Project to assessors.</p>
                 {% elif result_submitted %}
                   <p class="muted" style="margin-top:0.5rem;">Assessment results already submitted.</p>
                 {% elif project.project_status in ['hdc_verified', 'results_submitted_to_hdc', 'results_declined'] %}

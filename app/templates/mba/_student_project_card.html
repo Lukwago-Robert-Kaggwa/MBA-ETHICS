@@ -114,11 +114,11 @@
           {% endif %}
         {% endif %}
       {% elif not student_support_docs_complete %}
-        Upload the Global Document and combined Turnitin-AI report here. Submit the Capstone Manuscript through Moodle.
+        Upload the Global Document and combined Turnitin-AI report here. Submit the Capstone Project and the Manuscript through Moodle.
       {% elif not admin_capstone_upload_complete %}
-        Wait for MBA Admin to upload the Capstone Manuscript from Moodle.
+        Wait for MBA Admin to upload the Capstone Project and the Manuscript from Moodle.
       {% elif not project.dissertation_released_to_assessors %}
-        Wait for MBA Admin to release the Capstone Manuscript to assessors.
+        Wait for MBA Admin to release the Capstone Project to assessors.
       {% elif project.project_status == 'admin_approved' %}
         Wait for HDC to approve the assessor nominations.
       {% elif project.project_status == 'hdc_declined' %}
@@ -126,7 +126,7 @@
       {% elif project.project_status == 'hdc_verified' %}
         {% if corrections_active and corrections_released %}
           {% if corrections_state == 'awaiting_student' %}
-            Open the Response to Assessors' Comments area, upload your corrected Capstone Manuscript, fill the response form, and upload the resubmitted Turnitin report here.
+            Open the Response to Assessors' Comments area, upload your corrected Capstone Project, fill the response form, and upload the resubmitted Turnitin report here.
           {% elif corrections_state == 'rejected_by_supervisor' %}
             Your supervisor returned the corrections. Open the Response to Assessors' Comments area to revise and resubmit the corrected pack.
           {% elif corrections_state == 'awaiting_supervisor' %}

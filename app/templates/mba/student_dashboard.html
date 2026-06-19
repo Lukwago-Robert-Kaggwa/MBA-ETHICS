@@ -75,7 +75,7 @@
         {% else %}
           Your supervisor has released assessor comments{% if correction_alert_count == 1 %} for {{ pending_correction_projects[0].project_title }}{% else %} for {{ correction_alert_count }} Capstone Projects{% endif %}.
         {% endif %}
-        Upload the corrected Capstone Manuscript, complete the response form, and upload the resubmitted Turnitin report in the MBA system.
+        Upload the corrected Capstone Project, complete the response form, and upload the resubmitted Turnitin report in the MBA system.
       </p>
     </div>
   </div>
@@ -323,13 +323,13 @@
                 {% if jbs5_hdc_approved and jbs10_signed_by_supervisor and intent_signed_by_supervisor %}
                   <hr class="section-divider">
                   <p class="help-text">
-                    JBS10 and Intent to Submit are signed by your supervisor. Submit the Capstone Manuscript through Moodle. On this system, upload only supporting documents, including the Global Document and combined Turnitin-AI report. MBA Admin will upload the Capstone Manuscript here after downloading it from Moodle.
+                    JBS10 and Intent to Submit are signed by your supervisor. Submit both the Capstone Project (for assessor marking) and the Manuscript (for HDC review) through Moodle. On this system, upload only supporting documents, including the Global Document and combined Turnitin-AI report. MBA Admin will upload the Capstone Project and the Manuscript here after downloading them from Moodle.
                   </p>
                   {% if project.dissertation_moodle_request_sent_at and not dissertation_docs %}
                     <div class="moodle-alert">
-                      <strong>Action required: Submit your Capstone Manuscript on Moodle.</strong>
-                      <p>MBA Admin requested this Moodle submission on {{ project.dissertation_moodle_request_sent_at.strftime('%d %b %Y %H:%M') }}. Please log in to Moodle and upload your final Capstone Manuscript there as soon as possible.</p>
-                      <p>Do not upload the Capstone Manuscript in this MBA system.</p>
+                      <strong>Action required: Submit your Capstone Project and Manuscript on Moodle.</strong>
+                      <p>MBA Admin requested this Moodle submission on {{ project.dissertation_moodle_request_sent_at.strftime('%d %b %Y %H:%M') }}. Please log in to Moodle and upload your final Capstone Project and Manuscript there as soon as possible.</p>
+                      <p>Do not upload the Capstone Project or the Manuscript in this MBA system.</p>
                     </div>
                   {% endif %}
                   {% for doc_key, doc_info in [('jbs1_declaration', 'JBS 1 Declaration'), ('plagiarism_declaration', 'Combined Plagiarism, Turnitin and AI Declaration')] %}
@@ -404,7 +404,7 @@
                         <p class="dissertation-pack-panel__eyebrow">Supporting Documents</p>
                         <h3 class="dissertation-pack-panel__title">Student Supporting Pack</h3>
                         <p class="dissertation-pack-panel__intro">
-                          Upload supporting documents here only. The Capstone Manuscript must be submitted through Moodle and will be uploaded by MBA Admin.
+                          Upload supporting documents here only. The Capstone Project and the Manuscript must be submitted through Moodle and will be uploaded by MBA Admin.
                         </p>
                       </div>
                       <div class="dissertation-pack-panel__summary">{{ support_upload_count }}/2 uploads ready</div>
@@ -412,7 +412,7 @@
 
                     <div class="dissertation-pack-status-grid">
                       <div class="pack-status-item {% if dissertation_docs %}is-ready{% else %}is-missing{% endif %}" data-pack-item="dissertation">
-                        <small>Admin Capstone Manuscript</small>
+                        <small>Admin Capstone Project</small>
                         <strong data-pack-status="dissertation">{{ 'Ready' if dissertation_docs else 'Missing' }}</strong>
                       </div>
                       <div class="pack-status-item {% if global_document_docs %}is-ready{% else %}is-missing{% endif %}" data-pack-item="global-document">

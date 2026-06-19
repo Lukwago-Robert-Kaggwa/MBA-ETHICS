@@ -10,7 +10,7 @@ from datetime import datetime
 
 from flask import Response, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
@@ -562,6 +562,7 @@ def admin_dashboard():
     search_text = (request.args.get("q") or "").strip()
     student_number = (request.args.get("student_number") or "").strip()
     status_filter = (request.args.get("status") or "").strip()
+    year_filter = (request.args.get("year") or "").strip()
     project_page = parse_positive_int(request.args.get("project_page"), 1)
     project_per_page = parse_page_size(request.args.get("project_per_page"), 5)
 
@@ -594,6 +595,9 @@ def admin_dashboard():
 
         if student_number:
             base_query = base_query.filter(MbaStudentProfile.student_number.ilike(f"%{student_number}%"))
+
+        if year_filter.isdigit():
+            base_query = base_query.filter(func.extract("year", MbaProject.created_at) == int(year_filter))
 
         if status_filter == "declined":
             base_query = base_query.filter((MbaProject.primary_supervisor_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_1_invitation_status == INVITATION_DECLINED) | (MbaProject.assessor_2_invitation_status == INVITATION_DECLINED))
@@ -639,6 +643,14 @@ def admin_dashboard():
         per_page_param="project_per_page",
         base_args=admin_pagination_args,
         anchor="project-queue",
+    )
+    project_years = sorted(
+        {
+            int(year)
+            for (year,) in db.session.query(func.extract("year", MbaProject.created_at)).distinct().all()
+            if year is not None
+        },
+        reverse=True,
     )
     disciplines = disciplines_query(include_inactive=True).all()
     students = MbaUser.query.filter_by(role=MbaRole.STUDENT.value).order_by(MbaUser.email).limit(30).all()
@@ -753,6 +765,8 @@ def admin_dashboard():
         documents_by_project=documents_by_project,
         kpis=mba_kpis(),
         project_pagination=project_pagination,
+        project_years=project_years,
+        year_filter=year_filter,
         document_label=document_label,
         all_assessment_results_received=all_assessment_results_received,
         supervisor_suggestion_limit=SUPERVISOR_RECOMMENDATION_LIMIT,
@@ -766,6 +780,8 @@ def admin_dashboard():
         additional_assessment_stage=additional_assessment_stage,
         additional_assessment_status_label=additional_assessment_status_label,
         additional_assessment_blocks_hdc_submission=additional_assessment_blocks_hdc_submission,
+        additional_assessment_pending=additional_assessment_pending,
+        project_correction_requests=project_correction_requests,
         assessment_results_forwarded_to_supervisor=assessment_results_forwarded_to_supervisor,
         assessment_summary_supervisor_signed=assessment_summary_supervisor_signed,
         assessment_summary_supervisor_signing_block_reason=assessment_summary_supervisor_signing_block_reason,
@@ -1145,11 +1161,11 @@ def admin_reminder_email_message(item):
         action_text = "Please sign in to the MBA system to accept or decline the assessor invitation and submit the required acceptance documents."
     elif kind == "moodle_manuscript_submission":
         action_text = (
-            "Please submit the Capstone Manuscript through Moodle. Do not upload the Capstone Manuscript "
+            "Please submit the Capstone Project and the Manuscript through Moodle. Do not upload them "
             "in the MBA system; upload only the required supporting documents there."
         )
     elif kind == "corrections_response":
-        action_text = "Please upload the corrected Capstone Manuscript, fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report in the MBA system."
+        action_text = "Please upload the corrected Capstone Project, fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report in the MBA system."
     elif kind == "assessment_summary_release":
         action_text = "Please review the assessment summary and release the assessor comments to the student when ready."
     elif kind == "corrections_supervisor_approval":

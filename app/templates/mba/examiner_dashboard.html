@@ -7,6 +7,16 @@
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
 <div class="mba-page-stack">
+<div class="dashboard-stats-grid" style="margin-bottom:0;">
+  <article class="dashboard-stat-card dashboard-stat-card--orange">
+    <div>
+      <span>Assigned Projects</span>
+      <strong>{{ examiner_pagination.total }}</strong>
+      <small>as external assessor</small>
+    </div>
+    <b aria-hidden="true"><i class="bi bi-award-fill"></i></b>
+  </article>
+</div>
 <section class="ethics-panel" id="assigned-projects">
   <div class="panel-heading">
     <h2>Assigned Capstone Projects</h2>
@@ -138,17 +148,17 @@
                         </div>
                       {% endfor %}
                     {% elif student_dissertation_docs %}
-                      <p class="muted">The Capstone Manuscript is uploaded and waiting for MBA Admin to release it to assessors.</p>
+                      <p class="muted">The Capstone Project is uploaded and waiting for MBA Admin to release it to assessors.</p>
                     {% endif %}
                     {% if not student_dissertation_docs %}
-                      <p class="muted">MBA Admin has not uploaded the Capstone Manuscript from Moodle yet.</p>
+                      <p class="muted">MBA Admin has not uploaded the Capstone Project from Moodle yet.</p>
                     {% endif %}
                   </div>
                 {% else %}
-                  <p class="muted" style="margin-top:0.5rem;">Capstone Manuscript access opens after MBA Admin releases it to assessors.</p>
+                  <p class="muted" style="margin-top:0.5rem;">Capstone Project access opens after MBA Admin releases it to assessors.</p>
                 {% endif %}
                 {% if not assessor_can_view_student_dissertation(project) %}
-                  <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after MBA Admin releases the Capstone Manuscript to assessors.</p>
+                  <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after MBA Admin releases the Capstone Project to assessors.</p>
                 {% elif result_submitted %}
                   <p class="muted" style="margin-top:0.5rem;">Assessment results already submitted.</p>
                 {% elif project.project_status in ['hdc_verified', 'results_submitted_to_hdc', 'results_declined'] %}

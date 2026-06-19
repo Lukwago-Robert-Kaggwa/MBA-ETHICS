@@ -129,9 +129,9 @@
                 {% endif %}
               </div>
             {% elif corrected_doc or response_doc or turnitin_doc %}
-              <p class="muted" style="margin-top:0.5rem;">The student submitted the correction pack to the supervisor. The corrected Capstone Manuscript and Response to Assessors' Comments will be available to Admin after supervisor approval.</p>
+              <p class="muted" style="margin-top:0.5rem;">The student submitted the correction pack to the supervisor. The corrected Capstone Project and Response to Assessors' Comments will be available to Admin after supervisor approval.</p>
             {% else %}
-              <p class="muted" style="margin-top:0.5rem;">The student has not submitted the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report yet.</p>
+              <p class="muted" style="margin-top:0.5rem;">The student has not submitted the corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report yet.</p>
             {% endif %}
           </details>
 
@@ -139,20 +139,22 @@
             <strong>Admin Readiness</strong>
             {% if correction_status_value == 'awaiting_student' %}
               <p class="muted" style="margin:0.5rem 0 0;">
-                Hold results at admin level until the supervisor releases comments and the student submits the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report.
+                Hold results at admin level until the supervisor releases comments and the student submits the corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report.
               </p>
               {% if not assessment_results_forwarded_to_supervisor(project) %}
                 <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="inline-action" style="margin-top:0.75rem;">
-                  <button class="primary-button small-button" name="action" value="forward_results_to_supervisor" type="submit" {% if not all_assessment_results_received(project) %}disabled{% endif %}>Forward Summary to Supervisor</button>
+                  <button class="primary-button small-button" name="action" value="forward_results_to_supervisor" type="submit"
+                    data-tooltip="All assessor results must be received before forwarding the summary to the supervisor."
+                    {% if not all_assessment_results_received(project) %}disabled{% endif %}>Forward Summary to Supervisor</button>
                 </form>
               {% endif %}
             {% elif correction_status_value == 'awaiting_supervisor' %}
               <p class="muted" style="margin:0.5rem 0 0;">
-                The corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report are with the supervisor. Wait for supervisor approval before sending results to HDC.
+                The corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report are with the supervisor. Wait for supervisor approval before sending results to HDC.
               </p>
             {% elif correction_status_value == 'rejected_by_supervisor' %}
               <p class="muted" style="margin:0.5rem 0 0;">
-                The supervisor returned the corrections to the student. Wait for the revised corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report.
+                The supervisor returned the corrections to the student. Wait for the revised corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report.
               </p>
             {% else %}
               <p style="margin:0.5rem 0 0;color:var(--success,#2d7a3a);font-weight:600;">

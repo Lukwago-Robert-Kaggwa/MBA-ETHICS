@@ -330,7 +330,9 @@
               <p class="mba-doc-note">Approval is blocked until all assessor results are received.</p>
             {% endif %}
             <div class="card-actions">
-              <button class="primary-button" name="action" value="approve_results" type="submit" {% if (all_results_ready is defined and not all_results_ready) or missing_hdc_results_docs|default([]) %}disabled{% endif %}>Sign &amp; Approve Results</button>
+              <button class="primary-button" name="action" value="approve_results" type="submit"
+                data-tooltip="{{ 'All assessor results must be received before you can approve.' if (all_results_ready is defined and not all_results_ready) else 'Required results documents are still missing.' }}"
+                {% if (all_results_ready is defined and not all_results_ready) or missing_hdc_results_docs|default([]) %}disabled{% endif %}>Sign &amp; Approve Results</button>
               <button class="secondary-button" name="action" value="decline_results" type="submit">Sign &amp; Decline Results</button>
             </div>
             <a href="{{ url_for('mba.hdc_dashboard') }}" class="secondary-button">Cancel</a>

@@ -18,9 +18,12 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <div class="ethics-layout{% if public_page %} ethics-layout--public{% endif %}">
       {% if not public_page %}
-      <aside class="ethics-sidebar" aria-label="Primary navigation">
+      <aside class="ethics-sidebar" aria-label="Primary navigation" id="main-sidebar">
+        <button class="ethics-sidebar__close" id="sidebar-close" aria-label="Close navigation menu">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
         <div class="ethics-sidebar__brand">
-          <div class="ethics-sidebar__mark" aria-hidden="true">JBS</div>
+          <img src="{{ url_for('static', filename='img/uj_orange_square.png') }}" alt="University of Johannesburg" class="ethics-sidebar__logo">
           <div class="ethics-sidebar__brand-text">
             <h2>{% block app_name %}MBA Ethics{% endblock %}</h2>
             <p>University of Johannesburg</p>
@@ -209,6 +212,13 @@
 
       <main class="ethics-main{% if public_page %} ethics-main--public{% endif %}" id="main-content" tabindex="-1">
         {% if not public_page %}
+        <nav class="mobile-nav-bar" aria-label="Mobile navigation">
+          <button class="mobile-nav-bar__toggle" id="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="main-sidebar">
+            <i class="bi bi-list" aria-hidden="true"></i>
+          </button>
+          <img src="{{ url_for('static', filename='img/uj_orange_square.png') }}" alt="University of Johannesburg" class="mobile-nav-bar__logo">
+          <span class="mobile-nav-bar__avatar" aria-hidden="true">{{ (current_user.first_name or current_user.email or 'U')[:1]|upper if current_user.is_authenticated else '' }}</span>
+        </nav>
         {% set topbar_reminders_nav = mba_reminders_nav() if current_user.is_authenticated and current_user.system_name == 'mba' and current_user.role in ['admin', 'main_admin'] else none %}
         <header class="ethics-topbar">
           <form class="ethics-topbar__search" method="get" action="{{ request.path }}" role="search">
@@ -270,6 +280,24 @@
         {% block body %}{% endblock %}
       </main>
     </div>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+    <script>
+      (function () {
+        /* Auto-wrap any disabled button that carries a data-tooltip attribute so the
+           parent span (not the disabled button) receives the hover event. */
+        document.querySelectorAll('button[disabled][data-tooltip]').forEach(function (btn) {
+          if (btn.closest('.disabled-tooltip-wrap')) return;
+          var tip = btn.getAttribute('data-tooltip');
+          var wrap = document.createElement('span');
+          wrap.className = 'disabled-tooltip-wrap';
+          wrap.setAttribute('data-tooltip', tip);
+          wrap.setAttribute('aria-label', tip);
+          btn.removeAttribute('data-tooltip');
+          btn.parentNode.insertBefore(wrap, btn);
+          wrap.appendChild(btn);
+        });
+      })();
+    </script>
     <script>
       (function () {
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -310,6 +338,47 @@
             return originalFetch(input, requestInit);
           };
         }
+      })();
+    </script>
+    <script>
+      (function () {
+        var sidebar  = document.getElementById('main-sidebar');
+        var backdrop = document.getElementById('sidebar-backdrop');
+        var toggle   = document.getElementById('sidebar-toggle');
+        var closeBtn = document.getElementById('sidebar-close');
+        if (!sidebar) return;
+
+        function openSidebar() {
+          sidebar.classList.add('is-open');
+          backdrop.classList.add('is-visible');
+          backdrop.removeAttribute('aria-hidden');
+          document.body.style.overflow = 'hidden';
+          if (toggle) toggle.setAttribute('aria-expanded', 'true');
+          sidebar.focus();
+        }
+
+        function closeSidebar() {
+          sidebar.classList.remove('is-open');
+          backdrop.classList.remove('is-visible');
+          backdrop.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+          if (toggle) { toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); }
+        }
+
+        if (toggle)   toggle.addEventListener('click', openSidebar);
+        if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+        if (backdrop) backdrop.addEventListener('click', closeSidebar);
+
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && sidebar.classList.contains('is-open')) closeSidebar();
+        });
+
+        /* Close drawer when any nav link inside it is clicked (SPA-style navigation) */
+        sidebar.querySelectorAll('a').forEach(function (link) {
+          link.addEventListener('click', function () {
+            if (window.innerWidth <= 768) closeSidebar();
+          });
+        });
       })();
     </script>
   </body>

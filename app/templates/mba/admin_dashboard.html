@@ -63,7 +63,7 @@
   {%- endif -%}
   {%- endmacro %}
   {% macro button_tooltip(reason='') -%}
-  <span class="disabled-tooltip-wrap" {% if reason %} title="{{ reason }}" aria-label="{{ reason }}" {% endif %}>
+  <span class="disabled-tooltip-wrap" {% if reason %} data-tooltip="{{ reason }}" aria-label="{{ reason }}" {% endif %}>
     {{- caller() -}}
   </span>
   {%- endmacro %}
@@ -116,7 +116,7 @@
       <span>{{ project_pagination.total }} capstone projects</span>
     </div>
     {% set project_search = request.args.get('q') %}
-    {% set has_project_filters = project_search or request.args.get('student_number') or request.args.get('status') or sv != 'all' %}
+    {% set has_project_filters = project_search or request.args.get('student_number') or request.args.get('status') or request.args.get('year') or sv != 'all' %}
     <div class="admin-supervisor-pool-panel admin-supervisor-pool-panel--sticky">
       <div>
         <strong>Release to Supervisors</strong>
@@ -136,19 +136,19 @@
     </div>
     <div class="admin-project-toolbar">
       <div class="admin-project-toolbar__views" role="tablist" aria-label="Project filters">
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='all', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, year=request.args.get('year') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'all' %}is-active{% endif %}">
           All <strong>{{ vc.all }}</strong>
         </a>
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='awaiting', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='awaiting', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, year=request.args.get('year') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'awaiting' %}is-active{% endif %}">
           Awaiting <strong>{{ vc.awaiting }}</strong>
         </a>
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='declined', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='declined', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, year=request.args.get('year') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'declined' %}is-active{% endif %}">
           Declined <strong>{{ vc.declined }}</strong>
         </a>
-        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='accepted', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, project_per_page=project_pagination.per_page) }}"
+        <a href="{{ url_for('mba.admin_dashboard', panel='projects', view='accepted', q=project_search or None, student_number=request.args.get('student_number') or None, status=request.args.get('status') or None, year=request.args.get('year') or None, project_per_page=project_pagination.per_page) }}"
           class="filter-pill {% if sv == 'accepted' %}is-active{% endif %}">
           Accepted <strong>{{ vc.accepted }}</strong>
         </a>
@@ -192,6 +192,16 @@
           </select>
         </label>
 
+        <label class="admin-filter-field">
+          <span>Year</span>
+          <select name="year" class="admin-filter-input">
+            <option value="">All Years</option>
+            {% for available_year in project_years %}
+            <option value="{{ available_year }}" {% if year_filter|string == available_year|string %}selected{% endif %}>{{ available_year }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
         <div class="admin-filter-actions">
           <button type="submit" class="secondary-button small-button">Apply</button>
           {% if has_project_filters %}
@@ -201,10 +211,18 @@
         </div>
       </form>
     </div>
-    <div class="admin-queue-note">
-      <strong>Queue guide</strong>
-      <span>Follow stages from 1 to 8. Hover disabled actions for requirements.</span>
-    </div>
+    <details class="admin-queue-note" open>
+      <summary>
+        <strong>Queue guide</strong>
+        <span class="admin-queue-note__toggle">
+          <span class="admin-queue-note__expand">Open</span>
+          <span class="admin-queue-note__collapse">Close</span>
+        </span>
+      </summary>
+      <div class="admin-queue-note__body">
+        Follow stages from 1 to 8. Hover disabled actions for requirements.
+      </div>
+    </details>
     {% set pagination = project_pagination %}
     {% set item_label = 'capstone projects' %}
     {% include "mba/_project_pagination.html" %}
@@ -296,6 +314,7 @@
       external_examiner_nomination_doc_type()) | list %}
       {% set external_nomination_doc = external_nomination_docs[0] if external_nomination_docs else none %}
       {% set external_nomination_signed = external_examiner_nomination_supervisor_signed(project) %}
+      {% set header_report_doc = project_doc_list | selectattr('doc_type', 'equalto', 'header_report') | list | first %}
       {% set assessor_hr_docs_sent = assessor_hr_documents_sent(project) if assessor_hr_documents_sent is defined else false %}
       {% set assessor_hr_docs_sent_to_value = assessor_hr_documents_sent_to(project) if assessor_hr_documents_sent_to is defined else '' %}
       {% set workflow_already_beyond_nomination = project.project_status in ['results_submitted_to_hdc',
@@ -305,7 +324,8 @@
       {% set assessor_prerequisites_complete = (project.jbs5_hdc_approved_at is not none) and student_assessor_prerequisites_ready %}
       {% set can_forward_external_nomination_to_supervisor = primary_assessors_accepted and invitation_state.assessor_packs_complete
       and not external_nomination_signed and not nominations_forwarded_to_hdc and not nominations_approved_by_hdc %}
-      {% set can_forward_nominations_to_hdc = can_approve_to_hdc and assessor_prerequisites_complete and external_nomination_signed and not
+      {% set can_forward_nominations_to_hdc = can_approve_to_hdc and assessor_prerequisites_complete and external_nomination_signed and
+      header_report_doc and not
       nominations_forwarded_to_hdc and not nominations_approved_by_hdc and not hdc_declined_assessor_pending_replacement
       and not hdc_rejection_without_slot_decisions
       %}
@@ -412,6 +432,8 @@
       {% set nominations_hdc_reason = 'The supervisor must sign JBS10 before nominations can be forwarded to HDC.' %}
       {% elif not intent_signed_by_supervisor %}
       {% set nominations_hdc_reason = 'The supervisor must sign Intent to Submit before nominations can be forwarded to HDC.' %}
+      {% elif not header_report_doc %}
+      {% set nominations_hdc_reason = 'Upload the Header Report before nominations can be forwarded to HDC.' %}
       {% elif hdc_declined_assessor_pending_replacement or hdc_rejection_without_slot_decisions %}
       {% set nominations_hdc_reason = 'Replace the assessor nomination declined by HDC before forwarding nominations
       again.' %}
@@ -497,6 +519,8 @@
       {% set submit_results_reason = 'Request and receive Marks Committee coursework marks before sending
       results to HDC.' %}
       {% endif %}
+      {% elif not manuscript_doc %}
+      {% set submit_results_reason = 'Cannot forward to HDC: Manuscript has not been uploaded.' %}
       {% elif missing_hdc_result_docs %}
       {% set missing_doc_names %}{% for doc_key in missing_hdc_result_docs %}{{ document_label(doc_key) }}{% if not
       loop.last %}, {% endif %}{% endfor %}{% endset %}
@@ -523,14 +547,15 @@
       {% set jbs1_supervisor_signed_value = jbs1_supervisor_signed(project) if jbs1_supervisor_signed is defined else (jbs1_declaration_form and jbs1_declaration_form.supervisor_signed) %}
       {% set jbs1_program_manager_signed_value = jbs1_program_manager_signed(project) if jbs1_program_manager_signed is defined else (jbs1_declaration_form and jbs1_declaration_form.payload and jbs1_declaration_form.payload.get('office_program_manager') and jbs1_declaration_form.payload.get('office_program_manager_date')) %}
       {% set student_dissertation_doc = student_dissertation_docs[0] if student_dissertation_docs else None %}
+      {% set manuscript_doc = proj_docs | selectattr('doc_type', 'equalto', 'manuscript') | list | first %}
       {% set can_release_dissertation = student_dissertation_doc and assessor_hr_stage_complete and project.project_status in ['admin_approved',
       'hdc_verified', 'results_submitted_to_hdc', 'results_declined', 'results_approved', 'graduated'] %}
       {% if project.dissertation_released_to_assessors %}
-      {% set release_dissertation_reason = 'The Capstone Manuscript has already been released to assessors.' %}
+      {% set release_dissertation_reason = 'The Capstone Project has already been released to assessors.' %}
       {% elif not student_dissertation_doc %}
-      {% set release_dissertation_reason = 'Upload the Capstone Manuscript before releasing it to assessors.' %}
+      {% set release_dissertation_reason = 'Cannot forward to assessors: Capstone Project has not been uploaded.' %}
       {% elif not assessor_hr_stage_complete %}
-      {% set release_dissertation_reason = 'Send the approved assessor temporary appointment and claim forms to HR before releasing the Capstone Manuscript.' %}
+      {% set release_dissertation_reason = 'Send the approved assessor temporary appointment and claim forms to HR before releasing the Capstone Project.' %}
       {% elif not can_release_dissertation %}
       {% set release_dissertation_reason = 'Nominations must reach an assessor-visible stage before release.' %}
       {% else %}
@@ -552,15 +577,15 @@
       {% set capstone_upload_prerequisites_ready = jbs1_program_manager_signed_value and combined_declaration_docs and assessor_hr_stage_complete %}
       {% set can_request_moodle_submission = can_request_moodle_manuscript_submission(project) %}
       {% if student_dissertation_doc %}
-      {% set moodle_submission_request_reason = 'The Capstone Manuscript has already been uploaded from Moodle.' %}
+      {% set moodle_submission_request_reason = 'The Capstone Project has already been uploaded from Moodle.' %}
       {% elif not project.student or not project.student.email %}
       {% set moodle_submission_request_reason = 'The student does not have an email address on file.' %}
       {% elif not project.jbs5_hdc_approved_at %}
-      {% set moodle_submission_request_reason = 'HDC must approve JBS5 before the Capstone Manuscript is requested.' %}
+      {% set moodle_submission_request_reason = 'HDC must approve JBS5 before the Capstone Project is requested.' %}
       {% elif not student_assessor_prerequisites_ready %}
-      {% set moodle_submission_request_reason = 'JBS10 and Intent to Submit must be signed by the supervisor before requesting the Capstone Manuscript.' %}
+      {% set moodle_submission_request_reason = 'JBS10 and Intent to Submit must be signed by the supervisor before requesting the Capstone Project.' %}
       {% elif not assessor_hr_stage_complete %}
-      {% set moodle_submission_request_reason = 'Send the approved assessor temporary appointment and claim forms to HR before requesting the Capstone Manuscript.' %}
+      {% set moodle_submission_request_reason = 'Send the approved assessor temporary appointment and claim forms to HR before requesting the Capstone Project.' %}
       {% else %}
       {% set moodle_submission_request_reason = '' %}
       {% endif %}
@@ -601,7 +626,7 @@
       {% set next_step = 'Await Supervisor-Signed Intent' %}
       {% endif %}
       {% elif nominations_approved_by_hdc and not project.dissertation_released_to_assessors %}
-      {% set next_step = 'Upload Capstone Manuscript' if not student_dissertation_doc else 'Release Manuscript to Assessors' %}
+      {% set next_step = 'Upload Capstone Project' if not student_dissertation_doc else 'Release Capstone Project to Assessors' %}
       {% elif project.project_status == 'results_submitted_to_hdc' %}
       {% set next_step = 'Await HDC Results Review' %}
       {% elif project.project_status == 'results_approved' and not results_released %}
@@ -628,12 +653,12 @@
       {% elif project.jbs5_hdc_approved_at and not student_assessor_prerequisites_ready %}
       {% set next_step_note = invite_selected_assessors_reason %}
       {% elif nominations_approved_by_hdc and not assessor_hr_stage_complete %}
-      {% set next_step_note = 'HDC has approved the assessors. Send the temporary appointment and remuneration/temporary claim forms to HR before moving to the manuscript stage.' %}
+      {% set next_step_note = 'HDC has approved the assessors. Send the temporary appointment and remuneration/temporary claim forms to HR before moving to the Capstone Project stage.' %}
       {% elif nominations_approved_by_hdc and not project.dissertation_released_to_assessors %}
       {% if not student_dissertation_doc %}
-      {% set next_step_note = 'Upload the Capstone Manuscript downloaded from Moodle, then release it to the assessors.' %}
+      {% set next_step_note = 'Upload the Capstone Project downloaded from Moodle, then release it to the assessors.' %}
       {% else %}
-      {% set next_step_note = 'The Capstone Manuscript is uploaded and can be released to the assessors.' %}
+      {% set next_step_note = 'The Capstone Project is uploaded and can be released to the assessors.' %}
       {% endif %}
       {% elif project.project_status == 'results_approved' and not results_released %}
       {% set next_step_note = 'HDC approved the results. Admin can now release them to the supervisor.' %}
@@ -647,7 +672,11 @@
       {% elif all_assessment_results_received(project) and not assessment_summary_signed %}
       {% set next_step_note = assessment_summary_sign_reason or 'Forward the assessment summary to the supervisor for signature.' %}
       {% elif additional_assessment_active and additional_assessment_state != 'completed' %}
+      {% if additional_assessment_pending is defined and additional_assessment_pending(project) and project_correction_requests is defined and project_correction_requests(project) %}
+      {% set next_step_note = 'Waiting for third assessor results before corrections can begin.' %}
+      {% else %}
       {% set next_step_note = 'Additional assessment must be completed before the final results workflow continues.' %}
+      {% endif %}
       {% elif invitations_sent %}
       {% set next_step_note = 'Track responses and use the available action buttons when each prerequisite is complete.'
       %}
@@ -711,6 +740,18 @@
       project.project_status == 'results_approved' else ('With HDC' if project.project_status ==
       'results_submitted_to_hdc' else ('Rejected by HDC' if project.project_status == 'results_declined' else 'Not
       ready'))) %}
+      {% set progression_stages = [
+        {'label': 'Supervisor', 'complete': workflow_supervisor_complete, 'current': workflow_supervisor_current},
+        {'label': 'JBS5 Approval', 'complete': workflow_jbs5_complete, 'current': workflow_jbs5_current},
+        {'label': 'Assessor Suggestion', 'complete': workflow_assessor_suggestion_complete, 'current': workflow_assessor_suggestion_current},
+        {'label': 'HDC Nomination Documents', 'complete': workflow_nominations_complete, 'current': workflow_nominations_current},
+        {'label': 'Capstone Project to Assessors', 'complete': workflow_manuscript_complete, 'current': workflow_manuscript_current},
+        {'label': 'Forward Assessor Summary', 'complete': workflow_summary_complete, 'current': workflow_summary_current},
+        {'label': 'Marks Committee & Results to HDC', 'complete': workflow_module_hdc_complete, 'current': workflow_module_hdc_current},
+        {'label': 'Release HDC Verified Results', 'complete': workflow_release_complete, 'current': workflow_release_current},
+      ] %}
+      {% set progression_current = progression_stages | selectattr('current') | list | first %}
+      {% set progression_current_label = progression_current.label if progression_current else ('Graduated' if project.project_status == 'graduated' else 'Workflow complete') %}
       {% call project_disclosure(project, 'project-disclosure--admin') %}
       <article class="record-card admin-project-card">
         <div class="record-card__top">
@@ -759,14 +800,16 @@
         {% set show_supervisor_selection = workflow_supervisor_current %}
         {% set show_assessor_selection = workflow_assessor_suggestion_current %}
         {% set capstone_upload_form_id = 'project-' ~ project.id ~ '-capstone-upload-form' %}
+        {% set header_report_upload_form_id = 'project-' ~ project.id ~ '-header-report-upload-form' %}
+        {% set manuscript_upload_form_id = 'project-' ~ project.id ~ '-manuscript-upload-form' %}
 
         <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post"
           class="form-stack compact-form admin-inline-form admin-workflow-form">
           <section class="admin-redesign-flow" aria-label="Project workflow status">
-          <div class="admin-redesign-flow__guide">
-            <strong>Queue guide
-</strong>
-            <span>Follow stages 1 to 8. Current actions appear directly inside each active stage.</span>
+          <div class="admin-redesign-flow__panel">
+            <button type="button" class="secondary-button small-button admin-workflow-info-button" id="project-{{ project.id }}-workflow-info-open">
+              Queue guide & project progression
+            </button>
           </div>
 
           <div class="admin-redesign-flow__stack">
@@ -1118,6 +1161,7 @@
                   <span>JBS10: {{ 'Supervisor signed' if jbs10_signed_by_supervisor else ('Returned for amendment' if jbs10_return_pending else ('Awaiting supervisor signature' if student_jbs10_docs else 'Missing')) }}</span>
                   <span>Intent: {{ 'Supervisor signed' if intent_signed_by_supervisor else ('Awaiting supervisor signature' if student_intent_docs else 'Missing') }}</span>
                   <span>Nomination form: {{ 'Supervisor signed' if external_nomination_signed else ('Generated' if external_nomination_doc else 'Pending') }}</span>
+                  <span>Header Report: {{ 'Uploaded' if header_report_doc else 'Missing' }}</span>
                   <span>HR documents: {{ 'Sent' if assessor_hr_docs_sent else ('Complete' if workflow_already_beyond_nomination else ('Ready to send' if nominations_approved_by_hdc else 'Waiting')) }}</span>
                   {% if assessor_hr_docs_sent_to_value %}
                   <span>HR email: {{ assessor_hr_docs_sent_to_value }}</span>
@@ -1136,6 +1180,17 @@
                       <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=external_nomination_doc.id) }}" class="secondary-button small-button">View Nomination</a>
                       <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=external_nomination_doc.id) }}" class="secondary-button small-button">Download Nomination</a>
                     {% endif %}
+                    {% if header_report_doc %}
+                      <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=header_report_doc.id) }}" class="secondary-button small-button">View Header Report</a>
+                      <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=header_report_doc.id) }}" class="secondary-button small-button">Download Header Report</a>
+                    {% endif %}
+                    <label class="admin-stage-file-button">
+                      <span class="secondary-button small-button">Choose Header Report</span>
+                      <input type="file" name="header_report_file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        form="{{ header_report_upload_form_id }}" data-file-name-target="project-{{ project.id }}-header-report-file-name">
+                    </label>
+                    <span class="admin-stage-file-name" id="project-{{ project.id }}-header-report-file-name">No file selected</span>
+                    <button class="secondary-button small-button" type="submit" form="{{ header_report_upload_form_id }}">{{ 'Replace Header Report' if header_report_doc else 'Upload Header Report' }}</button>
                     {% call button_tooltip(external_nomination_supervisor_reason) %}
                     <button class="secondary-button small-button" name="action" value="forward_external_examiner_nomination_to_supervisor" type="submit" {% if
                       not can_forward_external_nomination_to_supervisor %}disabled{% endif %}>Send to Supervisor</button>
@@ -1154,13 +1209,14 @@
               <div class="admin-redesign-stage__marker">5</div>
               <div class="admin-redesign-stage__content">
                 <div class="admin-redesign-stage__head">
-                  <h4>Manuscript to Assessors</h4>
+                  <h4>Capstone Project to Assessors</h4>
                   <span class="admin-redesign-badge">{{ workflow_manuscript_status }}</span>
                 </div>
                 <div class="admin-redesign-stage__body admin-redesign-stage__checks">
                   <span>Moodle request: {{ 'Sent' if project.dissertation_moodle_request_sent_at else 'Not sent' }}</span>
                   <span>JBS 1: {{ 'Program Manager signed' if jbs1_program_manager_signed_value else ('Awaiting Admin signature' if jbs1_supervisor_signed_value else ('Awaiting supervisor signature' if jbs1_declaration_docs else 'Missing')) }}</span>
-                  <span>Manuscript: {{ 'Uploaded' if student_dissertation_doc else 'Missing' }}</span>
+                  <span>Capstone Project: {{ 'Uploaded ' ~ student_dissertation_doc.uploaded_at.strftime('%d %b %Y %H:%M') if student_dissertation_doc else 'Missing' }}</span>
+                  <span>Capstone Project Moodle upload: {{ project.capstone_project_moodle_uploaded_at.strftime('%d %b %Y %H:%M') if project.capstone_project_moodle_uploaded_at else 'Not recorded' }}</span>
                   <span>Assessor access: {{ 'Released' if project.dissertation_released_to_assessors else 'Not released' }}</span>
                 </div>
                 {% if workflow_manuscript_current or (jbs1_supervisor_signed_value and not jbs1_program_manager_signed_value) %}
@@ -1175,7 +1231,7 @@
                   {% endcall %}
                   <label class="admin-stage-file-button {% if not capstone_upload_prerequisites_ready %}is-disabled{% endif %}"
                     {% if not capstone_upload_prerequisites_ready %}title="{{ upload_capstone_reason }}"{% endif %}>
-                    <span class="secondary-button small-button">Choose Manuscript PDF</span>
+                    <span class="secondary-button small-button">Choose Capstone Project PDF</span>
                     <input type="file" name="capstone_file" accept=".pdf,application/pdf" required
                       form="{{ capstone_upload_form_id }}" data-file-name-target="project-{{ project.id }}-capstone-file-name"
                       {% if not capstone_upload_prerequisites_ready %}disabled{% endif %}>
@@ -1190,6 +1246,14 @@
                     type="submit" {% if not can_release_dissertation or project.dissertation_released_to_assessors
                     %}disabled{% endif %}>Release</button>
                   {% endcall %}
+                  <label class="admin-field-group admin-stage-email-field">
+                    <span>Capstone Project Moodle upload time</span>
+                    <input type="datetime-local" name="capstone_project_moodle_uploaded_at"
+                      value="{{ project.capstone_project_moodle_uploaded_at.strftime('%Y-%m-%dT%H:%M') if project.capstone_project_moodle_uploaded_at else '' }}"
+                      class="admin-filter-input">
+                  </label>
+                  <button class="secondary-button small-button" name="action"
+                    value="set_capstone_project_moodle_uploaded_at" type="submit">Save Moodle Time</button>
                 </div>
                 {% endif %}
               </div>
@@ -1262,6 +1326,8 @@
                 </div>
                 <div class="admin-redesign-stage__body admin-redesign-stage__checks">
                   <span>Module Marks Verification: {{ 'Verified' if module_verified else ('Pending' if module_verification_pending else 'Waiting') }}</span>
+                  <span>Manuscript: {{ 'Uploaded ' ~ manuscript_doc.uploaded_at.strftime('%d %b %Y %H:%M') if manuscript_doc else 'Missing' }}</span>
+                  <span>Manuscript Moodle upload: {{ project.manuscript_moodle_uploaded_at.strftime('%d %b %Y %H:%M') if project.manuscript_moodle_uploaded_at else 'Not recorded' }}</span>
                   <span>Results to HDC: {{ 'Sent' if project.project_status in ['results_submitted_to_hdc', 'results_approved', 'graduated'] else 'Not sent' }}</span>
                 </div>
                 {% if workflow_module_hdc_current %}
@@ -1281,12 +1347,31 @@
                   <button class="secondary-button small-button" type="button" disabled>Marks</button>
                   {% endcall %}
                   {% endif %}
+                  {% if manuscript_doc %}
+                    <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=manuscript_doc.id) }}" class="secondary-button small-button">View Manuscript</a>
+                    <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=manuscript_doc.id) }}" class="secondary-button small-button">Download Manuscript</a>
+                  {% endif %}
+                  <label class="admin-stage-file-button">
+                    <span class="secondary-button small-button">Choose Manuscript PDF</span>
+                    <input type="file" name="manuscript_file" accept=".pdf,application/pdf"
+                      form="{{ manuscript_upload_form_id }}" data-file-name-target="project-{{ project.id }}-manuscript-file-name">
+                  </label>
+                  <span class="admin-stage-file-name" id="project-{{ project.id }}-manuscript-file-name">No file selected</span>
+                  <button class="secondary-button small-button" type="submit" form="{{ manuscript_upload_form_id }}">{{ 'Replace Manuscript' if manuscript_doc else 'Upload Manuscript' }}</button>
+                  <label class="admin-field-group admin-stage-email-field">
+                    <span>Manuscript Moodle upload time</span>
+                    <input type="datetime-local" name="manuscript_moodle_uploaded_at"
+                      value="{{ project.manuscript_moodle_uploaded_at.strftime('%Y-%m-%dT%H:%M') if project.manuscript_moodle_uploaded_at else '' }}"
+                      class="admin-filter-input">
+                  </label>
+                  <button class="secondary-button small-button" name="action"
+                    value="set_manuscript_moodle_uploaded_at" type="submit">Save Moodle Time</button>
                   {% call button_tooltip(submit_results_reason) %}
                   <button class="primary-button small-button" name="action" value="submit_results_to_hdc" type="submit"
                     {% if not results_hdc_submission_status or not all_assessment_results_received(project) or
                     corrections_block_hdc_submission(project) or additional_assessment_blocks_hdc_submission(project) or
                     not assessment_summary_signed or not module_completion_allows_hdc_submission(project) or
-                    required_hdc_results_documents_missing(project) %}disabled{% endif %}>{{ 'Resend' if
+                    not manuscript_doc or required_hdc_results_documents_missing(project) %}disabled{% endif %}>{{ 'Resend' if
                     project.project_status == 'results_declined' else 'Send' }}</button>
                   {% endcall %}
                 </div>
@@ -1371,8 +1456,64 @@
             </div>
           </section>
         </form>
+
+        <dialog class="auth-dialog admin-workflow-info-dialog" id="project-{{ project.id }}-workflow-info-dialog" aria-labelledby="workflow-info-title">
+          <div class="auth-dialog__form">
+            <div class="auth-dialog__header">
+              <div>
+                <h2 id="workflow-info-title">Queue guide & project progression</h2>
+              </div>
+              <button type="button" class="auth-dialog__close" id="project-{{ project.id }}-workflow-info-close" aria-label="Close workflow information dialog">&times;</button>
+            </div>
+            <div class="auth-dialog__body">
+              <div class="admin-redesign-flow__guide">
+                <strong>Queue guide</strong>
+                <div class="admin-redesign-flow__guide-body">
+                  Follow stages 1 to 8. Current actions appear directly inside each active stage.
+                </div>
+              </div>
+              <div class="admin-progression-panel" style="margin-top: 16px;">
+                <strong class="admin-progression-panel__title">Project Progression</strong>
+                <div class="admin-progression-panel__body">
+                  <dl class="admin-progression-panel__facts">
+                    <div>
+                      <dt>Current stage</dt>
+                      <dd>{{ progression_current_label }}</dd>
+                    </div>
+                    <div>
+                      <dt>Action required</dt>
+                      <dd>{{ next_step }}</dd>
+                    </div>
+                    <div>
+                      <dt>Next step / blocker</dt>
+                      <dd>{{ next_step_note }}</dd>
+                    </div>
+                  </dl>
+                  <ul class="admin-progression-panel__steps">
+                    {% for stage in progression_stages %}
+                    <li class="{% if stage.complete %}is-complete{% elif stage.current %}is-current{% else %}is-pending{% endif %}">
+                      <span class="admin-progression-panel__icon" aria-hidden="true">{% if stage.complete %}&check;{% elif stage.current %}&bull;{% else %}&middot;{% endif %}</span>
+                      {{ stage.label }}
+                    </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="auth-dialog__actions">
+              <button type="button" class="secondary-button" id="project-{{ project.id }}-workflow-info-cancel">Close</button>
+            </div>
+          </div>
+        </dialog>
+
         <form id="{{ capstone_upload_form_id }}"
           action="{{ url_for('mba.admin_upload_capstone_submission', project_id=project.id) }}" method="post"
+          enctype="multipart/form-data"></form>
+        <form id="{{ header_report_upload_form_id }}"
+          action="{{ url_for('mba.admin_upload_header_report', project_id=project.id) }}" method="post"
+          enctype="multipart/form-data"></form>
+        <form id="{{ manuscript_upload_form_id }}"
+          action="{{ url_for('mba.admin_upload_manuscript', project_id=project.id) }}" method="post"
           enctype="multipart/form-data"></form>
 
         <section class="admin-project-section admin-project-section--supporting"
@@ -1670,6 +1811,49 @@
       updateFileName();
     });
 
+    document.querySelectorAll('button[id$="-workflow-info-open"]').forEach(function (button) {
+      var targetDialogId = button.id.replace('-open', '-dialog');
+      var targetCloseId = button.id.replace('-open', '-close');
+      var targetCancelId = button.id.replace('-open', '-cancel');
+      var dialog = document.getElementById(targetDialogId);
+      var closeButton = document.getElementById(targetCloseId);
+      var cancelButton = document.getElementById(targetCancelId);
+
+      function openDialog() {
+        if (!dialog) return;
+        if (typeof dialog.showModal === 'function') {
+          dialog.showModal();
+        } else {
+          dialog.setAttribute('open', '');
+        }
+      }
+
+      function closeDialog() {
+        if (!dialog) return;
+        if (typeof dialog.close === 'function') {
+          dialog.close();
+        } else {
+          dialog.removeAttribute('open');
+        }
+      }
+
+      button.addEventListener('click', openDialog);
+      closeButton?.addEventListener('click', closeDialog);
+      cancelButton?.addEventListener('click', closeDialog);
+
+      dialog?.addEventListener('click', function (event) {
+        var bounds = dialog.getBoundingClientRect();
+        var clickedOutside =
+          event.clientX < bounds.left ||
+          event.clientX > bounds.right ||
+          event.clientY < bounds.top ||
+          event.clientY > bounds.bottom;
+        if (clickedOutside) {
+          closeDialog();
+        }
+      });
+    });
+
     document.querySelectorAll('form.compact-form').forEach(function (form) {
       var assessorSelects = Array.from(form.querySelectorAll('select.assessor-select'));
       var supervisorSelects = Array.from(form.querySelectorAll('select.supervisor-selection-select'));
@@ -1687,10 +1871,10 @@
           return;
         }
         if (button.disabled && reason) {
-          wrapper.setAttribute('title', reason);
+          wrapper.setAttribute('data-tooltip', reason);
           wrapper.setAttribute('aria-label', reason);
         } else {
-          wrapper.removeAttribute('title');
+          wrapper.removeAttribute('data-tooltip');
           wrapper.removeAttribute('aria-label');
         }
       }

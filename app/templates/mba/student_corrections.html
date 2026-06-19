@@ -93,7 +93,7 @@
             {% elif student_submitted_corrections_pack(project) %}
               <p class="muted" style="margin-top:0.75rem;">Your corrections pack is uploaded and waiting for supervisor approval.</p>
             {% elif student_submitted_corrections_response(project) %}
-              <p class="muted" style="margin-top:0.75rem;">Your response and resubmitted Turnitin report are on file. Please resubmit the full pack with the corrected Capstone Manuscript.</p>
+              <p class="muted" style="margin-top:0.75rem;">Your response and resubmitted Turnitin report are on file. Please resubmit the full pack with the corrected Capstone Project.</p>
             {% endif %}
           </details>
 
@@ -101,7 +101,7 @@
             <section class="response-section">
               <strong>Response to Assessors' Comments</strong>
               <p class="muted" style="margin:0.5rem 0 0.75rem;">
-                Upload the corrected Capstone Manuscript, fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report in the app.
+                Upload the corrected Capstone Project, fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report in the app.
               </p>
               <a href="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='corrections_response') }}" class="primary-button small-button" style="display:inline-block;">
                 {% if supervisor_rejected_corrections(project) %}Revise and Resubmit Corrected Pack{% elif student_submitted_corrections_response(project) %}Edit and Resubmit Corrected Pack{% else %}Fill Response Form{% endif %}

@@ -275,6 +275,8 @@ class MbaProject(db.Model):
     supervisor_pool_released_at = db.Column(db.DateTime, nullable=True)
     supervisor_pool_released_by_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=True)
     dissertation_moodle_request_sent_at = db.Column(db.DateTime, nullable=True)
+    capstone_project_moodle_uploaded_at = db.Column(db.DateTime, nullable=True)
+    manuscript_moodle_uploaded_at = db.Column(db.DateTime, nullable=True)
     dissertation_resubmission_requested_at = db.Column(db.DateTime, nullable=True)
     dissertation_resubmission_open = db.Column(db.Boolean, nullable=False, default=False)
     dissertation_resubmission_opened_at = db.Column(db.DateTime, nullable=True)

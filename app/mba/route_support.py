@@ -228,8 +228,9 @@ MBA_DOCUMENT_LABELS = {
     "supervisor_agreement": "Supervisor Agreement Form",
     "jbs10": "JBS10 - Project Submission Form",
     "intent_to_submit": "Intent to Submit",
-    "dissertation": "Capstone Manuscript",
-    "manuscript": "Capstone Manuscript",
+    "header_report": "Header Report",
+    "dissertation": "Capstone Project",
+    "manuscript": "Manuscript",
     "global_document": "Global Document",
     "plagiarism_declaration": "Combined Plagiarism, Turnitin and AI Declaration",
     "combined_turnitin_ai_report": "Combined Turnitin-AI Report",
@@ -242,7 +243,7 @@ MBA_DOCUMENT_LABELS = {
     "ai_declaration_form": "TII AI Declaration (JBS) (Legacy)",
     "affidavit": "JBS 2 Affidavit",
     "affidavit_stamped": "Stamped JBS 2 Affidavit",
-    "corrected_dissertation": "Corrected Capstone Manuscript",
+    "corrected_dissertation": "Corrected Capstone Project",
     "corrections_response": "Response to Assessors' Comments",
     "corrections_turnitin_report": "Resubmitted Turnitin Report",
 }
@@ -1113,6 +1114,20 @@ def _validate_uploaded_pdf(uploaded_file):
     uploaded_file.seek(0)
     if file_size > UPLOAD_MAX_BYTES:
         return "File exceeds the 10 MB limit."
+    return None
+
+
+def _validate_required_pdf_or_word(uploaded_file, label):
+    if not uploaded_file or not uploaded_file.filename:
+        return f"{label} is required."
+    extension = uploaded_file.filename.rsplit(".", 1)[1].lower() if "." in uploaded_file.filename else ""
+    if extension not in DETAILED_REPORT_UPLOAD_EXTENSIONS:
+        return f"{label} must be a PDF or Word document."
+    uploaded_file.seek(0, 2)
+    file_size = uploaded_file.tell()
+    uploaded_file.seek(0)
+    if file_size > UPLOAD_MAX_BYTES:
+        return f"{label} exceeds the 10 MB limit."
     return None
 
 
@@ -7249,6 +7264,7 @@ def module_completion_allows_hdc_submission(project):
 def required_hdc_results_documents_missing(project):
     required = [
         "jbs10",
+        "manuscript",
         assessment_summary_doc_type(),
         "jbs1_declaration",
         "plagiarism_declaration",
@@ -7532,7 +7548,7 @@ def hdc_can_access_document(project, doc_type):
         ProjectStatus.GRADUATED.value,
     }
 
-    if doc_type in {"jbs10", "intent_to_submit"}:
+    if doc_type in {"jbs10", "intent_to_submit", "header_report"}:
         return project.project_status in nomination_stage_statuses or project.project_status in results_stage_statuses
 
     if doc_type in {external_examiner_nomination_doc_type(), additional_external_examiner_nomination_doc_type()}:
@@ -7547,7 +7563,6 @@ def hdc_can_access_document(project, doc_type):
     if project.project_status in results_stage_statuses and doc_type in {
         "global_document",
         "combined_turnitin_ai_report",
-        "dissertation",
         "manuscript",
         "jbs1_declaration",
         "plagiarism_declaration",

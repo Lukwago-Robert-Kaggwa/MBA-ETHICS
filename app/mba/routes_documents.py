@@ -15,6 +15,7 @@ from .route_support import (
     _render_html_to_pdf_bytes,
     _store_project_document,
     _uploads_dir,
+    _validate_required_pdf_or_word,
     _validate_uploaded_pdf,
 )
 
@@ -320,9 +321,9 @@ MBA_FORM_TEMPLATES = {
 }
 
 MOODLE_CAPSTONE_SUBMISSION_MESSAGE = (
-    "Submit the Capstone Manuscript through Moodle. "
+    "Submit the Capstone Project through Moodle. "
     "Use this system only for supporting documents, including the combined Turnitin-AI report. "
-    "MBA Admin will download the Capstone Manuscript from Moodle and upload it here."
+    "MBA Admin will download the Capstone Project from Moodle and upload it here."
 )
 
 
@@ -348,13 +349,13 @@ def dissertation_assessor_email_messages(project, dissertation_doc, assessor_use
         messages.append(
             {
                 "recipient": assessor.email,
-                "subject": f"MBA Capstone Manuscript Released for Assessment: {project.project_title}",
+                "subject": f"MBA Capstone Project Released for Assessment: {project.project_title}",
                 "body": (
-                    f"MBA Admin has released the Capstone Manuscript for assessment for '{project.project_title}'.\n\n"
+                    f"MBA Admin has released the Capstone Project for assessment for '{project.project_title}'.\n\n"
                     f"Student: {project.student.email if project.student else 'Unknown'}\n"
                     f"Discipline: {project.discipline_name}\n"
                     f"File: {dissertation_doc.original_name}\n\n"
-                    "Please sign in to the MBA system to download the Capstone Manuscript. "
+                    "Please sign in to the MBA system to download the Capstone Project. "
                     "Assessor result submission opens after HDC verifies the assessor nominations."
                 ),
             }
@@ -406,12 +407,12 @@ def corrections_response_supervisor_email_messages(project, response_doc, turnit
             "body": (
                 f"{student_label} ({current_user.email}) submitted the corrected response pack for "
                 f"'{project.project_title}'.\n\n"
-                f"Corrected Capstone Manuscript: {corrected_filename}\n"
+                f"Corrected Capstone Project: {corrected_filename}\n"
                 f"Response file: {response_filename}\n"
                 f"Resubmitted Turnitin report: {turnitin_filename}\n"
                 f"Student: {project.student.email if project.student else current_user.email}\n"
                 f"Discipline: {project.discipline_name}\n\n"
-                "Please sign in to the MBA system, review the corrected Capstone Manuscript, "
+                "Please sign in to the MBA system, review the corrected Capstone Project, "
                 "Response to Assessors' Comments, and resubmitted Turnitin report, then approve the response pack.\n\n"
                 f"Review queue: {review_url}"
             ),
@@ -436,7 +437,7 @@ def corrections_approval_admin_email_messages(project, response_doc, turnitin_do
             "body": (
                 f"{supervisor_label} ({current_user.email}) approved the student's corrected response pack for "
                 f"'{project.project_title}'.\n\n"
-                f"Corrected Capstone Manuscript: {corrected_filename}\n"
+                f"Corrected Capstone Project: {corrected_filename}\n"
                 f"Response to Assessors' Comments: {response_filename}\n"
                 f"Resubmitted Turnitin report: {turnitin_filename}\n"
                 f"Student: {project.student.email if project.student else 'Unknown'}\n"
@@ -721,21 +722,21 @@ def admin_upload_capstone_submission(project_id):
 
     if not assessor_hr_documents_sent(project):
         flash(
-            "Send the approved assessor temporary appointment and claim forms to HR before uploading the Capstone Manuscript.",
+            "Send the approved assessor temporary appointment and claim forms to HR before uploading the Capstone Project.",
             "error",
         )
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
     if not _jbs1_declaration_ready(project):
         flash(
-            "The JBS 1 Declaration must be signed by the student, supervisor, and Program Manager before Admin uploads the Capstone Manuscript.",
+            "The JBS 1 Declaration must be signed by the student, supervisor, and Program Manager before Admin uploads the Capstone Project.",
             "error",
         )
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
     if not _combined_declaration_ready(project):
         flash(
-            "The combined plagiarism, Turnitin and AI declaration must be signed by the student before Admin uploads the Capstone Manuscript.",
+            "The combined plagiarism, Turnitin and AI declaration must be signed by the student before Admin uploads the Capstone Project.",
             "error",
         )
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
@@ -754,15 +755,79 @@ def admin_upload_capstone_submission(project_id):
         project.dissertation_resubmission_requested_at = None
         project.comments = append_comment(
             project.comments,
-            f"{current_user.email}: uploaded the Admin-only Capstone Manuscript from Moodle.",
+            f"{current_user.email}: uploaded the Admin-only Capstone Project from Moodle.",
         )
         db.session.commit()
     except Exception:
         db.session.rollback()
-        flash("Capstone Manuscript upload failed.", "error")
+        flash("Capstone Project upload failed.", "error")
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
-    flash("Capstone Manuscript uploaded.", "success")
+    flash("Capstone Project uploaded.", "success")
+    return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+
+@mba_bp.route("/projects/<int:project_id>/admin-manuscript-submission", methods=["POST"])
+@login_required
+def admin_upload_manuscript(project_id):
+    if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    manuscript_file = request.files.get("manuscript_file")
+    manuscript_error = _validate_required_pdf(manuscript_file, document_label("manuscript"))
+    if manuscript_error:
+        flash(manuscript_error, "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    try:
+        _store_project_document(project, "manuscript", manuscript_file)
+        project.comments = append_comment(
+            project.comments,
+            f"{current_user.email}: uploaded the Admin-only Manuscript from Moodle.",
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash("Manuscript upload failed.", "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    flash("Manuscript uploaded.", "success")
+    return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+
+@mba_bp.route("/projects/<int:project_id>/admin-header-report", methods=["POST"])
+@login_required
+def admin_upload_header_report(project_id):
+    if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    if project.project_status in NOMINATION_FORWARDING_UNAVAILABLE_STATUSES:
+        flash("The Header Report cannot be replaced once HDC has approved the nominated assessors.", "info")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    uploaded_file = request.files.get("header_report_file")
+    file_error = _validate_required_pdf_or_word(uploaded_file, document_label("header_report"))
+    if file_error:
+        flash(file_error, "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    try:
+        _store_project_document(project, "header_report", uploaded_file)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash("Header Report upload failed.", "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    flash("Header Report uploaded.", "success")
     return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
 

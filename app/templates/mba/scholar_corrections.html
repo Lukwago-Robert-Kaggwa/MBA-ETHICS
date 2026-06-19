@@ -164,7 +164,7 @@
                 {% endif %}
               </div>
             {% else %}
-              <p class="muted" style="margin-top:0.5rem;">The student has not submitted the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report yet.</p>
+              <p class="muted" style="margin-top:0.5rem;">The student has not submitted the corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report yet.</p>
             {% endif %}
           </details>
 
@@ -172,7 +172,7 @@
             <section class="response-section">
               <strong>Approve Response Pack</strong>
               <p class="muted" style="margin:0.5rem 0 0.75rem;">
-                Review the student's corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report before approving.
+                Review the student's corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report before approving.
               </p>
               <form action="{{ url_for('mba.supervisor_approve_corrections', project_id=project.id) }}" method="post" class="form-stack compact-form">
                 <label>Supervisor comments
@@ -189,7 +189,7 @@
             </section>
           {% elif correction_status_value == 'ready_for_admin' %}
             <p style="margin-top:0.75rem;color:var(--success,#2d7a3a);font-weight:600;">
-              Response pack approved{% if project.corrections_supervisor_approved_at %} on {{ project.corrections_supervisor_approved_at.strftime('%d %b %Y %H:%M') }}{% endif %}. MBA Admin can now review the Capstone Manuscript for HDC submission.
+              Response pack approved{% if project.corrections_supervisor_approved_at %} on {{ project.corrections_supervisor_approved_at.strftime('%d %b %Y %H:%M') }}{% endif %}. MBA Admin can now review the Capstone Project for HDC submission.
             </p>
             {% if project.corrections_supervisor_comments %}
               <p class="muted" style="margin-top:0.35rem;white-space:pre-wrap;">{{ project.corrections_supervisor_comments }}</p>
@@ -213,7 +213,7 @@
           {% else %}
             <p class="muted" style="margin-top:0.75rem;">
               {% if correction_status_value == 'awaiting_student' %}
-                Waiting for the student to submit the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report.
+                Waiting for the student to submit the corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report.
               {% else %}
                 This corrections round is not yet ready for supervisor approval.
               {% endif %}

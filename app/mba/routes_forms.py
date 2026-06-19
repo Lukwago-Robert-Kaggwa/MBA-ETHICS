@@ -1774,9 +1774,9 @@ def fill_project_form(project_id, form_type):
             corrected_dissertation_error = _validate_uploaded_pdf(corrected_dissertation_file)
             if corrected_dissertation_error:
                 if corrected_dissertation_error == "No file selected.":
-                    corrected_dissertation_error = "Corrected Capstone Manuscript is required."
+                    corrected_dissertation_error = "Corrected Capstone Project is required."
                 else:
-                    corrected_dissertation_error = f"Corrected Capstone Manuscript: {corrected_dissertation_error}"
+                    corrected_dissertation_error = f"Corrected Capstone Project: {corrected_dissertation_error}"
                 flash(corrected_dissertation_error, "error")
                 template_context["prefill"] = payload
                 return render_template(template_name, **template_context)
@@ -1837,7 +1837,7 @@ def fill_project_form(project_id, form_type):
                     project.comments,
                     (
                         f"{current_user.email}: submitted Response to Assessors' Comments "
-                        "via web form with the corrected Capstone Manuscript and resubmitted "
+                        "via web form with the corrected Capstone Project and resubmitted "
                         "Turnitin report for supervisor review."
                     ),
                 )
@@ -1903,7 +1903,7 @@ def fill_project_form(project_id, form_type):
             return redirect(url_for("mba.student_dashboard"))
         if form_type == "corrections_response":
             flash(
-                "Corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report submitted for supervisor review.",
+                "Corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report submitted for supervisor review.",
                 "success",
             )
             return redirect(url_for("mba.student_corrections"))
@@ -3947,7 +3947,7 @@ def assessor_grade_form(project_id, slot):
         return redirect(role_landing_url())
 
     if not assessor_can_view_student_dissertation(project):
-        flash("Assessor result submission opens after MBA Admin releases the Capstone Manuscript to assessors.", "error")
+        flash("Assessor result submission opens after MBA Admin releases the Capstone Project to assessors.", "error")
         return redirect(role_landing_url())
 
     if project.project_status not in {
@@ -4047,12 +4047,6 @@ def assessor_grade_form(project_id, slot):
         )
 
     if request.method == "POST":
-        existing_assessment_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
-        previous_assessment_payload = (
-            dict(existing_assessment_form.payload or {})
-            if existing_assessment_form and isinstance(existing_assessment_form.payload, dict)
-            else {}
-        )
         payload = {
             key: (request.form.get(key) or "").strip()
             for key in request.form
@@ -4134,16 +4128,6 @@ def assessor_grade_form(project_id, slot):
             "certification_date": payload.get("certification_date", ""),
         }
         refresh_saved_signature_snapshot(assessment_payload, ("assessor_signature_name",), current_user)
-        assessment_requests_corrections = recommendation_requests_corrections(
-            assessment_payload.get("recommendation")
-        )
-        previous_assessment_requested_corrections = recommendation_requests_corrections(
-            previous_assessment_payload.get("recommendation")
-        )
-        had_active_corrections = project_has_active_corrections(project)
-        correction_request_triggered = assessment_requests_corrections and (
-            not previous_assessment_requested_corrections or not had_active_corrections
-        )
 
         try:
             detailed_report_doc = None
@@ -4159,12 +4143,16 @@ def assessor_grade_form(project_id, slot):
             _save_form_as_document(project, report_form_type, report_form_type, report_payload)
             _prune_obsolete_assessment_documents(project)
             db.session.flush()
+            corrections_newly_activated = False
             if primary_assessment_conflict_detected(project):
                 activate_additional_assessment(project)
-            if assessment_requests_corrections:
-                if correction_request_triggered:
+            if additional_assessment_pending(project):
+                pass  # corrections wait until the additional assessment is complete
+            elif project_correction_requests(project):
+                if not project.corrections_requested_at:
                     activate_project_corrections(project)
-            elif not project_correction_requests(project):
+                    corrections_newly_activated = True
+            elif project.corrections_requested_at:
                 clear_project_corrections(project)
             if all_assessment_results_received(project):
                 refresh_assessment_summary_if_ready(project)
@@ -4181,7 +4169,7 @@ def assessor_grade_form(project_id, slot):
             flash("Grade submission failed. Please try again.", "error")
             return _render_grade_form(payload)
 
-        if correction_request_triggered:
+        if corrections_newly_activated:
             send_bulk_emails(
                 corrections_requested_email_messages(
                     project,

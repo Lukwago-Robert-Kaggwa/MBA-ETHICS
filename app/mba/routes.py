@@ -382,16 +382,17 @@ def moodle_manuscript_submission_email_messages(project):
     return [
         {
             "recipient": project.student.email,
-            "subject": f"Submit Your Capstone Manuscript on Moodle: {project.project_title}",
+            "subject": f"Submit Your Capstone Project and Manuscript on Moodle: {project.project_title}",
             "body": (
                 f"Dear {student_name},\n\n"
-                f"MBA Admin requests that you submit the Capstone Manuscript for "
-                f"'{project.project_title}' through Moodle.\n\n"
-                "Do not upload the Capstone Manuscript in the MBA system. In the MBA system, "
-                "upload the supporting documents only, including the Global Document and the "
+                f"MBA Admin requests that you submit both the Capstone Project (for assessor marking) "
+                f"and the Manuscript (for HDC review) for '{project.project_title}' through Moodle.\n\n"
+                "Do not upload the Capstone Project or the Manuscript in the MBA system. In the MBA "
+                "system, upload the supporting documents only, including the Global Document and the "
                 "combined Turnitin-AI report where required.\n\n"
-                "After you submit on Moodle, MBA Admin will download the Capstone Manuscript "
-                "from Moodle and upload it in the MBA system for the assessment workflow.\n\n"
+                "After you submit on Moodle, MBA Admin will download the Capstone Project and the "
+                "Manuscript from Moodle and upload them in the MBA system for the assessment and HDC "
+                "review workflow.\n\n"
                 f"MBA dashboard: {dashboard_url}"
             ),
         }
@@ -581,7 +582,7 @@ def corrections_rejection_student_email_messages(project, rejection_comment):
                 f"'{project.project_title}' and returned it for revision.\n\n"
                 f"Supervisor comments:\n{rejection_comment}\n\n"
                 "Please sign in to the MBA system, open the Response to Assessors' Comments section, "
-                "revise the corrected Capstone Manuscript and response form, and upload a resubmitted "
+                "revise the corrected Capstone Project and response form, and upload a resubmitted "
                 f"Turnitin report with the revised pack.\n\nCorrection queue: {correction_url}"
             ),
         }
@@ -603,7 +604,7 @@ def supervisor_approve_corrections(project_id):
         flash("There are no active assessor comments on this Capstone Project.", "error")
         return redirect(url_for("mba.scholar_corrections"))
     if not student_submitted_corrections_pack(project):
-        flash("The student must submit the corrected Capstone Manuscript, Response to Assessors' Comments form, and resubmitted Turnitin report first.", "error")
+        flash("The student must submit the corrected Capstone Project, Response to Assessors' Comments form, and resubmitted Turnitin report first.", "error")
         return redirect(url_for("mba.scholar_corrections"))
 
     comment = (request.form.get("comment") or "").strip()
@@ -665,6 +666,11 @@ def supervisor_reject_corrections(project_id):
     project.corrections_supervisor_comments = None
     project.corrections_supervisor_rejected_at = datetime.utcnow()
     project.corrections_supervisor_rejection_comments = rejection_comment
+    project.corrections_student_resubmitted_at = None
+    stale_correction_doc_types = {"corrected_dissertation", "corrections_response", "corrections_turnitin_report"}
+    for doc in list(project.documents):
+        if doc.doc_type in stale_correction_doc_types:
+            db.session.delete(doc)
     project.comments = append_comment(
         project.comments,
         f"{current_user.email}: returned the student's corrections for revision.",
@@ -719,7 +725,7 @@ def supervisor_release_corrections(project_id):
                     f"Your supervisor has released assessor comments for your MBA Capstone Project "
                     f"'{project.project_title}'.\n\n"
                     "Please sign in to the MBA system, open the Response to Assessors' Comments section, "
-                    "review any attached detailed assessor reports, upload the corrected Capstone Manuscript, "
+                    "review any attached detailed assessor reports, upload the corrected Capstone Project, "
                     "fill the Response to Assessors' Comments form, and upload the resubmitted Turnitin report "
                     "in the MBA system."
                 ),
@@ -1273,6 +1279,9 @@ def admin_project_action(project_id):
         if not student_submitted_assessor_prerequisite_docs(project):
             flash("JBS10 and Intent to Submit must be signed by the supervisor before nominations can be forwarded to HDC.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if not uploaded_doc_for(project, "header_report"):
+            flash("Upload the Header Report before nominations can be forwarded to HDC.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
         declined_hdc_slots = hdc_declined_assessor_slots(project)
         if declined_hdc_slots:
             declined_labels = ", ".join(INVITATION_SLOTS[slot]["label"] for slot in declined_hdc_slots)
@@ -1387,13 +1396,13 @@ def admin_project_action(project_id):
             flash("The student does not have an email address on file.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if uploaded_doc_for(project, "dissertation"):
-            flash("The Capstone Manuscript has already been uploaded from Moodle.", "info")
+            flash("The Capstone Project has already been uploaded from Moodle.", "info")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if not assessor_hr_documents_sent(project):
-            flash("Send the approved assessor temporary appointment and claim forms to HR before requesting the Capstone Manuscript.", "error")
+            flash("Send the approved assessor temporary appointment and claim forms to HR before requesting the Capstone Project.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if not student_submitted_assessor_prerequisite_docs(project):
-            flash("Ask the student to submit the Capstone Manuscript only after JBS10 and Intent to Submit are signed by the supervisor, and JBS5 is approved by HDC.", "error")
+            flash("Ask the student to submit the Capstone Project only after JBS10 and Intent to Submit are signed by the supervisor, and JBS5 is approved by HDC.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
         project.dissertation_moodle_request_sent_at = datetime.utcnow()
@@ -1403,29 +1412,29 @@ def admin_project_action(project_id):
         project.comments = append_comment(
             project.comments,
             (
-                f"{current_user.email}: requested student to submit the Capstone Manuscript through Moodle; "
+                f"{current_user.email}: requested student to submit the Capstone Project and Manuscript through Moodle; "
                 f"delivered={delivered_count}; failed={failed_count}"
             ),
         )
         if delivered_count and not failed_count:
-            message = "Student was asked to submit the Capstone Manuscript through Moodle."
+            message = "Student was asked to submit the Capstone Project and Manuscript through Moodle."
         elif delivered_count and failed_count:
             message = f"Moodle submission request recorded. Email sent; {failed_count} failed."
         else:
             message = "Moodle submission request recorded. Email delivery is not configured or failed."
     elif action == "release_dissertation_to_assessors":
         if not assessor_can_view_project_documents(project):
-            flash("Release the nomination stage to assessors before releasing the Capstone Manuscript.", "error")
+            flash("Release the nomination stage to assessors before releasing the Capstone Project.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if not assessor_hr_documents_sent(project):
-            flash("Send the approved assessor temporary appointment and claim forms to HR before releasing the Capstone Manuscript.", "error")
+            flash("Send the approved assessor temporary appointment and claim forms to HR before releasing the Capstone Project.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         dissertation_doc = uploaded_doc_for(project, "dissertation")
         if not dissertation_doc:
-            flash("The Admin-uploaded Capstone Manuscript is not on file yet.", "error")
+            flash("Cannot forward to assessors: Capstone Project has not been uploaded.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if project.dissertation_released_to_assessors:
-            flash("The Capstone Manuscript has already been released to assessors.", "info")
+            flash("The Capstone Project has already been released to assessors.", "info")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
         from .routes_documents import dissertation_assessor_email_messages
@@ -1437,16 +1446,41 @@ def admin_project_action(project_id):
         failed_count = len(email_result["failed"])
         project.comments = append_comment(
             project.comments,
-            f"MBA Admin released the Capstone Manuscript to assessors: delivered={delivered_count}; failed={failed_count}",
+            f"MBA Admin released the Capstone Project to assessors: delivered={delivered_count}; failed={failed_count}",
         )
         if delivered_count and not failed_count:
-            message = "Capstone Manuscript released to assessors and email notifications sent."
+            message = "Capstone Project released to assessors and email notifications sent."
         elif delivered_count and failed_count:
-            message = f"Capstone Manuscript released to assessors. Email sent to {delivered_count}; {failed_count} failed."
+            message = f"Capstone Project released to assessors. Email sent to {delivered_count}; {failed_count} failed."
         elif failed_count:
-            message = "Capstone Manuscript released to assessors, but assessor email delivery failed."
+            message = "Capstone Project released to assessors, but assessor email delivery failed."
         else:
-            message = "Capstone Manuscript released to assessors. No accepted assessor email recipients were available yet."
+            message = "Capstone Project released to assessors. No accepted assessor email recipients were available yet."
+    elif action in {"set_capstone_project_moodle_uploaded_at", "set_manuscript_moodle_uploaded_at"}:
+        field = (
+            "capstone_project_moodle_uploaded_at"
+            if action == "set_capstone_project_moodle_uploaded_at"
+            else "manuscript_moodle_uploaded_at"
+        )
+        document_name = "Capstone Project" if field.startswith("capstone_project") else "Manuscript"
+        raw_value = (request.form.get(field) or "").strip()
+        if not raw_value:
+            flash(f"Enter a date and time before recording the {document_name} Moodle upload time.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        try:
+            moodle_uploaded_at = datetime.strptime(raw_value, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            flash(f"Enter a valid date and time for the {document_name} Moodle upload time.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        setattr(project, field, moodle_uploaded_at)
+        project.comments = append_comment(
+            project.comments,
+            f"{current_user.email}: recorded {document_name} Moodle upload time as {moodle_uploaded_at.strftime('%d %b %Y %H:%M')}.",
+        )
+        message = f"{document_name} Moodle upload time recorded."
+    elif action == "submit_results_to_hdc" and not uploaded_doc_for(project, "manuscript"):
+        flash("Cannot forward to HDC: Manuscript has not been uploaded.", "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
     elif action == "assign_additional_assessor":
         if project.project_status not in {ProjectStatus.HDC_VERIFIED.value, ProjectStatus.RESULTS_DECLINED.value}:
             flash("Additional assessment can only be managed while the results are still with MBA Admin.", "error")
@@ -1756,7 +1790,7 @@ def admin_project_action(project_id):
         if corrections_block_hdc_submission(project):
             flash(
                 "Results cannot be sent to HDC while assessor-requested corrections are still open. "
-                "Wait for the student's corrected Capstone Manuscript, Response to Assessors' Comments, resubmitted Turnitin report, and supervisor approval.",
+                "Wait for the student's corrected Capstone Project, Response to Assessors' Comments, resubmitted Turnitin report, and supervisor approval.",
                 "error",
             )
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
@@ -1772,6 +1806,17 @@ def admin_project_action(project_id):
                 "error",
             )
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if resubmitting_results:
+            summary_form = MbaForm.query.filter_by(
+                project_id=project.id, form_type=assessment_summary_doc_type()
+            ).first()
+            if summary_form and isinstance(summary_form.payload, dict):
+                summary_payload = dict(summary_form.payload)
+                for field in ("hod_signature_name", "hod_signature_date", "chair_fhdc_signature_name", "chair_fhdc_signature_date"):
+                    summary_payload.pop(field, None)
+                clear_signature_snapshots(summary_payload, ("hod_signature_name", "chair_fhdc_signature_name"))
+                summary_form.payload = summary_payload
+                flag_modified(summary_form, "payload")
         _routes_forms.refresh_assessment_summary_if_ready(project)
         missing_hdc_docs = required_hdc_results_documents_missing(project)
         if missing_hdc_docs:

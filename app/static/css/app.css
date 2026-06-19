@@ -382,9 +382,11 @@ body {
 
 .auth-logo {
   width: 108px;
-  height: auto;
+  height: 108px;
   display: block;
   margin: 0 auto 22px;
+  border-radius: 16px;
+  object-fit: cover;
 }
 
 .form-stack {
@@ -3673,10 +3675,58 @@ button:disabled,
 .disabled-tooltip-wrap {
   display: inline-flex;
   width: fit-content;
+  position: relative;
 }
 
-.disabled-tooltip-wrap > button:disabled {
+.disabled-tooltip-wrap > button:disabled,
+.disabled-tooltip-wrap > input:disabled {
   pointer-events: none;
+}
+
+/* Tooltip bubble */
+.disabled-tooltip-wrap[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.5;
+  padding: 8px 12px;
+  border-radius: 7px;
+  white-space: normal;
+  width: max-content;
+  max-width: 240px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.13s ease;
+  z-index: 1200;
+  text-align: left;
+}
+
+/* Arrow */
+.disabled-tooltip-wrap[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  border: 5px solid transparent;
+  border-top-color: #1e293b;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.13s ease;
+  z-index: 1201;
+}
+
+.disabled-tooltip-wrap[data-tooltip]:hover::after,
+.disabled-tooltip-wrap[data-tooltip]:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .text-link {
@@ -4439,29 +4489,16 @@ body,
   border-bottom: 1px solid var(--border);
 }
 
-.ethics-sidebar__logo,
-.ethics-sidebar__mark {
+.ethics-sidebar__logo {
   width: 42px;
   height: 42px;
-  border-radius: var(--radius-md);
-  background: var(--primary);
-  border: 1px solid var(--primary);
-  box-shadow: none;
-}
-
-.ethics-sidebar__mark {
-  display: inline-grid;
   flex: 0 0 42px;
-  place-items: center;
-  color: #fff;
-  font-size: 0.82rem;
-  font-weight: 900;
-}
-
-.ethics-sidebar__logo {
+  border-radius: var(--radius-md);
   object-fit: cover;
-  object-position: left center;
+  object-position: center;
   padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
 .ethics-sidebar__brand-text h2 {
@@ -5336,6 +5373,8 @@ input[type="radio"] {
 
 .admin-redesign-flow {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 14px;
   margin: 16px 0 12px;
   padding: 16px;
@@ -5343,6 +5382,86 @@ input[type="radio"] {
   border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
   box-shadow: var(--shadow-xs);
+}
+
+.admin-redesign-flow__panel {
+  display: grid;
+  gap: 14px;
+  align-self: start;
+}
+
+.admin-workflow-info-button {
+  justify-self: start;
+}
+
+.admin-workflow-info-dialog .auth-dialog__body {
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+
+.admin-progression-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-progression-panel__title {
+  font-size: 0.9rem;
+  color: #172554;
+}
+
+.admin-progression-panel__facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-progression-panel__facts dt {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+  margin: 0;
+}
+
+.admin-progression-panel__facts dd {
+  margin: 2px 0 0;
+  font-size: 0.86rem;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.admin-progression-panel__steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-progression-panel__steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.admin-progression-panel__steps li.is-complete {
+  color: #166534;
+}
+
+.admin-progression-panel__steps li.is-current {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.admin-progression-panel__icon {
+  flex: 0 0 16px;
+  text-align: center;
 }
 
 .admin-redesign-flow__guide {
@@ -5649,8 +5768,11 @@ input[type="radio"] {
 }
 
 .auth-logo {
-  width: 92px;
-  margin-bottom: 18px;
+  width: 96px;
+  height: 96px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  object-fit: cover;
 }
 
 .login-heading {
@@ -5688,6 +5810,7 @@ input[type="radio"] {
   }
 
   .admin-redesign-flow {
+    grid-template-columns: 1fr;
     padding: 12px;
   }
 
@@ -5820,12 +5943,13 @@ body,
   color: rgba(255, 255, 255, 0.66) !important;
 }
 
-.ethics-sidebar__mark,
-.ethics-sidebar__logo,
+.ethics-sidebar__logo {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
 .nav-icon {
   background: linear-gradient(135deg, #ffffff, #ffe4bf);
   color: var(--primary-strong);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
 .ethics-sidebar__item {
@@ -5968,7 +6092,7 @@ input[type="submit"].primary-button {
 }
 
 .secondary-button:not(.login-microsoft),
-.small-button,
+.small-button:not(.primary-button):not(.banner-button),
 .project-disclosure__expand {
   border: 1px solid var(--border);
   background: linear-gradient(180deg, #ffffff, #f7f9fc);
@@ -5977,7 +6101,7 @@ input[type="submit"].primary-button {
 }
 
 .secondary-button:not(.login-microsoft):hover:not([disabled]),
-.small-button:hover:not([disabled]),
+.small-button:not(.primary-button):not(.banner-button):hover:not([disabled]),
 .project-disclosure__expand:hover {
   border-color: var(--border-strong);
   background: linear-gradient(180deg, #ffffff, #fff7ed);
@@ -6954,4 +7078,281 @@ textarea:focus,
   color: var(--text-muted);
   font-size: 0.82rem;
   font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — PHONE / TABLET / LAPTOP
+   Breakpoints:  768px (mobile drawer), 640px (phone), 480px (small phone)
+   The 980px / 900px / 720px / 640px blocks already exist above;
+   these additions fill the remaining gaps.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── 768px: Mobile layout active (hamburger drawer) ── */
+@media (max-width: 768px) {
+  /* ── Page chrome ── */
+  .page-title-block h1 {
+    font-size: clamp(1.1rem, 5vw, 1.4rem);
+    margin-bottom: 2px;
+  }
+
+  .page-title-block p {
+    font-size: 0.82rem;
+  }
+
+  .mba-page-stack {
+    gap: 14px;
+  }
+
+  /* ── Panels ── */
+  .ethics-panel,
+  .mba-page-stack .ethics-panel {
+    padding: 16px 14px;
+    border-radius: var(--radius-lg);
+  }
+
+  .panel-heading h2 {
+    font-size: clamp(0.98rem, 4vw, 1.2rem);
+  }
+
+  /* ── KPI stat cards ── */
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  /* ── Quick actions ── */
+  .quick-action-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* ── Tables: ensure horizontal scroll ── */
+  .table-wrap,
+  .table-wrap--embedded {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-table {
+    min-width: 500px;
+  }
+
+  /* ── Admin filter toolbar: stack pills + form ── */
+  .admin-project-toolbar {
+    gap: 10px;
+  }
+
+  .admin-filter-form {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-filter-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* ── Invitation action rows: stack buttons ── */
+  .invitation-action-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .invitation-action-row .primary-button,
+  .invitation-action-row .secondary-button,
+  .invitation-action-form {
+    width: 100%;
+  }
+
+  .invitation-action-form button {
+    width: 100%;
+  }
+
+  /* ── Inline actions: allow wrapping ── */
+  .inline-action {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* ── Admin filter strip (HDC) ── */
+  .admin-filter-strip {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* ── Workflow strip: 3 columns on mid phones ── */
+  .mba-student-dashboard .workflow-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* ── Booking page ── */
+  .booking-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-admin__forms {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Auth card ── */
+  .auth-card {
+    margin: 14px;
+    padding: 24px 18px;
+  }
+
+  /* ── HDC grade summary (inline bar) ── */
+  .admin-project-card > [style*="display:flex"],
+  .admin-project-card > div[style*="display:flex"] {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* ── 640px: Small phones ── */
+@media (max-width: 640px) {
+  .mba-page-stack {
+    padding: 10px 10px 20px;
+    gap: 10px;
+  }
+
+  /* Workflow strip: 2 columns */
+  .mba-student-dashboard .workflow-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Quick action: single column */
+  .quick-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stat card value: scale down */
+  .dashboard-stat-card strong,
+  .kpi-card strong {
+    font-size: clamp(1.35rem, 7vw, 1.75rem);
+  }
+
+  /* Document action rows: wrap if needed */
+  .document-action-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Card actions: stack */
+  .card-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .card-actions .small-button,
+  .card-actions .primary-button,
+  .card-actions .secondary-button {
+    width: 100%;
+  }
+
+  /* Response-section buttons full width */
+  .response-section .small-button:not(.document-action-row .small-button) {
+    width: 100%;
+  }
+
+  /* Admin project meta: 1 column */
+  .admin-project-meta {
+    grid-template-columns: 1fr;
+  }
+
+  /* Form stacks: reduce gap */
+  .form-stack {
+    gap: 10px;
+  }
+
+  /* Panel heading count badge: smaller */
+  .panel-heading span {
+    font-size: 0.78rem;
+    padding: 3px 8px;
+  }
+
+  /* Filter pills: tighter */
+  .filter-pill {
+    font-size: 0.78rem;
+    padding: 5px 9px;
+    gap: 5px;
+  }
+
+  /* Admin table: ensure min-width for scroll */
+  .admin-table {
+    min-width: 480px;
+  }
+}
+
+/* ── 480px: Very small phones ── */
+@media (max-width: 480px) {
+  /* Stat grid: allow even smaller cards */
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+  }
+
+  /* Auth card: tightest padding */
+  .auth-card {
+    margin: 10px;
+    padding: 20px 14px;
+  }
+
+  /* Workflow step text: smaller */
+  .workflow-step strong {
+    font-size: 0.78rem;
+  }
+
+  /* flash messages */
+  .flash {
+    font-size: 0.82rem;
+    padding: 10px 12px;
+  }
+
+  /* Sidebar close button: larger tap target */
+  .ethics-sidebar__close {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+}
+
+/* ── Button colour guarantee ─────────────────────────────── */
+/* Explicit color on every state so cascade conflicts can't
+   cause text to disappear (visible in both light and dark). */
+.primary-button,
+.banner-button,
+.primary-button:hover,
+.primary-button:focus-visible,
+.primary-button:active,
+.banner-button:hover,
+.banner-button:focus-visible,
+.banner-button:active {
+  color: #fff;
+}
+
+.secondary-button:not(.login-microsoft),
+.secondary-button:not(.login-microsoft):hover,
+.secondary-button:not(.login-microsoft):focus-visible,
+.secondary-button:not(.login-microsoft):active {
+  color: var(--text);
+}
+
+/* Ensure color is included in the transition so changes
+   can't produce a momentary flash of an unexpected colour. */
+.primary-button,
+.secondary-button,
+.banner-button {
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+              box-shadow 0.15s ease, transform 0.15s ease, color 0.1s ease;
+}
+
+/* ── Stat-card used as a link (HDC queue shortcuts) ─────── */
+a.dashboard-stat-card {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.dashboard-stat-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }

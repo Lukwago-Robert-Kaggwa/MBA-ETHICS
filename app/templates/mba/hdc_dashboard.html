@@ -23,22 +23,31 @@
     <span>{{ hdc_pagination.total }}</span>
   </div>
 
-  <div class="detail-grid">
-    <div>
-      <dt>JBS5 Approvals</dt>
-      <dd>{{ hdc_pending_counts.jbs5 if hdc_pending_counts is defined else 0 }} pending</dd>
-      <a href="{{ url_for('mba.hdc_dashboard', approval_set='jbs5', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="text-link">Open</a>
-    </div>
-    <div>
-      <dt>JBS10 &amp; Assessor Nominations</dt>
-      <dd>{{ hdc_pending_counts.nominations if hdc_pending_counts is defined else 0 }} pending</dd>
-      <a href="{{ url_for('mba.hdc_dashboard', approval_set='nominations', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="text-link">Open</a>
-    </div>
-    <div>
-      <dt>Result Approvals</dt>
-      <dd>{{ hdc_pending_counts.results if hdc_pending_counts is defined else 0 }} pending</dd>
-      <a href="{{ url_for('mba.hdc_dashboard', approval_set='results', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="text-link">Open</a>
-    </div>
+  <div class="dashboard-stats-grid" style="margin-bottom:1.25rem;">
+    <a href="{{ url_for('mba.hdc_dashboard', approval_set='jbs5', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="dashboard-stat-card dashboard-stat-card--orange">
+      <div>
+        <span>JBS5 Approvals</span>
+        <strong>{{ hdc_pending_counts.jbs5 if hdc_pending_counts is defined else 0 }}</strong>
+        <small>pending review</small>
+      </div>
+      <b aria-hidden="true"><i class="bi bi-file-earmark-text-fill"></i></b>
+    </a>
+    <a href="{{ url_for('mba.hdc_dashboard', approval_set='nominations', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="dashboard-stat-card dashboard-stat-card--blue">
+      <div>
+        <span>Assessor Nominations</span>
+        <strong>{{ hdc_pending_counts.nominations if hdc_pending_counts is defined else 0 }}</strong>
+        <small>pending review</small>
+      </div>
+      <b aria-hidden="true"><i class="bi bi-people-fill"></i></b>
+    </a>
+    <a href="{{ url_for('mba.hdc_dashboard', approval_set='results', review_status='pending_review', hdc_per_page=hdc_pagination.per_page) }}" class="dashboard-stat-card dashboard-stat-card--green">
+      <div>
+        <span>Result Approvals</span>
+        <strong>{{ hdc_pending_counts.results if hdc_pending_counts is defined else 0 }}</strong>
+        <small>pending review</small>
+      </div>
+      <b aria-hidden="true"><i class="bi bi-award-fill"></i></b>
+    </a>
   </div>
 
   <div class="admin-filter-strip">
@@ -175,7 +184,7 @@
           </div>
           {% if results_stage and project.corrections_requested_at %}
             <p class="muted" style="margin-top:0.75rem;">
-              Corrections were requested for this result. Review the corrected Capstone Manuscript, Response to Assessors' Comments, and resubmitted Turnitin report before deciding.
+              Corrections were requested for this result. Review the corrected Capstone Project, Response to Assessors' Comments, and resubmitted Turnitin report before deciding.
             </p>
           {% endif %}
           {% if results_stage and missing_hdc_docs %}
@@ -237,8 +246,12 @@
                       {% endif %}
                     </small>
                     <div class="card-actions">
-                      <button class="primary-button small-button" name="action" value="approve_{{ slot }}_nomination" type="submit" {% if hdc_decision == 'approved' or not assessor or not nomination_supervisor_signed %}disabled{% endif %}>Approve</button>
-                      <button class="secondary-button small-button" name="action" value="decline_{{ slot }}_nomination" type="submit" {% if hdc_decision == 'declined' or not assessor or not nomination_supervisor_signed %}disabled{% endif %}>Decline</button>
+                      <button class="primary-button small-button" name="action" value="approve_{{ slot }}_nomination" type="submit"
+                        data-tooltip="{{ 'This slot has already been approved.' if hdc_decision == 'approved' else 'No assessor has been nominated for this slot yet.' if not assessor else 'The supervisor must sign the nomination form before you can approve.' }}"
+                        {% if hdc_decision == 'approved' or not assessor or not nomination_supervisor_signed %}disabled{% endif %}>Approve</button>
+                      <button class="secondary-button small-button" name="action" value="decline_{{ slot }}_nomination" type="submit"
+                        data-tooltip="{{ 'This slot has already been declined.' if hdc_decision == 'declined' else 'No assessor has been nominated for this slot yet.' if not assessor else 'The supervisor must sign the nomination form before you can decline.' }}"
+                        {% if hdc_decision == 'declined' or not assessor or not nomination_supervisor_signed %}disabled{% endif %}>Decline</button>
                     </div>
                   </div>
                   <span class="invite-badge invite-badge--{{ decision_badge }}">{{ assessor_hdc_decision_label(hdc_decision) }}</span>
