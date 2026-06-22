@@ -26,8 +26,8 @@
   </div>
 {%- endmacro %}
 
-{% macro marks_input(name, value, editable=false, class_name='') -%}
-  <input class="mba-doc-input {{ class_name }}" type="number" step="0.01" min="0" name="{{ name }}" value="{{ value or '' }}" {% if editable %}required{% else %}readonly{% endif %}>
+{% macro marks_input(name, value, editable=false, class_name='', required=true) -%}
+  <input class="mba-doc-input {{ class_name }}" type="number" step="0.01" min="0" name="{{ name }}" value="{{ value or '' }}" {% if editable %}{% if required %}required{% endif %}{% else %}readonly{% endif %}>
 {%- endmacro %}
 
 {% macro student_number_cells(value) -%}
@@ -237,16 +237,16 @@
           </tr>
           <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
           <tr><th colspan="2">Capstone Project result</th><th>&nbsp;</th></tr>
-          <tr><td>Assessor 1</td><td>{{ readonly_input(prefill.get('assessor_1_grade')) }}</td><td>&nbsp;</td></tr>
-          <tr><td>Assessor 2</td><td>{{ readonly_input(prefill.get('assessor_2_grade')) }}</td><td>&nbsp;</td></tr>
-          <tr><td>Total Capstone Project =</td><td>{{ readonly_input(prefill.get('capstone_total')) }}</td><td>&nbsp;</td></tr>
-          <tr><td>Average for Capstone Project %</td><td>{{ readonly_input(prefill.get('capstone_average')) }}</td><td>&nbsp;</td></tr>
+          <tr><td>Assessor 1</td><td>{{ marks_input('assessor_1_grade', prefill.get('assessor_1_grade'), marks_committee_mode, 'summary-assessor-grade', required=false) }}</td><td>&nbsp;</td></tr>
+          <tr><td>Assessor 2</td><td>{{ marks_input('assessor_2_grade', prefill.get('assessor_2_grade'), marks_committee_mode, 'summary-assessor-grade', required=false) }}</td><td>&nbsp;</td></tr>
+          <tr><td>Total Capstone Project =</td><td>{{ marks_input('capstone_total', prefill.get('capstone_total'), marks_committee_mode, 'summary-capstone-total') }}</td><td>&nbsp;</td></tr>
+          <tr><td>Average for Capstone Project %</td><td>{{ marks_input('capstone_average', prefill.get('capstone_average'), marks_committee_mode, 'summary-capstone-average') }}</td><td>&nbsp;</td></tr>
           <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
           <tr><th colspan="3">Final resut:</th></tr>
-          <tr><td>Capstone project result (26%)</td><td>{{ readonly_input(prefill.get('capstone_weighted_result')) }}</td><td></td></tr>
-          <tr><td>Coursework module average result(74%)</td><td>{{ readonly_input(prefill.get('coursework_weighted_result')) }}</td><td></td></tr>
+          <tr><td>Capstone project result (26%)</td><td>{{ marks_input('capstone_weighted_result', prefill.get('capstone_weighted_result'), marks_committee_mode, 'summary-capstone-weighted') }}</td><td></td></tr>
+          <tr><td>Coursework module average result(74%)</td><td>{{ marks_input('coursework_weighted_result', prefill.get('coursework_weighted_result'), marks_committee_mode, 'summary-coursework-weighted') }}</td><td></td></tr>
           <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-          <tr><td></td><td class="mba-doc-label">Final mark</td><td>{{ readonly_input(prefill.get('final_mark')) }}</td></tr>
+          <tr><td></td><td class="mba-doc-label">Final mark</td><td>{{ marks_input('final_mark', prefill.get('final_mark'), marks_committee_mode, 'summary-final-mark') }}</td></tr>
         </table>
 
         <table class="mba-doc-table summary-doc-table summary-doc-table--center summary-doc-final-table">
@@ -358,6 +358,12 @@
     const averageInput = form.querySelector('.summary-coursework-average');
     const creditTotalInput = form.querySelector('.summary-credit-total');
     const creditAverageInput = form.querySelector('.summary-credit-average');
+    const assessorGradeInputs = Array.from(form.querySelectorAll('.summary-assessor-grade'));
+    const capstoneTotalInput = form.querySelector('.summary-capstone-total');
+    const capstoneAverageInput = form.querySelector('.summary-capstone-average');
+    const capstoneWeightedInput = form.querySelector('.summary-capstone-weighted');
+    const courseworkWeightedInput = form.querySelector('.summary-coursework-weighted');
+    const finalMarkInput = form.querySelector('.summary-final-mark');
     const formatNumber = (value) => Number.isFinite(value) ? value.toFixed(2).replace(/\.?0+$/, '') : '';
     const recalculate = () => {
       let simpleTotal = 0;
@@ -379,17 +385,34 @@
         }
       });
       if (totalInput) totalInput.value = formatNumber(simpleTotal);
-      if (averageInput) {
-        const average = resultCount ? simpleTotal / resultCount : NaN;
-        averageInput.value = formatNumber(average);
-      }
+      const courseworkAverage = resultCount ? simpleTotal / resultCount : NaN;
+      if (averageInput) averageInput.value = formatNumber(courseworkAverage);
       if (creditTotalInput) creditTotalInput.value = formatNumber(creditTotal);
       if (creditAverageInput) {
         const averageCredit = creditCount ? creditTotal / creditCount : NaN;
         creditAverageInput.value = formatNumber(averageCredit);
       }
+
+      let capstoneTotal = 0;
+      let capstoneCount = 0;
+      assessorGradeInputs.forEach((gradeInput) => {
+        const grade = parseFloat(gradeInput.value);
+        if (Number.isFinite(grade)) {
+          capstoneTotal += grade;
+          capstoneCount += 1;
+        }
+      });
+      if (capstoneTotalInput) capstoneTotalInput.value = formatNumber(capstoneTotal);
+      const capstoneAverage = capstoneCount ? capstoneTotal / capstoneCount : NaN;
+      if (capstoneAverageInput) capstoneAverageInput.value = formatNumber(capstoneAverage);
+
+      const capstoneWeighted = capstoneAverage * 0.26;
+      const courseworkWeighted = courseworkAverage * 0.74;
+      if (capstoneWeightedInput) capstoneWeightedInput.value = formatNumber(capstoneWeighted);
+      if (courseworkWeightedInput) courseworkWeightedInput.value = formatNumber(courseworkWeighted);
+      if (finalMarkInput) finalMarkInput.value = formatNumber(capstoneWeighted + courseworkWeighted);
     };
-    resultInputs.concat(creditInputs).forEach((input) => input.addEventListener('input', recalculate));
+    resultInputs.concat(creditInputs, assessorGradeInputs).forEach((input) => input.addEventListener('input', recalculate));
     if (!totalInput.value || !averageInput.value || !creditTotalInput.value || !creditAverageInput.value) recalculate();
   })();
 </script>

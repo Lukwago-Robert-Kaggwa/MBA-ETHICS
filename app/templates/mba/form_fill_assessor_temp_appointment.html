@@ -60,7 +60,7 @@
                 {% endfor %}
               </select>
             </td>
-            <td class="mba-doc-label">If Yes, Department or Division</td>
+            <td class="mba-doc-label">If &#8220;Yes&#8221;, please indicate Department or Division</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('uj_department_division','') }}" readonly></td>
           </tr>
           <tr>
@@ -123,7 +123,7 @@
             </td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Nationality</td>
+            <td class="mba-doc-label">If &#8220;No,&#8221; specify the Nationality</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('nationality','') }}" readonly></td>
             <td class="mba-doc-label">Home Language</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('home_language','') }}" readonly></td>
@@ -178,8 +178,15 @@
             </td>
           </tr>
           <tr>
-            <td class="mba-doc-label">If yes, state disability nature</td>
+            <td class="mba-doc-label">If &#8220;Yes&#8221;, State Nature</td>
             <td colspan="3"><textarea class="mba-doc-textarea mba-doc-textarea--line" rows="2" readonly>{{ prefill.get('disability_nature','') }}</textarea></td>
+          </tr>
+          <tr>
+            <td colspan="4" class="mba-doc-note">
+              The University recognises that People with Disabilities are people with abilities capable of and eligible for a wide range of positions and occupations just as their abled colleagues.
+              Disclosed information will be treated as private and confidential. It will be used, if deemed necessary, to assess the ability to perform, to reasonably accommodate the employee,
+              to enhance their working conditions/environment to ensure efficient functioning, as well as for legal compliance purposes.
+            </td>
           </tr>
           <tr>
             <td class="mba-doc-label">Home Address</td>
@@ -221,7 +228,7 @@
                 {% endfor %}
               </select>
             </td>
-            <td class="mba-doc-label">Account Holder's Name</td>
+            <td class="mba-doc-label">Account Holder&#8217;s Name</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('bank_account_holder','') }}" readonly></td>
           </tr>
           <tr>
@@ -265,7 +272,7 @@
           <tr>
             <td class="mba-doc-label">Employment Group</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('employment_group','Academic') }}" readonly></td>
-            <td class="mba-doc-label">Appointment Category</td>
+            <td class="mba-doc-label">Appointment Category (Refer to Tariff List) e.g., P11, P13</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('appointment_category','') }}" readonly></td>
           </tr>
           <tr>
@@ -290,7 +297,7 @@
             <td colspan="3"><input class="mba-doc-input" value="{{ prefill.get('appointment_reason_other','') }}" readonly></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Motivation</td>
+            <td class="mba-doc-label">Motivation (For vacancies from the UJ central budget, clarify the reason if post is vacant for more than 3-months)</td>
             <td colspan="3"><textarea class="mba-doc-textarea" rows="4" readonly>{{ prefill.get('appointment_motivation','') }}</textarea></td>
           </tr>
           <tr>
@@ -300,9 +307,9 @@
             <td><input class="mba-doc-input" value="{{ prefill.get('rate_per_hour','') }}" readonly></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Other Rate Basis</td>
+            <td class="mba-doc-label">Other: please specify if remuneration is made from any other department or division (Refer to Tariff List e.g., per page, per session)</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('other_rate_basis','') }}" readonly></td>
-            <td class="mba-doc-label">Actual Hours</td>
+            <td class="mba-doc-label">Actual Hours (Please indicate the numbers of hours worked for the full duration of the contract)</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('actual_hours','') }}" readonly></td>
           </tr>
           <tr>
@@ -322,6 +329,18 @@
             <td colspan="3"><textarea class="mba-doc-textarea" rows="3" readonly>{{ prefill.get('conflict_of_interest_details','') }}</textarea></td>
           </tr>
         </table>
+
+        <p class="mba-doc-note">
+          The parties below acknowledge and confirm that the information above is correct; sufficient budget has been provided for and the reason for the temporary appointment is justifiable.
+          By signing this form, the employee accepts the appointment on the terms and conditions as set out herein, as well as all other terms and conditions that are available upon request.
+          The employee accepts the reason set out hereinabove, and its validity, for the fixed duration of this appointment. The employee accepts that there is no expectation of further renewals.
+          If at any time a conflict of interest arises, the employee is requested to immediately declare this as per the policy of the University of Johannesburg. The parties further acknowledge
+          and agree that the contract of employment shall be of full force and effect only upon the signature of all the listed signatories.
+        </p>
+
+        <p class="mba-doc-note">
+          IF A SECONDARY LINE MANAGER APPOINTS A MEMBER OF STAFF IT IS REQUIRED FOR THE PRIMARY LINE MANAGER TO SIGN ACCEPTANCE THEREOF BEFORE THE APPOINTMENT WILL BE PROCESSED
+        </p>
 
         <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
           <tr>

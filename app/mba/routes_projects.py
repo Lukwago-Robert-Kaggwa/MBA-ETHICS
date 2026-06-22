@@ -327,6 +327,9 @@ def invitation_response(project_id):
     if current_status != INVITATION_PENDING:
         flash("This invitation has already been responded to.", "error")
         return redirect(role_landing_url())
+    if decision == INVITATION_ACCEPTED and slot == "co_supervisor":
+        flash("Fill in and sign the Student/Supervisor Agreement to accept the co-supervisor invitation.", "error")
+        return redirect(url_for("mba.co_supervisor_fill_form", project_id=project.id))
     if decision == INVITATION_ACCEPTED and slot in ALL_ASSESSOR_SLOTS:
         if not assessor_acceptance_pack_complete(project, slot):
             flash(
@@ -339,7 +342,7 @@ def invitation_response(project_id):
     if (
         decision == INVITATION_ACCEPTED
         and slot in ALL_ASSESSOR_SLOTS
-        and assessor_can_view_student_dissertation(project)
+        and assessor_can_view_student_dissertation(project, slots=[slot])
     ):
         dissertation_doc = uploaded_doc_for(project, "dissertation")
         if dissertation_doc:

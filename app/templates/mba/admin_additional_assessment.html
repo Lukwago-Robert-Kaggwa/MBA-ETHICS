@@ -6,9 +6,13 @@
 
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
+{% set single_project_view = single_project_view|default(false) %}
 <div class="mba-page-stack">
+  {% if not single_project_view %}
   {% include "mba/_kpis.html" %}
+  {% endif %}
   <section class="ethics-panel">
+    {% if not single_project_view %}
     <div class="panel-heading">
       <h2>Additional Assessment Queue</h2>
       <span>{{ projects|length }}</span>
@@ -46,6 +50,7 @@
         </div>
       </form>
     </div>
+    {% endif %}
 
     <div class="record-list">
       {% for project in projects %}
@@ -58,7 +63,12 @@
         {% set assessor_3_detailed_report = uploaded_doc_for(project, 'assessor_detailed_report_assessor_3') %}
         {% set additional_nomination_doc = uploaded_doc_for(project, additional_external_examiner_nomination_doc_type()) %}
         {% set additional_nomination_supervisor_signed = additional_external_examiner_nomination_supervisor_signed(project) %}
-        {% call project_disclosure(project, 'project-disclosure--admin') %}
+        {% set additional_acceptance_pack_complete = assessor_acceptance_pack_complete(project, 'assessor_3') %}
+        {% set additional_hdc_decision = assessor_hdc_decision(project, 'assessor_3') %}
+        {% set additional_hdc_previously_approved = assessor_previously_hdc_approved(project.assessor_3) %}
+        {% set additional_assessor_hr_docs_sent = additional_assessor_hr_documents_sent(project) %}
+        {% set additional_assessor_hr_docs_sent_to = additional_assessor_hr_documents_sent_to(project) %}
+        {% call project_disclosure(project, 'project-disclosure--admin', open_only=single_project_view, detail_url=url_for('mba.admin_additional_assessment_project_detail', project_id=project.id)) %}
         <article class="record-card admin-project-card">
           <div class="record-card__top">
             <div>
@@ -110,6 +120,7 @@
             </p>
           </section>
 
+          {% if current_user.role in ('admin', 'main_admin') %}
           <section class="response-section">
             <strong>Third Assessor Assignment</strong>
             {% if project.assessor_3 %}
@@ -136,79 +147,153 @@
               </button>
             </form>
           </section>
+          {% endif %}
 
           {% if project.assessor_3 %}
             <section class="response-section">
               <strong>Third Assessor Progress</strong>
-              <div class="invite-list" style="margin-top:0.75rem;">
+              <div class="invite-list invite-list--documents" style="margin-top:0.75rem;">
                 <div class="invite-row">
                   <div>
                     <strong>Invitation</strong>
-                    <small>
-                      {% if additional_nomination_supervisor_signed %}
-                        {{ (project.assessor_3_invitation_status or 'not sent').replace('_', ' ').title() }}
-                      {% else %}
-                        Held until additional nomination is signed by the supervisor
-                      {% endif %}
-                    </small>
+                    <small>{{ (project.assessor_3_invitation_status or 'not sent').replace('_', ' ').title() }}</small>
                     {% if project.assessor_3_invitation_status in [none, '', 'not_sent'] %}
+                      <small>Next step: MBA Admin can click Send Invitation. The assessor will then see the acceptance forms.</small>
+                    {% elif project.assessor_3_invitation_status == 'pending' %}
+                      <small>Next step: the assessor must sign in, accept, and complete the acceptance documents.</small>
+                    {% elif project.assessor_3_invitation_status == 'accepted' %}
                       <small>
                         Next step:
-                        {% if not additional_nomination_supervisor_signed %}
-                          the supervisor must sign the additional assessor nomination form.
+                        {% if not additional_acceptance_pack_complete %}
+                          the assessor must finish uploading the acceptance documents (temp appointment, claim, CV, qualification).
+                        {% elif not additional_nomination_supervisor_signed %}
+                          send the nomination form to the supervisor for signature.
+                        {% elif additional_hdc_decision != 'approved' %}
+                          awaiting HDC review of the additional assessor nomination.
+                        {% elif not additional_assessor_hr_docs_sent %}
+                          MBA Admin must send the approved temporary appointment and remuneration/temporary claim forms to HR before the assessor can access the Capstone Project.
                         {% else %}
-                          MBA Admin can click Send Invitation if the automatic email was not sent. The assessor will then see the acceptance forms.
+                          the assessor must submit the assessment result.
                         {% endif %}
                       </small>
-                    {% elif project.assessor_3_invitation_status == 'pending' %}
-                      <small>Next step: the assessor must sign in and complete the acceptance documents.</small>
-                    {% elif project.assessor_3_invitation_status == 'accepted' %}
-                      <small>Next step: the assessor must submit the assessment result.</small>
                     {% endif %}
                   </div>
-                  {% if additional_nomination_supervisor_signed and project.assessor_3_invitation_status not in ['pending', 'accepted'] %}
-                    <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="inline-action" style="gap:0.5rem;">
-                      <button class="primary-button small-button" name="action" value="send_additional_assessor_invitation" type="submit">Send Invitation</button>
-                    </form>
+                  {% if project.assessor_3_invitation_status not in ['pending', 'accepted'] and current_user.role in ('admin', 'main_admin') %}
+                    <div class="document-action-row">
+                      <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="inline-action" style="gap:0.5rem;">
+                        <button class="primary-button small-button" name="action" value="send_additional_assessor_invitation" type="submit">Send Invitation</button>
+                      </form>
+                    </div>
                   {% endif %}
                 </div>
-                <div class="invite-row">
+                <div class="invite-row invite-row--document">
                   <div>
                     <strong>Additional Assessor Nomination Form</strong>
                     <small>
                       {% if additional_nomination_doc %}
-                        Supervisor: {{ 'Signed' if additional_nomination_supervisor_signed else 'Pending' }} &middot; HDC: Not required
+                        Supervisor: {{ 'Signed' if additional_nomination_supervisor_signed else 'Pending' }}
+                      {% elif project.assessor_3_invitation_status == 'accepted' and additional_acceptance_pack_complete %}
+                        Ready to send to the supervisor
+                      {% elif project.assessor_3_invitation_status == 'accepted' %}
+                        Generated once the assessor's acceptance documents are complete
                       {% else %}
-                        Generated after a proposed third assessor is selected
+                        Generated after the additional assessor accepts the invitation
                       {% endif %}
                     </small>
                   </div>
-                  {% if additional_nomination_doc %}
-                    <div class="inline-action" style="gap:0.5rem;">
+                  <div class="document-action-row">
+                    {% if project.assessor_3_invitation_status == 'accepted' and additional_acceptance_pack_complete and not additional_nomination_supervisor_signed and current_user.role in ('admin', 'main_admin') %}
+                      <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="inline-action" style="gap:0.5rem;">
+                        <button class="primary-button small-button" name="action" value="forward_additional_examiner_nomination_to_supervisor" type="submit">Send to Supervisor</button>
+                      </form>
+                    {% endif %}
+                    {% if additional_nomination_doc %}
                       <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=additional_nomination_doc.id) }}" class="secondary-button small-button">View</a>
                       <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=additional_nomination_doc.id) }}" class="secondary-button small-button">Download Word</a>
-                    </div>
-                  {% endif %}
+                    {% endif %}
+                  </div>
                 </div>
-                <div class="invite-row">
+                {% if project.assessor_3 %}
+                  {% set additional_hdc_decision_badge = 'accepted' if additional_hdc_decision == 'approved' else ('declined' if additional_hdc_decision == 'declined' else 'pending') %}
+                  {% set additional_nomination_hdc_signed = hdc_additional_external_examiner_nomination_signature_complete(project) %}
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>HDC Review</strong>
+                      <small>
+                        {% if additional_hdc_decision == 'approved' %}
+                          Approved{% if additional_hdc_previously_approved %} (previously approved by HDC){% endif %}
+                        {% elif additional_hdc_decision == 'declined' %}
+                          Declined
+                        {% elif not additional_nomination_supervisor_signed %}
+                          Awaiting supervisor signature first
+                        {% elif not additional_nomination_hdc_signed %}
+                          HDC must sign the nomination form before approving or declining
+                        {% else %}
+                          Pending HDC review{% if project.assessor_3.hdc_assessor_approval_status == 'revoked' %} (previously revoked &mdash; requires fresh approval){% endif %}
+                        {% endif %}
+                      </small>
+                    </div>
+                    {% if current_user.role == 'hdc' %}
+                      <div class="document-action-row">
+                        {% if additional_nomination_supervisor_signed %}
+                          <a href="{{ url_for('mba.hdc_sign_project_form', project_id=project.id, form_type='additional_external_examiner_nomination') }}" class="secondary-button small-button">Sign Nomination Form</a>
+                        {% endif %}
+                        {% if additional_hdc_decision == 'approved' %}
+                          <form action="{{ url_for('mba.hdc_project_action', project_id=project.id) }}" method="post" class="document-action-row">
+                            <button class="secondary-button small-button" name="action" value="revoke_additional_assessor_hdc_approval" type="submit">Revoke Approval</button>
+                          </form>
+                        {% elif additional_nomination_supervisor_signed and additional_nomination_hdc_signed %}
+                          <form action="{{ url_for('mba.hdc_project_action', project_id=project.id) }}" method="post" class="document-action-row">
+                            <button class="primary-button small-button" name="action" value="approve_assessor_3_additional_nomination" type="submit">Approve</button>
+                            <button class="secondary-button small-button" name="action" value="decline_assessor_3_additional_nomination" type="submit"
+                              {% if additional_hdc_decision == 'declined' %}disabled{% endif %}>Decline</button>
+                          </form>
+                        {% endif %}
+                      </div>
+                    {% else %}
+                      <span class="invite-badge invite-badge--{{ additional_hdc_decision_badge }}">{{ assessor_hdc_decision_label(additional_hdc_decision) }}</span>
+                    {% endif %}
+                  </div>
+                {% endif %}
+                {% if additional_hdc_decision == 'approved' %}
+                  <div class="invite-row invite-row--document">
+                    <div>
+                      <strong>Additional Assessor HR Documents</strong>
+                      <small>
+                        {% if additional_assessor_hr_docs_sent %}
+                          Sent to {{ additional_assessor_hr_docs_sent_to }}
+                        {% else %}
+                          Send the approved temporary appointment and remuneration/temporary claim forms to HR before the assessor can access the Capstone Project.
+                        {% endif %}
+                      </small>
+                    </div>
+                    {% if not additional_assessor_hr_docs_sent and current_user.role in ('admin', 'main_admin') %}
+                      <form action="{{ url_for('mba.admin_project_action', project_id=project.id) }}" method="post" class="inline-action" style="gap:0.5rem;">
+                        <input type="email" name="assessor_hr_email" placeholder="hr@example.com" class="admin-filter-input" required>
+                        <button class="primary-button small-button" name="action" value="send_additional_assessor_hr_documents_to_hr" type="submit">Send to HR</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                {% endif %}
+                <div class="invite-row invite-row--document">
                   <div>
                     <strong>Assessor Report Form</strong>
                     <small>{% if assessor_3_report %}Submitted{% else %}Pending{% endif %}</small>
                   </div>
                   {% if assessor_3_report %}
-                    <div class="inline-action" style="gap:0.5rem;">
+                    <div class="document-action-row">
                       <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_report.id) }}" class="secondary-button small-button">View</a>
                       <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_report.id) }}" class="secondary-button small-button">Download Word</a>
                     </div>
                   {% endif %}
                 </div>
                 {% if assessor_3_detailed_report %}
-                  <div class="invite-row">
+                  <div class="invite-row invite-row--document">
                     <div>
                       <strong>{{ document_label(assessor_3_detailed_report.doc_type) }}</strong>
                       <small>{{ assessor_3_detailed_report.original_name }}</small>
                     </div>
-                    <div class="inline-action" style="gap:0.5rem;">
+                    <div class="document-action-row">
                       <a href="{{ url_for('mba.view_project_document', project_id=project.id, doc_id=assessor_3_detailed_report.id) }}" class="secondary-button small-button">View</a>
                       <a href="{{ url_for('mba.download_project_document', project_id=project.id, doc_id=assessor_3_detailed_report.id) }}" class="secondary-button small-button">Download</a>
                     </div>

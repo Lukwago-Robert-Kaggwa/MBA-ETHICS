@@ -180,7 +180,7 @@
             <th class="mba-doc-section-title" colspan="6">SECTION D: Nomination/Amendment of assessors</th>
           </tr>
           <tr>
-            <th colspan="6">D1: Nomination of internal assessor:<br><span class="jbs10-doc-small">An internal assessor from within CBE can be nominated where required.</span></th>
+            <th colspan="6">D1: Nomination of internal assessor:<br><span class="jbs10-doc-small">An internal assessor from within CBE may be appointed in the case of assessing a technical research project / limited scope dissertation / minor dissertation as long as that person has had no prior involvement with the research project.</span></th>
           </tr>
           <tr>
             <td class="mba-doc-label" colspan="2">Title, initials, surname:</td>
@@ -196,7 +196,7 @@
             <col style="width:20%;">
           </colgroup>
           <tr>
-            <th colspan="4">D2: Nomination of external assessor/s:<br><span class="jbs10-doc-small">Provide the external assessor details below. CV and highest qualification documents are handled through the assessor acceptance documents.</span></th>
+            <th colspan="4">D2: Nomination of external assessors:<br><span class="jbs10-doc-small">For minor dissertations at master&rsquo;s level, at least two assessors must be appointed, of whom at least one must be external to the University. For full research dissertations at master&rsquo;s level, at least two external assessors should be appointed. For doctoral theses, at least three assessors should be appointed. All assessors must be external to the University, having not had prior involvement with the project that might compromise there objectivity when assessing the thesis. At least one assessor from outside South Africa should be identified. The curriculum vitae of each assessor should be attached to this form and forwarded to the CBE Higher Degrees Committee via the Faculty Officer for approval.</span></th>
           </tr>
           {% for index in range(1, 5) %}
             <tr>
@@ -288,7 +288,7 @@
             <col style="width:20%;">
           </colgroup>
           <tr>
-            <td class="mba-doc-label">Signature: JBS HDC</td>
+            <td class="mba-doc-label">Signature: CBE HDC</td>
             <td>{{ signature_field('jbs_hdc_signature', prefill.get('jbs_hdc_signature', ''), hdc_signature_mode, hdc_signature_mode) }}</td>
             <td class="mba-doc-label">Date</td>
             <td><input class="mba-doc-input" type="date" name="jbs_hdc_signature_date" value="{{ prefill.get('jbs_hdc_signature_date', '') }}" {% if not hdc_signature_mode %}readonly{% endif %} {% if hdc_signature_mode %}required{% endif %}></td>

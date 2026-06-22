@@ -896,6 +896,7 @@ def _load_project_document_for_current_user(project_id, doc_id):
     is_assessor = bool(assessor_slots)
     is_project_staff = can_manage_corrections_for_project or current_user.id in {
         project.primary_supervisor_id,
+        project.co_supervisor_id,
         project.assessor_1_id,
         project.assessor_2_id,
         project.assessor_3_id,
@@ -965,7 +966,7 @@ def _load_project_document_for_current_user(project_id, doc_id):
         if not is_admin and doc.uploaded_by_id != current_user.id:
             abort(403)
     if doc.doc_type in nomination_doc_types:
-        if not (is_admin or is_hdc or current_user.id == project.primary_supervisor_id):
+        if not (is_admin or is_hdc or current_user.id == project.primary_supervisor_id or user_is_accepted_project_supervisor(project, current_user)):
             abort(403)
     if doc.doc_type.startswith(("assessor_profile_", "assessor_cv_", "assessor_highest_qualification_")):
         hdc_assessor_doc_allowed_statuses = {
@@ -991,7 +992,7 @@ def _load_project_document_for_current_user(project_id, doc_id):
         if doc.doc_type in {"jbs5", "jbs10"}:
             abort(403)
         if doc.doc_type == "dissertation":
-            if not assessor_can_view_student_dissertation(project):
+            if not assessor_can_view_student_dissertation(project, slots=accepted_assessor_slots):
                 abort(403)
         elif doc.uploaded_by_id != project.student_id:
             if doc.uploaded_by_id != current_user.id:

@@ -26,7 +26,6 @@ from ..supervisor_sync import sync_ethics_supervisor_from_mba
 ethics_bp = Blueprint("ethics", __name__, template_folder="../templates")
 
 UPLOAD_FOLDER = os.path.join("uploads", "ethics")
-LEGACY_UPLOAD_FOLDER = os.path.join("app", "static", "uploads", "ethics")
 ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx"}
 
 
@@ -34,10 +33,6 @@ def _ethics_upload_dir():
     if os.path.isabs(UPLOAD_FOLDER):
         return UPLOAD_FOLDER
     return os.path.abspath(os.path.join(current_app.root_path, "..", UPLOAD_FOLDER))
-
-
-def _legacy_ethics_upload_dir():
-    return os.path.abspath(os.path.join(current_app.root_path, "static", "uploads", "ethics"))
 
 
 def _mime_type_for(filename, fallback="application/octet-stream"):
@@ -622,15 +617,15 @@ def download_submission_file(submission_id, stored_name):
             download_name=db_file.original_name or file_record.get("filename") or stored_name,
         )
 
-    for directory in (_ethics_upload_dir(), _legacy_ethics_upload_dir()):
-        file_path = os.path.join(directory, stored_name)
-        if os.path.isfile(file_path):
-            return send_from_directory(
-                directory,
-                stored_name,
-                as_attachment=True,
-                download_name=file_record.get("filename") or stored_name,
-            )
+    directory = _ethics_upload_dir()
+    file_path = os.path.join(directory, stored_name)
+    if os.path.isfile(file_path):
+        return send_from_directory(
+            directory,
+            stored_name,
+            as_attachment=True,
+            download_name=file_record.get("filename") or stored_name,
+        )
 
     abort(404)
 

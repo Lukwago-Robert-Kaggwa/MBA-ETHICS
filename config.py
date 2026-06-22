@@ -1,5 +1,6 @@
 import os
 import secrets
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -27,6 +28,10 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     WTF_CSRF_ENABLED = os.getenv("WTF_CSRF_ENABLED", "true").lower() in {"1", "true", "yes"}
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 50 * 1024 * 1024))
+
+    PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", 30)))
+    SESSION_REFRESH_EACH_REQUEST = False
 
     MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID")
     MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET")

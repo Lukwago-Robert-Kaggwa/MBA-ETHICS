@@ -60,7 +60,7 @@
             </td>
             <td class="jbs5-doc-option-cell" colspan="2">REGISTRATION OF TITLE / SUPERVISOR/S (SECTION B)</td>
             <td></td>
-            <td class="jbs5-doc-office-cell" colspan="2">
+            <td class="jbs5-doc-office-cell" colspan="2" rowspan="2">
               <div class="jbs5-doc-office-title">OFFICE USE ONLY</div>
               <div>Faculty Officer: <span class="jbs5-doc-dots"></span></div>
               <div>Date: <span class="jbs5-doc-dots"></span></div>
@@ -70,7 +70,6 @@
             <td class="jbs5-doc-check-cell"></td>
             <td></td>
             <td></td>
-            <td></td>
           </tr>
           <tr>
             <td class="jbs5-doc-check-cell">
@@ -78,11 +77,14 @@
             </td>
             <td class="jbs5-doc-option-cell" colspan="2">AMENDMENT OF TITLE (SECTION C)</td>
             <td></td>
-            <td></td>
+            <td class="jbs5-doc-office-cell" colspan="2" rowspan="2">
+              <div class="jbs5-doc-office-title">OFFICE USE ONLY</div>
+              <div>Faculty Officer: <span class="jbs5-doc-dots"></span></div>
+              <div>Date: <span class="jbs5-doc-dots"></span></div>
+            </td>
           </tr>
           <tr>
             <td class="jbs5-doc-check-cell"></td>
-            <td></td>
             <td></td>
             <td></td>
           </tr>
@@ -92,143 +94,162 @@
             </td>
             <td class="jbs5-doc-option-cell" colspan="2">AMENDMENT OF SUPERVISOR(S) (SECTION D)</td>
             <td></td>
-            <td></td>
+            <td class="jbs5-doc-office-cell" colspan="2">
+              <div class="jbs5-doc-office-title">OFFICE USE ONLY</div>
+              <div>Faculty Officer: <span class="jbs5-doc-dots"></span></div>
+              <div>Date: <span class="jbs5-doc-dots"></span></div>
+            </td>
           </tr>
         </table>
 
         <table class="mba-doc-table jbs5-doc-table jbs5-doc-section-a">
           <colgroup>
-            <col style="width:13%;">
-            <col style="width:13%;">
-            <col style="width:6%;">
-            <col style="width:13%;">
-            <col style="width:6%;">
-            <col style="width:13%;">
-            <col style="width:6%;">
-            <col style="width:9%;">
-            <col style="width:6%;">
-            <col style="width:7%;">
-            <col style="width:5%;">
-            <col style="width:3%;">
+            <col style="width:9.93%;">
+            <col style="width:6.04%;">
+            <col style="width:2.14%;">
+            <col style="width:9.02%;">
+            <col style="width:6.36%;">
+            <col style="width:9.68%;">
+            <col style="width:2.68%;">
+            <col style="width:2.76%;">
+            <col style="width:6.62%;">
+            <col style="width:8.34%;">
+            <col style="width:2.7%;">
+            <col style="width:2.74%;">
+            <col style="width:8.62%;">
+            <col style="width:0.46%;">
+            <col style="width:1.8%;">
+            <col style="width:2.92%;">
+            <col style="width:1.9%;">
+            <col style="width:0.62%;">
+            <col style="width:4.68%;">
+            <col style="width:2.44%;">
+            <col style="width:2.86%;">
+            <col style="width:2.38%;">
+            <col style="width:2.32%;">
           </colgroup>
           <tr>
-            <th class="mba-doc-section-title" colspan="12">SECTION A: Information about the student</th>
+            <th class="mba-doc-section-title" colspan="23">SECTION A: Information about the student</th>
           </tr>
           <tr>
-            <td class="mba-doc-label">Surname</td>
-            <td colspan="2"><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname', '') }}" {% if content_locked %}readonly{% endif %}></td>
-            <td class="mba-doc-label">Title (e.g. Mr / Mrs)</td>
-            <td colspan="8"><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="3">Surname</td>
+            <td colspan="8"><input class="mba-doc-input" name="surname" value="{{ prefill.get('surname', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="5">Title (e.g. Mr / Mrs)</td>
+            <td colspan="7"><input class="mba-doc-input" name="student_title" value="{{ prefill.get('student_title', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Initials(s)</td>
-            <td colspan="2"><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials', '') }}" {% if content_locked %}readonly{% endif %}></td>
-            <td class="mba-doc-label">Date of first registration (e.g. Feb 2021)</td>
-            <td colspan="8"><input class="mba-doc-input" name="date_of_first_registration" value="{{ prefill.get('date_of_first_registration', '') }}" placeholder="Feb 2021" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="3">Initials(s)</td>
+            <td colspan="4"><input class="mba-doc-input" name="student_initials" value="{{ prefill.get('student_initials', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="7">Date of first registration (e.g. Feb 2021)</td>
+            <td colspan="9"><input class="mba-doc-input" name="date_of_first_registration" value="{{ prefill.get('date_of_first_registration', '') }}" placeholder="Feb 2021" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Student number</td>
-            <td colspan="2"><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number', '') }}" {% if not content_locked %}required{% endif %} {% if content_locked %}readonly{% endif %}></td>
-            <td class="mba-doc-label">Qualification (e.g. MBA)</td>
-            <td colspan="8"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="2">Student number</td>
+            <td colspan="7"><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number', '') }}" {% if not content_locked %}required{% endif %} {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="8">Qualification (e.g. MBA)</td>
+            <td colspan="6"><input class="mba-doc-input" name="qualification" value="{{ prefill.get('qualification', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
-            <td class="mba-doc-label" colspan="2">Discipline/Qualifier (e.g. Digital transformation, etc.)</td>
-            <td colspan="10"><input class="mba-doc-input" name="discipline" value="{{ prefill.get('discipline', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="5">Discipline/Qualifier (e.g. Digital transformation, etc.)</td>
+            <td colspan="18"><input class="mba-doc-input" name="discipline" value="{{ prefill.get('discipline', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Study type</td>
-            <td>Capstone Consultancy Project</td>
+            <td colspan="3">Capstone Consultancy Project</td>
             <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Capstone Consultancy Project" {% if capstone_checked %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
             <td>Research essay</td>
-            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Research essay" {% if current_study_type_key == 'research essay' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
-            <td>Minor dissertation</td>
-            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Minor dissertation" {% if current_study_type_key == 'minor dissertation' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
-            <td>Dissertation</td>
-            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Dissertation" {% if current_study_type_key == 'dissertation' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
-            <td>Thesis</td>
-            <td class="jbs5-doc-center"><input type="radio" name="study_type" value="Thesis" {% if current_study_type_key == 'thesis' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td class="jbs5-doc-center" colspan="2"><input type="radio" name="study_type" value="Research essay" {% if current_study_type_key == 'research essay' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td colspan="2">Minor dissertation</td>
+            <td class="jbs5-doc-center" colspan="2"><input type="radio" name="study_type" value="Minor dissertation" {% if current_study_type_key == 'minor dissertation' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td colspan="3">Dissertation</td>
+            <td class="jbs5-doc-center" colspan="3"><input type="radio" name="study_type" value="Dissertation" {% if current_study_type_key == 'dissertation' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td colspan="2">Thesis</td>
+            <td class="jbs5-doc-center" colspan="2"><input type="radio" name="study_type" value="Thesis" {% if current_study_type_key == 'thesis' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
             <td></td>
           </tr>
           <tr>
-            <td class="mba-doc-label" colspan="2">Sustainable Developmental Goals (SDGs)<br><span class="jbs5-doc-small">See list at end of document</span></td>
-            <td colspan="4"><input class="mba-doc-input" name="sdg_focus" value="{{ prefill.get('sdg_focus', '') }}" {% if content_locked %}readonly{% endif %}></td>
-            <td class="mba-doc-label" colspan="6">Is this a 4IR research?</td>
+            <td class="mba-doc-label" colspan="5" rowspan="2">Sustainable Developmental Goals (SDGs)<br><span class="jbs5-doc-small">See list at end of document</span></td>
+            <td colspan="8" rowspan="2"><input class="mba-doc-input" name="sdg_focus" value="{{ prefill.get('sdg_focus', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label" colspan="10">Is this a 4IR research?</td>
           </tr>
           <tr>
-            <td></td>
-            <td></td>
-            <td class="jbs5-doc-center">YES</td>
-            <td class="jbs5-doc-center"><input type="radio" name="is_4ir_research" value="Yes" {% if current_4ir|lower == 'yes' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
-            <td class="jbs5-doc-center">NO</td>
-            <td class="jbs5-doc-center"><input type="radio" name="is_4ir_research" value="No" {% if current_4ir|lower == 'no' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td class="jbs5-doc-center" colspan="4">YES</td>
+            <td class="jbs5-doc-center" colspan="2"><input type="radio" name="is_4ir_research" value="Yes" {% if current_4ir|lower == 'yes' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
+            <td class="jbs5-doc-center" colspan="2">NO</td>
+            <td class="jbs5-doc-center" colspan="2"><input type="radio" name="is_4ir_research" value="No" {% if current_4ir|lower == 'no' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></td>
           </tr>
         </table>
 
         <table class="mba-doc-table jbs5-doc-table">
           <colgroup>
-            <col style="width:39%;">
-            <col style="width:12%;">
-            <col style="width:12%;">
-            <col style="width:12%;">
-            <col style="width:8%;">
-            <col style="width:17%;">
+            <col style="width:28.25%;">
+            <col style="width:45.2%;">
+            <col style="width:5.26%;">
+            <col style="width:6.66%;">
+            <col style="width:2.72%;">
+            <col style="width:5.48%;">
+            <col style="width:6.44%;">
           </colgroup>
           <tr>
-            <th class="mba-doc-section-title">SECTION B: Registration title</th>
+            <th class="mba-doc-section-title" colspan="2">SECTION B: Registration title</th>
             <th class="mba-doc-section-title"></th>
             <th class="mba-doc-section-title"></th>
             <th class="mba-doc-section-title"></th>
             <th class="jbs5-doc-section-number">(4)</th>
-            <th></th>
+            <th class="mba-doc-section-title"></th>
           </tr>
           <tr>
             <td class="mba-doc-label">Proposed title (4) of thesis / dissertation / minor dissertation / research essay / research article/ Capstone Consultancy Project</td>
-            <td colspan="5"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="research_title" rows="3" {% if not content_locked %}required{% endif %} data-project-title-input {% if content_locked %}readonly{% endif %}>{{ prefill.get('research_title', '') }}</textarea></td>
+            <td colspan="6"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="research_title" rows="3" {% if not content_locked %}required{% endif %} data-project-title-input {% if content_locked %}readonly{% endif %}>{{ prefill.get('research_title', '') }}</textarea></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Proposed supervisor (A)</td>
-            <td colspan="5"><input class="mba-doc-input" name="proposed_supervisor" value="{{ prefill.get('proposed_supervisor', prefill.get('supervisor_name', '')) }}" {% if content_locked %}readonly{% endif %}></td>
+            <td colspan="6"><input class="mba-doc-input" name="proposed_supervisor" value="{{ prefill.get('proposed_supervisor', prefill.get('supervisor_name', '')) }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Proposed co-supervisor(s) (D)</td>
-            <td colspan="5"><input class="mba-doc-input" name="proposed_co_supervisors" value="{{ prefill.get('proposed_co_supervisors', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td colspan="6"><input class="mba-doc-input" name="proposed_co_supervisors" value="{{ prefill.get('proposed_co_supervisors', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
         </table>
 
         <table class="mba-doc-table jbs5-doc-table">
           <colgroup>
-            <col style="width:39%;">
-            <col style="width:12%;">
-            <col style="width:12%;">
-            <col style="width:12%;">
-            <col style="width:8%;">
-            <col style="width:17%;">
+            <col style="width:28.25%;">
+            <col style="width:45.2%;">
+            <col style="width:5.26%;">
+            <col style="width:6.66%;">
+            <col style="width:2.72%;">
+            <col style="width:5.48%;">
+            <col style="width:6.44%;">
           </colgroup>
           <tr>
-            <th class="mba-doc-section-title">SECTION C: Amendment of title</th>
+            <th class="mba-doc-section-title" colspan="2">SECTION C: Amendment of title</th>
             <th class="mba-doc-section-title"></th>
             <th class="mba-doc-section-title"></th>
             <th class="mba-doc-section-title"></th>
             <th class="jbs5-doc-section-number">(6)</th>
-            <th></th>
+            <th class="mba-doc-section-title"></th>
           </tr>
           <tr>
             <td class="mba-doc-label">Previously approved title (5) of thesis / dissertation / minor dissertation / research essay / Capstone Consultancy Project</td>
-            <td colspan="5"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="previous_title" rows="2" {% if content_locked %}readonly{% endif %}>{{ prefill.get('previous_title', '') }}</textarea></td>
+            <td colspan="6"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="previous_title" rows="2" {% if content_locked %}readonly{% endif %}>{{ prefill.get('previous_title', '') }}</textarea></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Proposed amendment to title (6) of thesis / dissertation / minor dissertation / research essay / Capstone Consultancy Project</td>
-            <td colspan="5"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="amended_title" rows="2" {% if content_locked %}readonly{% endif %}>{{ prefill.get('amended_title', '') }}</textarea></td>
+            <td colspan="6"><textarea class="mba-doc-textarea mba-doc-textarea--line jbs5-doc-textarea" name="amended_title" rows="2" {% if content_locked %}readonly{% endif %}>{{ prefill.get('amended_title', '') }}</textarea></td>
           </tr>
         </table>
 
         <table class="mba-doc-table jbs5-doc-table">
+          <colgroup>
+            <col style="width:30.96%;">
+            <col style="width:69.04%;">
+          </colgroup>
           <tr>
             <th class="mba-doc-section-title" colspan="2">SECTION D: Amendment of supervisor(s)</th>
           </tr>
           <tr>
-            <td class="mba-doc-label" style="width:39%;">Previously approved supervisor (B)</td>
+            <td class="mba-doc-label">Previously approved supervisor (B)</td>
             <td><input class="mba-doc-input" name="previous_supervisor" value="{{ prefill.get('previous_supervisor', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
           <tr>
@@ -247,38 +268,39 @@
 
         <table class="mba-doc-table jbs5-doc-table">
           <colgroup>
-            <col style="width:67%;">
-            <col style="width:33%;">
+            <col style="width:46.6%;">
+            <col style="width:46.61%;">
+            <col style="width:6.78%;">
           </colgroup>
           <tr>
-            <th class="mba-doc-section-title" colspan="2">SECTION E: Declaration of research focus</th>
+            <th class="mba-doc-section-title" colspan="3">SECTION E: Declaration of research focus</th>
           </tr>
           <tr>
-            <td class="mba-doc-label">1. The proposed study field/title and/or amendment to study field/title is discipline specific in that it falls within the primary research field of the qualification. (Please indicate YES / NO)</td>
+            <td class="mba-doc-label" colspan="2">1. The proposed study field/title and/or amendment to study field/title is discipline specific in that it falls within the primary research field of the qualification. (Please indicate YES / NO)</td>
             <td class="jbs5-doc-inline-options">
               <label><span>YES</span><input type="radio" name="discipline_specific" value="YES" {% if current_discipline_specific|upper == 'YES' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
               <label><span>NO</span><input type="radio" name="discipline_specific" value="NO" {% if current_discipline_specific|upper == 'NO' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
             </td>
           </tr>
           <tr>
-            <td class="mba-doc-label">2. Is there a secondary focus in the proposed study field/title and/or amendment to study field/title? (Please indicate YES / NO)</td>
+            <td class="mba-doc-label" colspan="2">2. Is there a secondary focus in the proposed study field/title and/or amendment to study field/title? (Please indicate YES / NO)</td>
             <td class="jbs5-doc-inline-options">
               <label><span>YES</span><input type="radio" name="has_secondary_focus" value="Yes" {% if current_secondary_focus|lower == 'yes' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
               <label><span>NO</span><input type="radio" name="has_secondary_focus" value="No" {% if current_secondary_focus|lower == 'no' %}checked{% endif %} {% if content_locked %}disabled{% endif %}></label>
             </td>
           </tr>
           <tr>
-            <td class="mba-doc-label">If you have answered 'YES' to the second question, please indicate the secondary focus:</td>
-            <td><input class="mba-doc-input" name="secondary_focus" value="{{ prefill.get('secondary_focus', '') }}" {% if content_locked %}readonly{% endif %}></td>
+            <td class="mba-doc-label">If you have answered &lsquo;YES&rsquo; to the second question, please indicate the secondary focus:</td>
+            <td colspan="2"><input class="mba-doc-input" name="secondary_focus" value="{{ prefill.get('secondary_focus', '') }}" {% if content_locked %}readonly{% endif %}></td>
           </tr>
         </table>
 
         <table class="mba-doc-table mba-doc-table--tight jbs5-doc-table jbs5-doc-signatures">
           <colgroup>
-            <col style="width:31%;">
-            <col style="width:31%;">
-            <col style="width:12%;">
-            <col style="width:26%;">
+            <col style="width:30.96%;">
+            <col style="width:36.72%;">
+            <col style="width:8.78%;">
+            <col style="width:23.54%;">
           </colgroup>
           <tr>
             <td class="mba-doc-label">Signature: Supervisor</td>
@@ -338,6 +360,8 @@
           <p>16_Peace and Justice Strong Institutions</p>
           <p>17_Partnerships to Achieve the Goal</p>
         </div>
+
+        <p class="mba-doc-note" style="text-align:center;margin-top:0.75rem;">Form JBS5: Adapted from CBE</p>
 
         {% if supervisor_signature_mode %}
           <div class="mba-doc-muted-box" style="border:1.5px solid #b45309;background:#fff7ed;margin-top:1rem;">

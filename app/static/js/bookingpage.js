@@ -46,6 +46,15 @@ function debounce(func, delay) {
   };
 }
 
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function showMessage(text, type) {
   messageBox.textContent = text;
   messageBox.className = "booking-message " + (type || "");
@@ -203,7 +212,9 @@ async function handleSupervisorSearch() {
     const data = await apiFetch("/supervisors/search?q=" + encodeURIComponent(query));
     const results = data.results || [];
     supervisorDropdown.innerHTML = results.length ? results.map(function (supervisor) {
-      return "<button type='button' class='booking-button subtle' style='width:100%;margin-top:.25rem' data-id='" + supervisor.id + "' data-name='" + supervisor.name.replace(/'/g, "&#39;") + "'>" + supervisor.name + " (" + supervisor.email + ")</button>";
+      const safeName = escapeHtml(supervisor.name);
+      const safeEmail = escapeHtml(supervisor.email);
+      return "<button type='button' class='booking-button subtle' style='width:100%;margin-top:.25rem' data-id='" + supervisor.id + "' data-name='" + safeName + "'>" + safeName + " (" + safeEmail + ")</button>";
     }).join("") : "<div class='booking-message info'>No supervisors found.</div>";
     supervisorDropdown.style.display = "block";
   } catch (error) {
@@ -279,7 +290,7 @@ function renderSchedule() {
   scheduleConfig.forEach(function (day) {
     const daySection = document.createElement("div");
     daySection.className = "day-section";
-    daySection.innerHTML = "<div class='day-title'><span>" + day.displayDate + "</span><span>" + day.panels.length + " panels</span></div>";
+    daySection.innerHTML = "<div class='day-title'><span>" + escapeHtml(day.displayDate) + "</span><span>" + day.panels.length + " panels</span></div>";
     const panelGrid = document.createElement("div");
     panelGrid.className = "panel-grid";
 
@@ -298,17 +309,17 @@ function renderSchedule() {
       let studentRows = "";
       day.studentSlots.forEach(function (slot) {
         const booking = getBooking(day.date, panel, "student", slot);
-        studentRows += "<div class='slot-row'><strong>" + slot + "</strong><br>" + (booking ? booking.name : "<span class='empty'>Open</span>") + "</div>";
+        studentRows += "<div class='slot-row'><strong>" + escapeHtml(slot) + "</strong><br>" + (booking ? escapeHtml(booking.name) : "<span class='empty'>Open</span>") + "</div>";
       });
 
       let supervisorRows = "";
       day.supervisorSlots.forEach(function (slot) {
         const booking = getBooking(day.date, panel, "supervisor", slot);
-        supervisorRows += "<div class='slot-row'><strong>" + slot + "</strong><br>" + (booking ? booking.name : "<span class='empty'>Open</span>") + "</div>";
+        supervisorRows += "<div class='slot-row'><strong>" + escapeHtml(slot) + "</strong><br>" + (booking ? escapeHtml(booking.name) : "<span class='empty'>Open</span>") + "</div>";
       });
 
       panelCard.innerHTML =
-        "<div class='panel-top'><h3>" + panel + "</h3><span class='badge " + (isFull ? "full-badge" : hasConflict ? "conflict-badge" : "open-badge") + "'>" + (isFull ? "Full" : hasConflict ? "Conflict" : "Open") + "</span></div>" +
+        "<div class='panel-top'><h3>" + escapeHtml(panel) + "</h3><span class='badge " + (isFull ? "full-badge" : hasConflict ? "conflict-badge" : "open-badge") + "'>" + (isFull ? "Full" : hasConflict ? "Conflict" : "Open") + "</span></div>" +
         "<div class='counts'><div class='count-box'><strong>" + studentCount + "/" + day.studentSlots.length + "</strong>Students</div><div class='count-box'><strong>" + supervisorCount + "/" + day.supervisorSlots.length + "</strong>Supervisors</div></div>" +
         "<div class='list'><div class='list-title'>Students</div>" + studentRows + "<div class='list-title'>Supervisors</div>" + supervisorRows + "</div>";
       panelGrid.appendChild(panelCard);

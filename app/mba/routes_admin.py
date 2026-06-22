@@ -552,7 +552,7 @@ def apply_student_excel_row(row):
 
 @mba_bp.route("/admin-dashboard")
 @login_required
-def admin_dashboard():
+def admin_dashboard(project_id_filter=None, single_project_view=False):
     if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
         return redirect(role_landing_url())
     selected_view = (request.args.get("view") or "all").strip().lower()
@@ -632,18 +632,25 @@ def admin_dashboard():
     query = apply_project_filters(
         MbaProject.query.filter(MbaProject.project_status != ProjectStatus.CREATED.value)
     ).order_by(MbaProject.updated_at.desc())
-    admin_pagination_args = request_query_args({"project_page", "project_per_page"})
-    admin_pagination_args["panel"] = "projects"
-    projects, project_pagination = paginate_query(
-        query,
-        project_page,
-        project_per_page,
-        "mba.admin_dashboard",
-        page_param="project_page",
-        per_page_param="project_per_page",
-        base_args=admin_pagination_args,
-        anchor="project-queue",
-    )
+    if project_id_filter:
+        query = query.filter(MbaProject.id == project_id_filter)
+        projects = query.all()
+        project_pagination = None
+        if single_project_view and not projects:
+            abort(404)
+    else:
+        admin_pagination_args = request_query_args({"project_page", "project_per_page"})
+        admin_pagination_args["panel"] = "projects"
+        projects, project_pagination = paginate_query(
+            query,
+            project_page,
+            project_per_page,
+            "mba.admin_dashboard",
+            page_param="project_page",
+            per_page_param="project_per_page",
+            base_args=admin_pagination_args,
+            anchor="project-queue",
+        )
     project_years = sorted(
         {
             int(year)
@@ -805,7 +812,15 @@ def admin_dashboard():
         assessor_hr_documents_sent_to=assessor_hr_documents_sent_to,
         supervisor_pool_release_count=len(supervisor_pool_release_candidates),
         supervisor_pool_available_count=len(supervisor_pool_available_projects),
+        single_project_view=single_project_view,
+        uploaded_doc_for=uploaded_doc_for,
     )
+
+
+@mba_bp.route("/admin-dashboard/<int:project_id>")
+@login_required
+def admin_project_detail(project_id):
+    return admin_dashboard(project_id_filter=project_id, single_project_view=True)
 
 
 @mba_bp.route("/admin/release-supervisor-project-pool", methods=["POST"])
@@ -995,7 +1010,7 @@ def _uploaded_import_rows(uploaded_file):
 
 @mba_bp.route("/admin-corrections")
 @login_required
-def admin_corrections():
+def admin_corrections(project_id_filter=None, single_project_view=False):
     if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
         return redirect(role_landing_url())
     correction_status = (request.args.get("corrections_status") or "all").strip().lower()
@@ -1070,9 +1085,14 @@ def admin_corrections():
         if correction_status == "all"
         or project_corrections_status(project, forms_by_project=forms_by_project) == correction_status
     ]
+    if project_id_filter:
+        visible_projects = [project for project in visible_projects if project.id == project_id_filter]
+        if single_project_view and not visible_projects:
+            abort(404)
     return render_template(
         "mba/admin_corrections.html",
         projects=visible_projects,
+        single_project_view=single_project_view,
         forms_by_project=forms_by_project,
         corrections_status=correction_status,
         correction_counts=correction_counts,
@@ -1094,6 +1114,12 @@ def admin_corrections():
         results_released_to_supervisor=results_released_to_supervisor,
         kpis=mba_kpis(),
     )
+
+
+@mba_bp.route("/admin-corrections/<int:project_id>")
+@login_required
+def admin_corrections_project_detail(project_id):
+    return admin_corrections(project_id_filter=project_id, single_project_view=True)
 
 
 def _reminder_student_detail_text(project):
@@ -1292,8 +1318,8 @@ def admin_reminder_action():
 
 @mba_bp.route("/admin-additional-assessment")
 @login_required
-def admin_additional_assessment():
-    if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value):
+def admin_additional_assessment(project_id_filter=None, single_project_view=False):
+    if not require_mba_role(MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value, MbaRole.HDC.value):
         return redirect(role_landing_url())
     assessment_status = (request.args.get("assessment_status") or "all").strip().lower()
     allowed_statuses = {"all", "needs_assignment", "awaiting_nomination", "awaiting_acceptance", "awaiting_result"}
@@ -1349,6 +1375,14 @@ def admin_additional_assessment():
 
             if _routes_forms.refresh_additional_external_examiner_nomination_if_ready(project):
                 updated_additional_nomination_docs = True
+        if (
+            getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None)
+            and additional_external_examiner_nomination_supervisor_signed(project)
+            and assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT) is None
+            and assessor_previously_hdc_approved(project.assessor_3)
+        ):
+            set_assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT, HDC_ASSESSOR_APPROVED)
+            updated_additional_nomination_docs = True
     if updated_additional_nomination_docs:
         db.session.commit()
 
@@ -1401,9 +1435,14 @@ def admin_additional_assessment():
         if assessment_status == "all"
         or additional_assessment_stage(project, forms_by_project=forms_by_project) == assessment_status
     ]
+    if project_id_filter:
+        visible_projects = [project for project in visible_projects if project.id == project_id_filter]
+        if single_project_view and not visible_projects:
+            abort(404)
     return render_template(
         "mba/admin_additional_assessment.html",
         projects=visible_projects,
+        single_project_view=single_project_view,
         forms_by_project=forms_by_project,
         assessment_status=assessment_status,
         assessment_counts=assessment_counts,
@@ -1417,6 +1456,7 @@ def admin_additional_assessment():
         additional_external_examiner_nomination_supervisor_signed=additional_external_examiner_nomination_supervisor_signed,
         hdc_additional_external_examiner_nomination_signature_complete=hdc_additional_external_examiner_nomination_signature_complete,
         assessment_result_pack_complete=assessment_result_pack_complete,
+        assessor_acceptance_pack_complete=assessor_acceptance_pack_complete,
         assessor_grade_for_slot=assessor_grade_for_slot,
         uploaded_doc_for=uploaded_doc_for,
         document_label=document_label,
@@ -1424,8 +1464,19 @@ def admin_additional_assessment():
         examiners=examiners,
         assessment_doc_type=assessment_doc_type,
         assessor_report_doc_type=assessor_report_doc_type,
+        assessor_hdc_decision=assessor_hdc_decision,
+        assessor_hdc_decision_label=assessor_hdc_decision_label,
+        assessor_previously_hdc_approved=assessor_previously_hdc_approved,
+        additional_assessor_hr_documents_sent=additional_assessor_hr_documents_sent,
+        additional_assessor_hr_documents_sent_to=additional_assessor_hr_documents_sent_to,
         kpis=mba_kpis(),
     )
+
+
+@mba_bp.route("/admin-additional-assessment/<int:project_id>")
+@login_required
+def admin_additional_assessment_project_detail(project_id):
+    return admin_additional_assessment(project_id_filter=project_id, single_project_view=True)
 
 
 @mba_bp.route("/admin/disciplines", methods=["POST"])

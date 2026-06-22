@@ -6,8 +6,10 @@
 
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
+{% set single_project_view = single_project_view|default(false) %}
 <div class="mba-page-stack">
 
+{% if not single_project_view %}
 <div class="dashboard-stats-grid" style="margin-bottom:0;">
   {% if current_user.is_supervisor_role() %}
   <article class="dashboard-stat-card dashboard-stat-card--orange">
@@ -36,8 +38,9 @@
     <b aria-hidden="true"><i class="bi bi-award-fill"></i></b>
   </article>
 </div>
+{% endif %}
 
-{% if current_user.is_supervisor_role() %}
+{% if current_user.is_supervisor_role() and not single_project_view %}
 <section class="ethics-panel" id="available-supervisor-projects">
   <div class="panel-heading">
     <h2>Available Project Titles</h2>
@@ -85,7 +88,9 @@
 </section>
 {% endif %}
 
+{% if supervised_projects or not single_project_view %}
 <section class="ethics-panel" id="supervisor-projects">
+  {% if not single_project_view %}
   <div class="panel-heading">
     <h2>Supervisor Capstone Projects</h2>
     <span>{{ supervisor_pagination.total }}</span>
@@ -125,9 +130,10 @@
   {% set pagination = supervisor_pagination %}
   {% set item_label = 'capstone projects' %}
   {% include "mba/_project_pagination.html" %}
+  {% endif %}
   <div class="record-list mba-work-project-list">
     {% for project in supervised_projects %}
-      {% call project_disclosure(project, 'project-disclosure--supervisor') %}
+      {% call project_disclosure(project, 'project-disclosure--supervisor', open_only=single_project_view, detail_url=url_for('mba.scholar_project_detail', project_id=project.id)) %}
       <div class="mba-work-project-stack">
         {% set supervisor_can_view_assessor_lineup = false %}
         {% set hide_assessor_lineup = not supervisor_can_view_assessor_lineup %}
@@ -158,6 +164,23 @@
               <p class="muted" style="margin-top:0.5rem;">
                 This invitation has expired because another supervisor accepted the Capstone Project.
               </p>
+            {% endif %}
+          </div>
+        {% endif %}
+        {% if project.co_supervisor_id == current_user.id %}
+          <div class="response-section">
+            <p><strong>Co-Supervisor invitation:</strong> {{ (project.co_supervisor_invitation_status or 'pending').replace('_', ' ').title() }}</p>
+            {% if project.co_supervisor_invitation_status == 'pending' %}
+              <p class="muted" style="margin-top:0.5rem;">
+                Accept the invitation first. Fill in and sign your portion of the Student/Supervisor Agreement to gain the same access as the primary supervisor on this Capstone Project.
+              </p>
+              <div class="invitation-action-row">
+                <a href="{{ url_for('mba.co_supervisor_fill_form', project_id=project.id) }}" class="primary-button small-button">Fill Supervisor Agreement and Accept</a>
+              </div>
+              <form action="{{ url_for('mba.invitation_response', project_id=project.id) }}" method="post" class="inline-action" style="margin-top:0.5rem;">
+                <input type="hidden" name="slot" value="co_supervisor">
+                <button class="secondary-button small-button" name="decision" value="declined" type="submit">Decline invitation</button>
+              </form>
             {% endif %}
           </div>
         {% endif %}
@@ -501,15 +524,22 @@
       </div>
       {% endcall %}
     {% else %}
+      {% if not single_project_view %}
       <p class="muted">{% if has_supervisor_filters %}No supervised Capstone Projects match these filters.{% else %}No supervised Capstone Projects assigned yet.{% endif %}</p>
+      {% endif %}
     {% endfor %}
   </div>
+  {% if not single_project_view %}
   {% set pagination = supervisor_pagination %}
   {% set item_label = 'capstone projects' %}
   {% include "mba/_project_pagination.html" %}
+  {% endif %}
 </section>
+{% endif %}
 
+{% if examiner_projects or not single_project_view %}
 <section class="ethics-panel" id="assessor-projects">
+  {% if not single_project_view %}
   <div class="panel-heading">
     <h2>Assessor Capstone Projects</h2>
     <span>{{ assessor_pagination.total }}</span>
@@ -549,9 +579,10 @@
   {% set pagination = assessor_pagination %}
   {% set item_label = 'capstone projects' %}
   {% include "mba/_project_pagination.html" %}
+  {% endif %}
   <div class="record-list mba-work-project-list">
     {% for project in examiner_projects %}
-      {% call project_disclosure(project, 'project-disclosure--assessor') %}
+      {% call project_disclosure(project, 'project-disclosure--assessor', open_only=single_project_view, detail_url=url_for('mba.scholar_project_detail', project_id=project.id)) %}
       <div class="mba-work-project-stack">
         {% set hide_assessor_lineup = true %}
         {% include "mba/_project_card.html" %}
@@ -649,7 +680,7 @@
                 {% if assessor_can_view_project_documents(project) %}
                   {% set student_dissertation_docs = project.documents | selectattr('doc_type', 'equalto', 'dissertation') | list %}
                   <div class="invite-list invite-list--documents" style="margin-top:0.75rem;">
-                    {% if assessor_can_view_student_dissertation(project) %}
+                    {% if assessor_can_view_student_dissertation(project, slots=[slot.slot]) %}
                       {% for doc in student_dissertation_docs %}
                         <div class="invite-row invite-row--document">
                           <div>
@@ -663,7 +694,11 @@
                         </div>
                       {% endfor %}
                     {% elif student_dissertation_docs %}
-                      <p class="muted">The Capstone Project is uploaded and waiting for MBA Admin to release it to assessors.</p>
+                      {% if slot.slot == 'assessor_3' and assessor_hdc_decision(project, 'assessor_3') != 'approved' %}
+                        <p class="muted">The Capstone Project will be available once HDC approves your nomination for this Capstone Project.</p>
+                      {% else %}
+                        <p class="muted">The Capstone Project is uploaded and waiting for MBA Admin to release it to assessors.</p>
+                      {% endif %}
                     {% endif %}
                     {% if not student_dissertation_docs %}
                       <p class="muted">MBA Admin has not uploaded the Capstone Project from Moodle yet.</p>
@@ -672,7 +707,9 @@
                 {% else %}
                   <p class="muted" style="margin-top:0.5rem;">Capstone Project access opens after MBA Admin releases it to assessors.</p>
                 {% endif %}
-                {% if not assessor_can_view_student_dissertation(project) %}
+                {% if slot.slot == 'assessor_3' and assessor_hdc_decision(project, 'assessor_3') != 'approved' %}
+                  <p class="muted" style="margin-top:0.5rem;">Capstone Project access and result submission open after HDC approves your nomination for this Capstone Project.</p>
+                {% elif not assessor_can_view_student_dissertation(project, slots=[slot.slot]) %}
                   <p class="muted" style="margin-top:0.5rem;">Assessor result submission opens after MBA Admin releases the Capstone Project to assessors.</p>
                 {% elif result_submitted %}
                   <p class="muted" style="margin-top:0.5rem;">Assessment results already submitted.</p>
@@ -699,12 +736,17 @@
       </div>
       {% endcall %}
     {% else %}
+      {% if not single_project_view %}
       <p class="muted">{% if has_assessor_filters %}No assessor Capstone Projects match these filters.{% else %}No assessor Capstone Projects assigned yet.{% endif %}</p>
+      {% endif %}
     {% endfor %}
   </div>
+  {% if not single_project_view %}
   {% set pagination = assessor_pagination %}
   {% set item_label = 'capstone projects' %}
   {% include "mba/_project_pagination.html" %}
+  {% endif %}
 </section>
+{% endif %}
 </div>
 {% endblock %}

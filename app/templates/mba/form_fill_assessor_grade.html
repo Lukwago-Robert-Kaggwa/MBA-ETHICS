@@ -7,9 +7,9 @@
 {% block body %}
 {% set doc_variant = display_doc_variant|default('assessment_submission') %}
 {% if doc_variant == 'assessment_result' %}
-  {% set doc_title = 'Capstone Assessment Result Summary' %}
-  {% set doc_subtitle = 'Submitted assessor outcome summary for HDC review' %}
-  {% set doc_note = 'This summary reflects the submitted examination outcome, final mark, and supporting report entered by the assessor.' %}
+  {% set doc_title = 'Capstone Project Final Submission Evaluation' %}
+  {% set doc_subtitle = 'Master of Business Administration (MBA34Q)' %}
+  {% set doc_note = 'This summary reflects the submitted marking-rubric grade, final mark, and overall feedback entered by the marker for the student&rsquo;s Final Submission.' %}
 {% elif doc_variant == 'assessor_report' %}
   {% set doc_title = "EXAMINER&rsquo;S REPORT ON A CAPSTONE RESEARCH REPORT SUBMITTED FOR THE DEGREE OF MASTER OF BUSINESS ADMINISTRATION (MBA)" %}
   {% set doc_subtitle = '(By capstone and coursework)' %}
@@ -23,10 +23,14 @@
   {% set doc_subtitle = '(By capstone and coursework)' %}
   {% set doc_note = "Examiners should consider the following in assessing and reporting on the research report, bearing in mind with respect to all criteria that the report constitutes 26% of the MBA and is not a full master&rsquo;s dissertation. The purpose of the capstone research report is for the student to demonstrate the ability to carry out structured, independent research into a theoretical or practical business-societal related problem. While the research should be more than a rudimentary application of theory, it is not required to make a unique contribution to the body of academic knowledge (NQF9). Integration and synthesis to the existing academic knowledge in the form of a literature review is required. Sources referenced should preferably be recent scholarly peer-reviewed academic articles. Typically a total of 30+ academic references are adequate. Quantitative, qualitative, mixed-method and theory extension literature based studies are all acceptable." %}
 {% endif %}
-{% set show_outcome_summary = doc_variant in ['assessment_submission', 'assessment_result', 'assessor_report'] %}
-{% set show_grading = doc_variant in ['assessment_submission', 'assessment_result', 'assessor_report'] %}
+{% set show_candidate_table = doc_variant in ['assessment_submission', 'assessor_report'] %}
+{% set show_evaluation_header_table = doc_variant == 'assessment_result' %}
+{% set show_outcome_summary = doc_variant in ['assessment_submission', 'assessor_report'] %}
+{% set show_grading = doc_variant in ['assessment_submission', 'assessor_report'] %}
+{% set show_evaluation_grading = doc_variant == 'assessment_result' %}
 {% set show_report_guidance = doc_variant in ['assessment_submission', 'assessor_report'] %}
 {% set show_written_assessment = doc_variant in ['assessment_submission', 'assessor_report', 'assessor_narrative'] %}
+{% set show_evaluation_feedback = doc_variant == 'assessment_result' %}
 <!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel">
@@ -43,6 +47,7 @@
       </div>
 
       <form action="{{ url_for('mba.assessor_grade_form', project_id=project.id, slot=slot) }}" method="post" enctype="multipart/form-data" class="mba-doc-form assessor-doc-form" data-assessor-report-form>
+        {% if show_candidate_table %}
         <table class="mba-doc-table assessor-doc-table">
           <colgroup>
             <col style="width:23.3%;">
@@ -94,6 +99,67 @@
             <td><input class="mba-doc-input" type="date" name="certification_date" value="{{ prefill.get('certification_date','') }}" required></td>
           </tr>
         </table>
+        {% endif %}
+
+        {% if show_evaluation_header_table %}
+        <table class="mba-doc-table assessor-doc-table">
+          <colgroup>
+            <col style="width:50%;">
+            <col style="width:50%;">
+          </colgroup>
+          <tr>
+            <td class="mba-doc-label">Final Submission Evaluation:</td>
+            <td>Credits : 30 of 50</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td>Total: {{ prefill.get('grade','') }}/100</td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table assessor-doc-table">
+          <colgroup>
+            <col style="width:33.3%;">
+            <col style="width:33.3%;">
+            <col style="width:33.4%;">
+          </colgroup>
+          <tr>
+            <th>Student Name:</th>
+            <th>Student No.</th>
+            <th>Title of formal submission</th>
+          </tr>
+          <tr>
+            <td><input class="mba-doc-input" name="student_name" value="{{ prefill.get('student_name','') }}" readonly required></td>
+            <td><input class="mba-doc-input" name="student_number" value="{{ prefill.get('student_number','') }}" readonly required></td>
+            <td><textarea class="mba-doc-textarea mba-doc-textarea--line" name="research_title" rows="2" readonly required>{{ prefill.get('research_title','') }}</textarea></td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table assessor-doc-table">
+          <colgroup>
+            <col style="width:33.3%;">
+            <col style="width:33.3%;">
+            <col style="width:33.4%;">
+          </colgroup>
+          <tr>
+            <th>Marker</th>
+            <th>Signature</th>
+            <th>Date</th>
+          </tr>
+          <tr>
+            <td><input class="mba-doc-input" name="assessor_name" value="{{ prefill.get('assessor_name','') }}" required></td>
+            <td>
+              <div class="mba-doc-signature-field">
+                {% if prefill.get('assessor_signature_name_image') %}
+                  <img class="mba-doc-signature-image" src="{{ prefill.get('assessor_signature_name_image') }}" alt="Saved signature">
+                {% endif %}
+                <input class="mba-doc-input" name="assessor_signature_name" value="{{ prefill.get('assessor_signature_name','') }}" required>
+              </div>
+            </td>
+            <td><input class="mba-doc-input" type="date" name="certification_date" value="{{ prefill.get('certification_date','') }}" required></td>
+          </tr>
+        </table>
+        {% endif %}
 
         {% if show_outcome_summary %}
         {% set current_recommendation = prefill.get('recommendation') %}
@@ -249,10 +315,63 @@
         </table>
         {% endif %}
 
-        {% if doc_variant == 'assessment_result' %}
-        <p class="mba-doc-paragraph">
-          The full assessor narrative is filed separately in the accompanying assessor report forms.
-        </p>
+        {% if show_evaluation_grading %}
+        {% set evaluation_grade = prefill.get('grade') %}
+        {% set evaluation_grade_value = evaluation_grade|int(-1) %}
+        <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+          <colgroup>
+            <col style="width:25%;">
+            <col style="width:25%;">
+            <col style="width:50%;">
+          </colgroup>
+          <tr>
+            <th>Grade</th>
+            <th>Results %</th>
+            <th>Mark awarded to student (%)</th>
+          </tr>
+          <tr>
+            <td>A</td>
+            <td>75+</td>
+            <td>{{ evaluation_grade if evaluation_grade_value >= 75 else '' }}</td>
+          </tr>
+          <tr>
+            <td>B</td>
+            <td>70 - 74</td>
+            <td>{{ evaluation_grade if (evaluation_grade_value >= 70 and evaluation_grade_value < 75) else '' }}</td>
+          </tr>
+          <tr>
+            <td>C</td>
+            <td>60 - 69</td>
+            <td>{{ evaluation_grade if (evaluation_grade_value >= 60 and evaluation_grade_value < 70) else '' }}</td>
+          </tr>
+          <tr>
+            <td>D</td>
+            <td>50 - 59</td>
+            <td>{{ evaluation_grade if (evaluation_grade_value >= 50 and evaluation_grade_value < 60) else '' }}</td>
+          </tr>
+          <tr>
+            <td>Fail</td>
+            <td>&lt;50</td>
+            <td>{{ evaluation_grade if (evaluation_grade_value >= 0 and evaluation_grade_value < 50) else '' }}</td>
+          </tr>
+        </table>
+
+        <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
+          <colgroup>
+            <col style="width:50%;">
+            <col style="width:50%;">
+          </colgroup>
+          <tr>
+            <th>Section</th>
+            <th>Approximate weighting for final mark</th>
+          </tr>
+          <tr><td>5. Dilemma and dilemma questions</td><td>10%</td></tr>
+          <tr><td>7. Literature Review</td><td>25%</td></tr>
+          <tr><td>9. Analysis and results</td><td>25%</td></tr>
+          <tr><td>10. Recommendations</td><td>25%</td></tr>
+          <tr><td>Other sections</td><td>15%</td></tr>
+          <tr><td>Total mark awarded to student</td><td>100%</td></tr>
+        </table>
         {% endif %}
 
         {% if show_report_guidance %}
@@ -298,6 +417,22 @@
             </td>
           </tr>
         </table>
+        {% endif %}
+
+        {% if show_evaluation_feedback %}
+        <table class="mba-doc-table assessor-doc-table">
+          <tr>
+            <th>Section A: Overall marker feedback on student submission</th>
+          </tr>
+          <tr>
+            <td>
+              <textarea class="mba-doc-textarea" name="written_assessment" rows="10">{{ prefill.get('written_assessment','') }}</textarea>
+            </td>
+          </tr>
+        </table>
+        <p class="mba-doc-note">
+          Section-specific feedback (Section B) is captured separately in the companion assessor report.
+        </p>
         {% endif %}
 
         <div class="mba-doc-actions">

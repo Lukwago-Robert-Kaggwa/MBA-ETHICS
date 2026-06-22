@@ -6,6 +6,7 @@
 
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
+{% set single_project_view = single_project_view|default(false) %}
 {% macro person_name(user, fallback='Unassigned') -%}
   {%- if user -%}
     {%- set full_name = ((user.first_name or '') ~ (' ' ~ user.last_name if user.last_name else '')) | trim -%}
@@ -18,6 +19,7 @@
 <section class="ethics-panel" id="hdc-queue">
   {% set current_approval_label = approval_labels.get(approval_set, 'HDC Approvals') if approval_labels is defined else 'HDC Approvals' %}
   {% set has_hdc_filters = approval_set != 'overview' or review_status != 'pending_review' or hdc_student_number %}
+  {% if not single_project_view %}
   <div class="panel-heading">
     <h2>{{ current_approval_label }}</h2>
     <span>{{ hdc_pagination.total }}</span>
@@ -47,6 +49,15 @@
         <small>pending review</small>
       </div>
       <b aria-hidden="true"><i class="bi bi-award-fill"></i></b>
+    </a>
+    {% set hdc_nav = mba_hdc_approval_nav() %}
+    <a href="{{ url_for('mba.admin_additional_assessment', assessment_status='all') }}" class="dashboard-stat-card dashboard-stat-card--amber">
+      <div>
+        <span>Additional Assessor Approvals</span>
+        <strong>{{ hdc_nav.additional_nominations }}</strong>
+        <small>pending review</small>
+      </div>
+      <b aria-hidden="true"><i class="bi bi-plus-square-fill"></i></b>
     </a>
   </div>
 
@@ -86,9 +97,10 @@
   {% set pagination = hdc_pagination %}
   {% set item_label = 'capstone projects' %}
   {% include "mba/_project_pagination.html" %}
+  {% endif %}
   <div class="record-list mba-work-project-list">
     {% for project in projects %}
-      {% call project_disclosure(project, 'project-disclosure--hdc') %}
+      {% call project_disclosure(project, 'project-disclosure--hdc', open_only=single_project_view, detail_url=url_for('mba.hdc_project_detail', project_id=project.id)) %}
       <div class="mba-work-project-stack">
         {% set show_assessor_profile_hover = true %}
         {% include "mba/_project_card.html" %}
@@ -133,7 +145,7 @@
                   {% set form = proj_forms.get(doc.doc_type) %}
                   {% set is_result_summary_doc = doc.doc_type == 'assessment_summary' %}
                   {% set native_word_doc = doc.doc_type in ['assessment_summary', 'external_examiner_nomination', 'additional_external_examiner_nomination', 'intent_to_submit'] or doc.doc_type.startswith('assessor_report_') or doc.doc_type.startswith('assessor_temp_appointment_') or doc.doc_type.startswith('assessor_temp_claim_') %}
-                  {% set hdc_signature_editable_doc = (doc.doc_type == 'jbs5' and project.project_status == 'jbs5_submitted_to_hdc') or (doc.doc_type in ['jbs10', 'intent_to_submit'] and project.project_status == 'admin_approved') or (doc.doc_type == 'assessment_summary' and project.project_status == 'results_submitted_to_hdc') or doc.doc_type in ['external_examiner_nomination', 'additional_external_examiner_nomination'] %}
+                  {% set hdc_signature_editable_doc = (doc.doc_type == 'jbs5' and project.project_status == 'jbs5_submitted_to_hdc') or (doc.doc_type in ['jbs10', 'intent_to_submit'] and project.project_status == 'admin_approved') or (doc.doc_type == 'assessment_summary' and project.project_status == 'results_submitted_to_hdc') or doc.doc_type == 'external_examiner_nomination' %}
                   {% set hdc_signature_status = hdc_document_signature_status(project, doc.doc_type, form) if hdc_document_signature_status is defined else none %}
                   <tr>
                     <td>
@@ -305,12 +317,16 @@
       </div>
       {% endcall %}
     {% else %}
+      {% if not single_project_view %}
       <p class="muted">No {{ current_approval_label|lower }} match this queue.</p>
+      {% endif %}
     {% endfor %}
   </div>
+  {% if not single_project_view %}
   {% set pagination = hdc_pagination %}
   {% set item_label = 'capstone projects' %}
   {% include "mba/_project_pagination.html" %}
+  {% endif %}
 </section>
 </div>
 {% endblock %}

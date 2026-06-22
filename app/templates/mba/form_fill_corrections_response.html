@@ -118,12 +118,17 @@
             text-align: left;
           }
 
-          .corrections-response-table th:last-child {
+          .corrections-response-table th:nth-child(3) {
             text-align: right;
           }
 
           .corrections-response-table td {
             padding: 5px 7px;
+          }
+
+          .corrections-response-row-number {
+            text-align: center;
+            font-weight: 700;
           }
 
           .corrections-response-table textarea {
@@ -171,26 +176,37 @@
           </h3>
           <table class="corrections-response-table">
             <colgroup>
-              <col style="width:51.3%;">
-              <col style="width:48.7%;">
+              <col style="width:4%;">
+              <col style="width:34.2%;">
+              <col style="width:32.4%;">
+              <col style="width:29.4%;">
             </colgroup>
             <tr>
-              <th>ASSESSOR’S COMMENT</th>
+              <th></th>
+              <th>ASSESSOR’S FEEDBACK</th>
               <th>STUDENT’S RESPONSE</th>
+              <th>SUPERVISORS’ COMMENTS ({{ prefill.get('supervisor_name','') or 'Insert Supervisor Name Here' }})</th>
             </tr>
             {% for row_number in range(1, section.rows + 1) %}
               {% set comment_key = section.slot ~ '_comment_' ~ row_number %}
               {% set response_key = section.slot ~ '_response_' ~ row_number %}
+              {% set supervisor_comment_key = section.slot ~ '_supervisor_comment_' ~ row_number %}
               {% set comment_value = prefill.get(comment_key, '') %}
               {% set response_value = prefill.get(response_key, '') %}
+              {% set supervisor_comment_value = prefill.get(supervisor_comment_key, '') %}
               {% set comment_rows = 2 if comment_value|length < 140 else 4 if comment_value|length < 360 else 7 if comment_value|length < 720 else 10 %}
               {% set response_rows = 2 if response_value|length < 140 else 4 if response_value|length < 360 else 7 if response_value|length < 720 else 10 %}
+              {% set supervisor_comment_rows = 2 if supervisor_comment_value|length < 140 else 4 if supervisor_comment_value|length < 360 else 7 if supervisor_comment_value|length < 720 else 10 %}
               <tr>
+                <td class="corrections-response-row-number">{{ row_number }}</td>
                 <td>
                   <textarea name="{{ comment_key }}" rows="{{ comment_rows }}" readonly>{{ comment_value }}</textarea>
                 </td>
                 <td>
                   <textarea name="{{ response_key }}" rows="{{ response_rows }}">{{ response_value }}</textarea>
+                </td>
+                <td>
+                  <textarea name="{{ supervisor_comment_key }}" rows="{{ supervisor_comment_rows }}" readonly>{{ supervisor_comment_value }}</textarea>
                 </td>
               </tr>
             {% endfor %}

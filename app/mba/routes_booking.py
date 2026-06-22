@@ -6,7 +6,7 @@ from flask import Response, abort, jsonify, redirect, render_template, request, 
 from flask_login import current_user, login_required
 from sqlalchemy.orm import joinedload
 
-from ..extensions import db
+from ..extensions import db, limiter
 from ..models import (
     MbaBookingDay,
     MbaBookingPanel,
@@ -175,6 +175,7 @@ def booking_page():
 
 @mba_bp.route("/booking/api/me")
 @login_required
+@limiter.limit("60/minute")
 def booking_me():
     if current_user.system_name != "mba":
         abort(403)
@@ -201,6 +202,7 @@ def booking_me():
 
 @mba_bp.route("/booking/api/schedule")
 @login_required
+@limiter.limit("60/minute")
 def booking_schedule():
     if current_user.system_name != "mba":
         abort(403)
@@ -227,6 +229,8 @@ def booking_schedule():
 
 @mba_bp.route("/booking/api/bookings", methods=["GET", "POST", "DELETE"])
 @login_required
+@limiter.limit("20/minute", methods=["POST", "DELETE"])
+@limiter.limit("60/minute", methods=["GET"])
 def booking_bookings():
     if current_user.system_name != "mba":
         abort(403)
@@ -314,6 +318,7 @@ def booking_bookings():
 
 @mba_bp.route("/booking/api/system-counts")
 @login_required
+@limiter.limit("60/minute")
 def booking_system_counts():
     if current_user.system_name != "mba":
         abort(403)
@@ -327,6 +332,7 @@ def booking_system_counts():
 
 @mba_bp.route("/booking/api/supervisors/search")
 @login_required
+@limiter.limit("60/minute")
 def booking_search_supervisors():
     if current_user.system_name != "mba":
         abort(403)

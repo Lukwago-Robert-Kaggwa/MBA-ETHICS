@@ -319,10 +319,11 @@
             </label>
           {% endif %}
           <label>New password
-            <input type="password" name="new_password" autocomplete="new-password" minlength="8" required>
+            <input type="password" name="new_password" autocomplete="new-password" minlength="10" required>
+            <small>At least 10 characters, with at least 3 of: uppercase, lowercase, numbers, symbols.</small>
           </label>
           <label>Confirm new password
-            <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required>
+            <input type="password" name="confirm_password" autocomplete="new-password" minlength="10" required>
           </label>
           <button class="primary-button" type="submit">{{ 'Update Password' if current_user.password_hash else 'Set Password' }}</button>
         </form>

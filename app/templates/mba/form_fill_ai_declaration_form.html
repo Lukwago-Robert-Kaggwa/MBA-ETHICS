@@ -5,9 +5,10 @@
 {% block page_subheading %}{{ project.project_title }}{% endblock %}
 
 {% block body %}
+<!-- MBA_FORM_START -->
 <div class="mba-page-stack mba-doc-page">
-  <section class="ethics-panel">
-    <div class="mba-doc-paper">
+  <section class="ethics-panel jbs-template-panel">
+    <div class="mba-doc-paper mba-doc-paper--integrity integrity-doc">
       <div class="mba-doc-header mba-doc-header--centered">
         <img class="mba-doc-logo" src="{{ url_for('static', filename='img/uj_logo.png') }}" alt="University of Johannesburg logo">
         <div class="mba-doc-title-stack">
@@ -18,37 +19,37 @@
         </div>
       </div>
 
-      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='ai_declaration_form') }}" method="post" class="mba-doc-form">
-        <table class="mba-doc-table">
+      <form action="{{ url_for('mba.fill_project_form', project_id=project.id, form_type='ai_declaration_form') }}" method="post" class="mba-doc-form integrity-doc-form">
+        <table class="mba-doc-table integrity-doc-table">
           <colgroup>
             <col style="width:28%;">
             <col style="width:72%;">
           </colgroup>
           <tr>
-            <td class="mba-doc-label">Course</td>
+            <td class="mba-doc-label">Course:</td>
             <td><input class="mba-doc-input" name="course_name" value="{{ prefill.get('course_name','') }}" required></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Module</td>
+            <td class="mba-doc-label">Module:</td>
             <td><input class="mba-doc-input" name="module_title" value="{{ prefill.get('module_title','') }}" required></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Assessment</td>
+            <td class="mba-doc-label">Assessment:</td>
             <td><textarea class="mba-doc-textarea mba-doc-textarea--line" name="assessment_title" rows="2" readonly required>{{ prefill.get('assessment_title','') }}</textarea></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Lecturer</td>
+            <td class="mba-doc-label">Lecturer:</td>
             <td><input class="mba-doc-input" name="lecturer_name" value="{{ prefill.get('lecturer_name','') }}"></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Due Date</td>
+            <td class="mba-doc-label">Due Date:</td>
             <td><input class="mba-doc-input" type="date" name="due_date" value="{{ prefill.get('due_date','') }}" required></td>
           </tr>
         </table>
 
         <div class="mba-doc-center" style="font-weight:700;">DETAILS OF INDIVIDUAL</div>
 
-        <table class="mba-doc-table mba-doc-table--center">
+        <table class="mba-doc-table mba-doc-table--center integrity-doc-table integrity-doc-members-table">
           <colgroup>
             <col style="width:40%;">
             <col style="width:25%;">
@@ -68,13 +69,13 @@
 
         <div class="mba-doc-form" style="gap:10px;">
           <p class="mba-doc-paragraph">By completing this form, I hereby confirm that:</p>
-          <p class="mba-doc-paragraph">The document I have submitted or contributed to was written by me.</p>
-          <p class="mba-doc-paragraph">I have acknowledged the use of any generative AI tools as and where relevant.</p>
-          <p class="mba-doc-paragraph">I understand that the misuse of AI tools without approval or proper motivation for the use of the tools is academic misconduct.</p>
-          <p class="mba-doc-paragraph">I understand that I will be held accountable and liable for any academic misconduct that arises in breach of any relevant University policy.</p>
+          <p class="mba-doc-paragraph">The document I have submitted/contributed was written by me.</p>
+          <p class="mba-doc-paragraph">I have acknowledged the use of any generative AI tools as / where relevant (list below as applicable).</p>
+          <p class="mba-doc-paragraph">I understand that the misuse of AI tools without receiving approval to use the tools or substantial motivation for the use of said tools is academic misconduct.</p>
+          <p class="mba-doc-paragraph">I understand that I will be held accountable and liable for any academic misconduct that arises in breach of any relevant University policy, as well as for the legal of financial consequences of such infringements.</p>
         </div>
 
-        <table class="mba-doc-table">
+        <table class="mba-doc-table integrity-doc-table integrity-doc-ai-table">
           <colgroup>
             <col style="width:32%;">
             <col style="width:28%;">
@@ -102,7 +103,7 @@
           </tr>
         </table>
 
-        <table class="mba-doc-table mba-doc-table--tight">
+        <table class="mba-doc-table mba-doc-table--tight integrity-doc-table">
           <tr>
             <td class="mba-doc-label" style="width:24%;">Declaration Date</td>
             <td><input class="mba-doc-input" type="date" name="signature_date" value="{{ prefill.get('signature_date','') }}" required></td>
@@ -124,4 +125,5 @@
     </div>
   </section>
 </div>
+<!-- MBA_FORM_END -->
 {% endblock %}

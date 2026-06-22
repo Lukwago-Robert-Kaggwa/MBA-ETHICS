@@ -6,17 +6,21 @@
 
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
+{% set single_project_view = single_project_view|default(false) %}
 <div class="mba-page-stack">
+  {% if not single_project_view %}
   {% include "mba/_kpis.html" %}
+  {% endif %}
   {% set vc = view_counts|default({'all': projects|length, 'awaiting': 0, 'declined': 0, 'accepted': 0}, true) %}
   {% set sv = selected_view|default('all', true) %}
   {% set isp = invitation_state_by_project|default({}, true) %}
   {% set dbp = documents_by_project|default({}, true) %}
-  {% set active_panel = request.args.get('panel', 'projects') %}
+  {% set active_panel = 'projects' if single_project_view else request.args.get('panel', 'projects') %}
   {% if active_panel not in ['disciplines', 'projects', 'assessors', 'supervisors', 'students'] %}
   {% set active_panel = 'projects' %}
   {% endif %}
   {% set admin_reminders_nav = mba_reminders_nav() %}
+  {% if not single_project_view %}
   <nav class="portal-tabs" aria-label="Admin workspace sections">
     <a href="#admin-overview" class="portal-tab portal-tab--overview">
       <span aria-hidden="true"><i class="bi bi-grid-1x2"></i></span>
@@ -54,6 +58,7 @@
     </a>
     {% endif %}
   </nav>
+  {% endif %}
   {% macro person_name(user, fallback='Unassigned') -%}
   {%- if user -%}
   {%- set full_name = ((user.first_name or '') ~ (' ' ~ user.last_name if user.last_name else '')) | trim -%}
@@ -111,6 +116,7 @@
 
   {% if active_panel == 'projects' %}
   <section class="ethics-panel" id="project-queue">
+    {% if not single_project_view %}
     <div class="panel-heading">
       <h2>Project Queue</h2>
       <span>{{ project_pagination.total }} capstone projects</span>
@@ -226,6 +232,7 @@
     {% set pagination = project_pagination %}
     {% set item_label = 'capstone projects' %}
     {% include "mba/_project_pagination.html" %}
+    {% endif %}
     <div class="record-list">
       {% for project in projects if project.project_status != 'created' %}
       {% set suggestions = suggestions_by_project.get(project.id) %}
@@ -330,8 +337,10 @@
       and not hdc_rejection_without_slot_decisions
       %}
       {% set jbs5_pending_hdc = project.project_status == 'jbs5_submitted_to_hdc' %}
+      {% set co_supervisor_acceptance_satisfied = not project.co_supervisor_required or project.co_supervisor_invitation_status
+      == 'accepted' %}
       {% set can_forward_jbs5_to_hdc = jbs5_supervisor_signed and not project.jbs5_hdc_approved_at and not
-      jbs5_pending_hdc %}
+      jbs5_pending_hdc and co_supervisor_acceptance_satisfied %}
       {% set can_return_jbs5_to_student = project.project_status in ['admin_submitted', 'supervisor_accepted', 'admin_declined'] and not project.jbs5_hdc_approved_at and not jbs5_pending_hdc and jbs5_form %}
       {% set suggested_supervisor_count = suggestions.ranked_supervisors|length if suggestions and
       suggestions.ranked_supervisors else 0 %}
@@ -373,6 +382,8 @@
       {% set forward_jbs5_reason = 'JBS5 has already been forwarded to HDC and is awaiting review.' %}
       {% elif not jbs5_supervisor_signed %}
       {% set forward_jbs5_reason = 'The supervisor must sign JBS5 before it can be forwarded to HDC.' %}
+      {% elif not co_supervisor_acceptance_satisfied %}
+      {% set forward_jbs5_reason = 'The co-supervisor must accept their invitation before JBS5 can be forwarded to HDC.' %}
       {% else %}
       {% set forward_jbs5_reason = 'JBS5 is not ready to forward yet.' %}
       {% endif %}
@@ -477,7 +488,7 @@
       {% set module_verified = module_completion_allows_hdc_submission(project) %}
       {% set results_hdc_submission_status = project.project_status in ['hdc_verified', 'results_declined'] %}
       {% set module_verification_ready = results_hdc_submission_status and all_assessment_results_received(project) and
-      assessment_summary_signed and not corrections_block_hdc_submission(project) and not
+      not corrections_block_hdc_submission(project) and not
       additional_assessment_blocks_hdc_submission(project) %}
       {% set can_request_module_verification = module_verification_ready and not module_verified and not
       module_verification_pending %}
@@ -489,8 +500,6 @@
       {% elif project.module_completion_status == 'modules_incomplete' %}
       {% set module_verification_reason = '' if module_verification_ready else 'The Marks Committee reported that
       modules are incomplete. Request another verification after follow-up.' %}
-      {% elif not assessment_summary_signed %}
-      {% set module_verification_reason = 'The supervisor must sign the assessment summary before module verification and HDC results submission can continue.' %}
       {% elif not module_verification_ready %}
       {% set module_verification_reason = 'Assessment results, corrections, and additional assessment checks must be
       complete before requesting module verification.' %}
@@ -519,7 +528,7 @@
       {% set submit_results_reason = 'Request and receive Marks Committee coursework marks before sending
       results to HDC.' %}
       {% endif %}
-      {% elif not manuscript_doc %}
+      {% elif not uploaded_doc_for(project, 'manuscript') %}
       {% set submit_results_reason = 'Cannot forward to HDC: Manuscript has not been uploaded.' %}
       {% elif missing_hdc_result_docs %}
       {% set missing_doc_names %}{% for doc_key in missing_hdc_result_docs %}{{ document_label(doc_key) }}{% if not
@@ -752,7 +761,7 @@
       ] %}
       {% set progression_current = progression_stages | selectattr('current') | list | first %}
       {% set progression_current_label = progression_current.label if progression_current else ('Graduated' if project.project_status == 'graduated' else 'Workflow complete') %}
-      {% call project_disclosure(project, 'project-disclosure--admin') %}
+      {% call project_disclosure(project, 'project-disclosure--admin', open_only=single_project_view, detail_url=url_for('mba.admin_project_detail', project_id=project.id)) %}
       <article class="record-card admin-project-card">
         <div class="record-card__top">
           <div>
@@ -942,6 +951,53 @@
                           {% endfor %}
                         </div>
                       </div>
+                    </div>
+                  </div>
+                </details>
+                {% endif %}
+                {% set proposed_co_supervisors_text = (jbs5_form.payload.get('proposed_co_supervisors') if jbs5_form and jbs5_form.payload else '') | trim %}
+                {% if not workflow_jbs5_complete and (proposed_co_supervisors_text or project.co_supervisor_required) %}
+                <details class="stage-expander" id="project-{{ project.id }}-co-supervisor-controls">
+                  <summary>
+                    <span>Co-supervisor controls</span>
+                    <span class="stage-expander__toggle"><span class="stage-expander__expand">Expand</span><span class="stage-expander__collapse">Collapse</span></span>
+                  </summary>
+                  <div class="stage-expander__body">
+                    <div class="admin-project-subsection">
+                      <h5 class="admin-subsection-title">Co-supervisor</h5>
+                      {% if proposed_co_supervisors_text %}
+                      <p class="admin-project-helper">Student proposed: <strong>{{ proposed_co_supervisors_text }}</strong></p>
+                      {% endif %}
+                      {% if project.co_supervisor_id %}
+                      <p class="admin-project-helper">
+                        Invited: {{ person_name(project.co_supervisor) }}
+                        &mdash; status: {{ (project.co_supervisor_invitation_status or 'not sent').replace('_', ' ').title() }}
+                      </p>
+                      {% endif %}
+                      {% set co_supervisor_change_locked = project.co_supervisor_invitation_status == 'accepted' %}
+                      {% if co_supervisor_change_locked %}
+                      <p class="admin-project-helper">Co-supervisor is locked after acceptance.</p>
+                      {% else %}
+                      <label class="admin-field-group">
+                        <span>Select co-supervisor to invite</span>
+                        <select name="co_supervisor_id" class="form-select admin-filter-input">
+                          <option value="">Select co-supervisor</option>
+                          {% for supervisor in supervisors %}
+                          <option value="{{ supervisor.id }}" title="{{ supervisor.email }}" {% if project.co_supervisor_id==supervisor.id %}selected{% endif %}>{{ person_name(supervisor) }} - {{ supervisor.email }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
+                      <div class="admin-stage-actions admin-redesign-actions">
+                        <button type="submit" name="action" value="invite_co_supervisor" class="secondary-button small-button">
+                          {{ 'Replace Co-Supervisor' if project.co_supervisor_id else 'Invite Co-Supervisor' }}
+                        </button>
+                        {% if project.co_supervisor_required %}
+                        <button type="submit" name="action" value="withdraw_co_supervisor_requirement" class="secondary-button small-button">
+                          This project does not need a co-supervisor
+                        </button>
+                        {% endif %}
+                      </div>
+                      {% endif %}
                     </div>
                   </div>
                 </details>
@@ -1330,6 +1386,9 @@
                   <span>Manuscript Moodle upload: {{ project.manuscript_moodle_uploaded_at.strftime('%d %b %Y %H:%M') if project.manuscript_moodle_uploaded_at else 'Not recorded' }}</span>
                   <span>Results to HDC: {{ 'Sent' if project.project_status in ['results_submitted_to_hdc', 'results_approved', 'graduated'] else 'Not sent' }}</span>
                 </div>
+                {% if missing_hdc_result_docs %}
+                <p class="admin-outstanding-docs">Outstanding documents before HDC submission: {% for doc_key in missing_hdc_result_docs %}{{ document_label(doc_key) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+                {% endif %}
                 {% if workflow_module_hdc_current %}
                 <div class="admin-stage-actions admin-redesign-actions">
                   {% if can_request_module_verification %}
@@ -1611,9 +1670,11 @@
       <p class="muted">No projects match this filter.</p>
       {% endif %}
     </div>
+    {% if not single_project_view %}
     {% set pagination = project_pagination %}
     {% set item_label = 'capstone projects' %}
     {% include "mba/_project_pagination.html" %}
+    {% endif %}
   </section>
   {% endif %}
 

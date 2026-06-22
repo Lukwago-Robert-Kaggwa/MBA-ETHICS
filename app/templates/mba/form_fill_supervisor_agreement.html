@@ -6,6 +6,7 @@
 
 {% block body %}
 {% set student_acceptance = student_acceptance|default(false) %}
+{% set co_supervisor_signature_mode = co_supervisor_signature_mode|default(false) %}
 {% set readonly_for_student = student_acceptance %}
 {% set student_number_value = prefill.get('student_number', '') %}
 {% set co_supervisor_has_signature = prefill.get('co_supervisor_full_name') or prefill.get('co_supervisor_signature') or prefill.get('co_supervisor_signature_name') %}
@@ -18,15 +19,15 @@
 <div class="mba-page-stack mba-doc-page">
   <section class="ethics-panel">
     <div class="mba-doc-paper supervisor-agreement-doc">
-      <form id="supervisor-agreement-form" action="{% if student_acceptance %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='supervisor_agreement') }}{% else %}{{ url_for('mba.supervisor_fill_form', project_id=project.id) }}{% endif %}" method="post" class="mba-doc-form supervisor-agreement-form">
+      <form id="supervisor-agreement-form" action="{% if student_acceptance %}{{ url_for('mba.fill_project_form', project_id=project.id, form_type='supervisor_agreement') }}{% elif co_supervisor_signature_mode %}{{ url_for('mba.co_supervisor_fill_form', project_id=project.id) }}{% else %}{{ url_for('mba.supervisor_fill_form', project_id=project.id) }}{% endif %}" method="post" class="mba-doc-form supervisor-agreement-form">
         <input type="hidden" name="research_title" value="{{ prefill.get('research_title', project.project_title) }}">
         <input type="hidden" name="student_signature_date" value="{{ prefill.get('student_signature_date', '') }}">
         <input type="hidden" name="supervisor_signature_date" value="{{ prefill.get('supervisor_signature_date', '') }}">
 
         <table class="mba-doc-table supervisor-agreement-table supervisor-agreement-header">
           <colgroup>
-            <col style="width:24%;">
-            <col style="width:76%;">
+            <col style="width:17.28%;">
+            <col style="width:82.72%;">
           </colgroup>
           <tr>
             <td class="supervisor-agreement-logo-cell">
@@ -54,10 +55,10 @@
 
         <table class="mba-doc-table supervisor-agreement-table">
           <colgroup>
-            <col style="width:28%;">
-            <col style="width:34%;">
-            <col style="width:14%;">
-            <col style="width:24%;">
+            <col style="width:22.79%;">
+            <col style="width:28.6%;">
+            <col style="width:8.35%;">
+            <col style="width:40.27%;">
           </colgroup>
           <tr>
             <th class="mba-doc-section-title" colspan="4">BETWEEN A MASTER&rsquo;S/DOCTORAL STUDENT</th>
@@ -77,27 +78,35 @@
         <div class="supervisor-agreement-center-title">AND</div>
 
         <table class="mba-doc-table supervisor-agreement-table">
+          <colgroup>
+            <col style="width:22.79%;">
+            <col style="width:77.21%;">
+          </colgroup>
           <tr>
             <th class="mba-doc-section-title" colspan="2">THE SUPERVISOR</th>
           </tr>
           <tr>
-            <td class="mba-doc-label" style="width:34%;">Full name(s) and surname of supervisor</td>
-            <td><input class="mba-doc-input" name="supervisor_full_name" value="{{ prefill.get('supervisor_full_name', '') }}" required {% if readonly_for_student %}readonly{% endif %}></td>
+            <td class="mba-doc-label">Full name(s) and surname of supervisor</td>
+            <td><input class="mba-doc-input" name="supervisor_full_name" value="{{ prefill.get('supervisor_full_name', '') }}" required {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% endif %}></td>
           </tr>
           <tr>
             <td class="mba-doc-label">School/Department</td>
-            <td><input class="mba-doc-input" name="department" value="{{ prefill.get('department', '') }}" {% if readonly_for_student %}readonly{% endif %}></td>
+            <td><input class="mba-doc-input" name="department" value="{{ prefill.get('department', '') }}" {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% endif %}></td>
           </tr>
         </table>
 
         <div class="supervisor-agreement-center-title">AND (If applicable)</div>
 
         <table class="mba-doc-table supervisor-agreement-table">
+          <colgroup>
+            <col style="width:22.79%;">
+            <col style="width:77.21%;">
+          </colgroup>
           <tr>
             <th class="mba-doc-section-title" colspan="2">THE CO-SUPERVISOR</th>
           </tr>
           <tr>
-            <td class="mba-doc-label" style="width:34%;">Full name(s) and surname of co-supervisor</td>
+            <td class="mba-doc-label">Full name(s) and surname of co-supervisor</td>
             <td><input class="mba-doc-input" name="co_supervisor_full_name" value="{{ prefill.get('co_supervisor_full_name', '') }}" {% if readonly_for_student %}readonly{% endif %}></td>
           </tr>
           <tr>
@@ -117,12 +126,24 @@
             <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-initials-fill" name="student_initials" value="{{ prefill.get('student_initials', '') }}" readonly>
             <span>(hereafter called the student)</span>
           </p>
-          <p>Student number</p>
         </div>
 
         <table class="mba-doc-table supervisor-agreement-number-table">
+          <colgroup>
+            <col style="width:17.35%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+            <col style="width:9.18%;">
+          </colgroup>
           <tr>
-            {% for index in range(10) %}
+            <td class="mba-doc-label">Student number</td>
+            {% for index in range(9) %}
               <td>{{ student_number_value[index:index + 1] }}</td>
             {% endfor %}
           </tr>
@@ -243,31 +264,31 @@
 
           <p class="supervisor-agreement-signing-line">
             <span>(b) Signed at</span>
-            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-location-fill" name="supervisor_signing_location" value="{{ prefill.get('supervisor_signing_location', '') }}" {% if readonly_for_student %}readonly{% else %}required{% endif %}>
+            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-location-fill" name="supervisor_signing_location" value="{{ prefill.get('supervisor_signing_location', '') }}" {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
             <span>on this</span>
-            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-day-fill" name="supervisor_signature_day" value="{{ prefill.get('supervisor_signature_day', '') }}" {% if readonly_for_student %}readonly{% else %}required{% endif %}>
+            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-day-fill" name="supervisor_signature_day" value="{{ prefill.get('supervisor_signature_day', '') }}" {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
             <span>day of</span>
-            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-month-fill" name="supervisor_signature_month" value="{{ prefill.get('supervisor_signature_month', '') }}" {% if readonly_for_student %}readonly{% else %}required{% endif %}>
-            <span class="supervisor-agreement-year-tail"><span>20</span><input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-year-fill" name="supervisor_signature_year" value="{{ prefill.get('supervisor_signature_year', '') }}" {% if readonly_for_student %}readonly{% else %}required{% endif %}><span>.</span></span>
+            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-month-fill" name="supervisor_signature_month" value="{{ prefill.get('supervisor_signature_month', '') }}" {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
+            <span class="supervisor-agreement-year-tail"><span>20</span><input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-year-fill" name="supervisor_signature_year" value="{{ prefill.get('supervisor_signature_year', '') }}" {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% else %}required{% endif %}><span>.</span></span>
           </p>
           <div class="supervisor-agreement-signature-pair">
-            <div class="mba-doc-signature-field">{{ signature_preview('supervisor_signature') }}<input class="mba-doc-input supervisor-agreement-line-fill" name="supervisor_signature" value="{{ prefill.get('supervisor_signature', '') }}" {% if readonly_for_student %}readonly{% else %}required{% endif %}></div>
-            <input class="mba-doc-input supervisor-agreement-line-fill" name="supervisor_signature_name" value="{{ prefill.get('supervisor_signature_name', prefill.get('supervisor_full_name', '')) }}" {% if readonly_for_student %}readonly{% else %}required{% endif %}>
+            <div class="mba-doc-signature-field">{{ signature_preview('supervisor_signature') }}<input class="mba-doc-input supervisor-agreement-line-fill" name="supervisor_signature" value="{{ prefill.get('supervisor_signature', '') }}" {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% else %}required{% endif %}></div>
+            <input class="mba-doc-input supervisor-agreement-line-fill" name="supervisor_signature_name" value="{{ prefill.get('supervisor_signature_name', prefill.get('supervisor_full_name', '')) }}" {% if readonly_for_student or co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
           </div>
           <div class="supervisor-agreement-signature-labels"><span>SUPERVISOR</span><span>Name printed</span></div>
 
           <p class="supervisor-agreement-signing-line">
             <span>(c) Signed at</span>
-            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-location-fill" name="co_supervisor_signing_location" value="{{ prefill.get('co_supervisor_signing_location', '') if co_supervisor_has_signature else '' }}" {% if readonly_for_student %}readonly{% endif %}>
+            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-location-fill" name="co_supervisor_signing_location" value="{{ prefill.get('co_supervisor_signing_location', '') if (co_supervisor_has_signature or co_supervisor_signature_mode) else '' }}" {% if readonly_for_student or not co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
             <span>on this</span>
-            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-day-fill" name="co_supervisor_signature_day" value="{{ prefill.get('co_supervisor_signature_day', '') if co_supervisor_has_signature else '' }}" {% if readonly_for_student %}readonly{% endif %}>
+            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-day-fill" name="co_supervisor_signature_day" value="{{ prefill.get('co_supervisor_signature_day', '') if (co_supervisor_has_signature or co_supervisor_signature_mode) else '' }}" {% if readonly_for_student or not co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
             <span>day of</span>
-            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-month-fill" name="co_supervisor_signature_month" value="{{ prefill.get('co_supervisor_signature_month', '') if co_supervisor_has_signature else '' }}" {% if readonly_for_student %}readonly{% endif %}>
-            <span class="supervisor-agreement-year-tail"><span>20</span><input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-year-fill" name="co_supervisor_signature_year" value="{{ prefill.get('co_supervisor_signature_year', '') if co_supervisor_has_signature else '' }}" {% if readonly_for_student %}readonly{% endif %}><span>.</span></span>
+            <input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-month-fill" name="co_supervisor_signature_month" value="{{ prefill.get('co_supervisor_signature_month', '') if (co_supervisor_has_signature or co_supervisor_signature_mode) else '' }}" {% if readonly_for_student or not co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
+            <span class="supervisor-agreement-year-tail"><span>20</span><input class="mba-doc-input supervisor-agreement-line-fill supervisor-agreement-year-fill" name="co_supervisor_signature_year" value="{{ prefill.get('co_supervisor_signature_year', '') if (co_supervisor_has_signature or co_supervisor_signature_mode) else '' }}" {% if readonly_for_student or not co_supervisor_signature_mode %}readonly{% else %}required{% endif %}><span>.</span></span>
           </p>
           <div class="supervisor-agreement-signature-pair">
-            <div class="mba-doc-signature-field">{{ signature_preview('co_supervisor_signature') }}<input class="mba-doc-input supervisor-agreement-line-fill" name="co_supervisor_signature" value="{{ prefill.get('co_supervisor_signature', '') if co_supervisor_has_signature else '' }}" {% if readonly_for_student %}readonly{% endif %}></div>
-            <input class="mba-doc-input supervisor-agreement-line-fill" name="co_supervisor_signature_name" value="{{ prefill.get('co_supervisor_signature_name', prefill.get('co_supervisor_full_name', '')) if co_supervisor_has_signature else '' }}" {% if readonly_for_student %}readonly{% endif %}>
+            <div class="mba-doc-signature-field">{{ signature_preview('co_supervisor_signature') }}<input class="mba-doc-input supervisor-agreement-line-fill" name="co_supervisor_signature" value="{{ prefill.get('co_supervisor_signature', '') if (co_supervisor_has_signature or co_supervisor_signature_mode) else '' }}" {% if readonly_for_student or not co_supervisor_signature_mode %}readonly{% else %}required{% endif %}></div>
+            <input class="mba-doc-input supervisor-agreement-line-fill" name="co_supervisor_signature_name" value="{{ prefill.get('co_supervisor_signature_name', prefill.get('co_supervisor_full_name', '')) if (co_supervisor_has_signature or co_supervisor_signature_mode) else '' }}" {% if readonly_for_student or not co_supervisor_signature_mode %}readonly{% else %}required{% endif %}>
           </div>
           <div class="supervisor-agreement-signature-labels"><span>CO-SUPERVISOR</span><span>Name printed</span></div>
         </div>
@@ -278,7 +299,7 @@
 </div>
 <!-- MBA_FORM_END -->
 <div class="supervisor-agreement-submit-controls">
-  <button class="primary-button" type="submit" form="supervisor-agreement-form">{% if student_acceptance %}Submit Supervisor Agreement{% else %}Submit Form & Accept Invitation{% endif %}</button>
+  <button class="primary-button" type="submit" form="supervisor-agreement-form">{% if student_acceptance %}Submit Supervisor Agreement{% elif co_supervisor_signature_mode %}Submit Form & Accept Co-Supervisor Invitation{% else %}Submit Form & Accept Invitation{% endif %}</button>
   <a href="{% if student_acceptance %}{{ url_for('mba.student_dashboard') }}{% else %}{{ url_for('mba.scholar_dashboard') }}{% endif %}" class="secondary-button">Cancel</a>
 </div>
 {% endblock %}

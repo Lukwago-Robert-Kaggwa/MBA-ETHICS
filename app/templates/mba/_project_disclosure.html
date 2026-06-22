@@ -11,7 +11,14 @@
   {%- endif -%}
 {%- endmacro %}
 
-{% macro project_disclosure(project, extra_class='') -%}
+{% macro project_disclosure(project, extra_class='', open_only=false, detail_url=none) -%}
+{%- if open_only -%}
+<div class="project-disclosure project-disclosure--open{% if extra_class %} {{ extra_class }}{% endif %}">
+  <div class="project-disclosure__content">
+    {{ caller() }}
+  </div>
+</div>
+{%- else -%}
 <details class="project-disclosure{% if extra_class %} {{ extra_class }}{% endif %}">
   <summary class="project-disclosure__summary">
     <span class="project-disclosure__main">
@@ -32,13 +39,19 @@
         <span class="project-disclosure__value project-disclosure__details">{{ project.project_description or project.discipline_name or 'No project details captured yet.' }}</span>
       </span>
     </span>
-    <span class="project-disclosure__expand" aria-hidden="true">
-      <span class="project-disclosure__expand-closed">Expand</span>
-      <span class="project-disclosure__expand-open">Collapse</span>
+    <span class="project-disclosure__actions">
+      {% if detail_url %}
+        <a href="{{ detail_url }}" target="_blank" rel="noopener" class="project-disclosure__open-link" onclick="event.stopPropagation()">Open in new tab &#8599;</a>
+      {% endif %}
+      <span class="project-disclosure__expand" aria-hidden="true">
+        <span class="project-disclosure__expand-closed">Expand</span>
+        <span class="project-disclosure__expand-open">Collapse</span>
+      </span>
     </span>
   </summary>
   <div class="project-disclosure__content">
     {{ caller() }}
   </div>
 </details>
+{%- endif -%}
 {%- endmacro %}

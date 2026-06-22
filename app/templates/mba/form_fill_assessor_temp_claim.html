@@ -22,7 +22,9 @@
         <table class="mba-doc-table assessor-doc-table">
           <tr>
             <td class="assessor-doc-note-row" colspan="4">
-              Please complete only ONE claim form per calendar month per appointment contract. Faculty/Division must ensure that all claims are completed in full before submission.
+              Please complete only ONE claim form per calendar month per appointment contract.
+              Faculty/Division must ensure that all claims forms reach the Human Resources Division before payroll closure.
+              Refer to the Policy on Temporary and Fixed term Appointments.
             </td>
           </tr>
           <tr>
@@ -56,32 +58,26 @@
             <td class="mba-doc-label">First Names</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('assessor_first_names','') }}" readonly></td>
             <td class="mba-doc-label">Cellphone / Mobile Number</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('alternate_contact_number','') or prefill.get('assessor_contact','') }}" readonly></td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('assessor_contact','') }}" readonly></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Email Address</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('alternate_email_address','') or prefill.get('assessor_email','') }}" readonly></td>
-            <td class="mba-doc-label">Requestor Email</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('requestor_email') or 'vukonac@uj.ac.za' }}" readonly></td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('assessor_email','') }}" readonly></td>
+            <td class="mba-doc-label">Alternate Contact Number</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('alternate_contact_number','') }}" readonly></td>
           </tr>
           <tr>
-            <td class="mba-doc-label">Requestor Extension</td>
+            <td class="mba-doc-label">Alternate Email Address</td>
+            <td colspan="3"><input class="mba-doc-input" value="{{ prefill.get('alternate_email_address','') }}" readonly></td>
+          </tr>
+          <tr>
+            <th class="mba-doc-section-title" colspan="4">Requestors Contact Details for Queries Regarding Appointment</th>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Telephone Extension</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('requestor_extension','') }}" readonly></td>
-            <td class="mba-doc-label">Appointed Against Permanent Position</td>
-            <td>
-              <select class="mba-doc-select" disabled>
-                <option value="">Select</option>
-                {% for option in yes_no_values %}
-                  <option value="{{ option }}" {% if prefill.get('appointed_against_permanent_position') == option %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <td class="mba-doc-label">If yes, Position Number</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('position_number','') }}" readonly></td>
-            <td class="mba-doc-label">Unit Basis</td>
-            <td><input class="mba-doc-input" value="{{ prefill.get('claim_unit_basis','') }}" readonly></td>
+            <td class="mba-doc-label">Email Address</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('requestor_email') or 'vukonac@uj.ac.za' }}" readonly></td>
           </tr>
         </table>
 
@@ -113,6 +109,19 @@
           <tr>
             <td class="mba-doc-label">Full Cost String</td>
             <td colspan="3"><input class="mba-doc-input" value="{{ prefill.get('claim_cost_centre_number') or prefill.get('full_cost_centre_string','') }}" readonly></td>
+          </tr>
+          <tr>
+            <td class="mba-doc-label">Appointed Against Permanent Position</td>
+            <td>
+              <select class="mba-doc-select" disabled>
+                <option value="">Select</option>
+                {% for option in yes_no_values %}
+                  <option value="{{ option }}" {% if prefill.get('appointed_against_permanent_position') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td class="mba-doc-label">If yes, Position Number</td>
+            <td><input class="mba-doc-input" value="{{ prefill.get('position_number','') }}" readonly></td>
           </tr>
           <tr>
             <td class="mba-doc-label">Total Budget for Appointment</td>
@@ -157,7 +166,7 @@
           <tr>
             <td class="mba-doc-label">Status</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('bank_changed','') }}" readonly></td>
-            <td class="mba-doc-label">Account Holder's Name</td>
+            <td class="mba-doc-label">Account Holder&#8217;s Name</td>
             <td><input class="mba-doc-input" value="{{ prefill.get('bank_account_holder','') }}" readonly></td>
           </tr>
           <tr>
@@ -179,6 +188,10 @@
             <td><input class="mba-doc-input" value="{{ prefill.get('bank_account_ownership','') }}" readonly></td>
           </tr>
         </table>
+
+        <p class="mba-doc-note">
+          IF A SECONDARY LINE MANAGER APPOINTS A MEMBER OF STAFF IT IS REQUIRED FOR THE PRIMARY LINE MANAGER TO SIGN ACCEPTANCE THEREOF BEFORE THE APPOINTMENT WILL BE PROCESSED
+        </p>
 
         <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
           <tr>

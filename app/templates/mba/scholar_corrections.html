@@ -6,8 +6,10 @@
 
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
+{% set single_project_view = single_project_view|default(false) %}
 <div class="mba-page-stack">
   <section class="ethics-panel">
+    {% if not single_project_view %}
     <div class="panel-heading">
       <h2>Supervisor Response Queue</h2>
       <span>{{ projects|length }}</span>
@@ -45,6 +47,7 @@
         </div>
       </form>
     </div>
+    {% endif %}
 
     <div class="record-list">
       {% for project in projects %}
@@ -56,7 +59,7 @@
         {% set assessment_summary_sign_reason = assessment_summary_supervisor_signing_block_reason(project) if assessment_summary_supervisor_signing_block_reason is defined else '' %}
         {% set can_sign_assessment_summary = not assessment_summary_signed and not assessment_summary_sign_reason %}
         {% set student_number_value = project.student.student_profile.student_number if project.student and project.student.student_profile and project.student.student_profile.student_number else 'Not captured' %}
-        {% call project_disclosure(project, 'project-disclosure--supervisor') %}
+        {% call project_disclosure(project, 'project-disclosure--supervisor', open_only=single_project_view, detail_url=url_for('mba.scholar_corrections_project_detail', project_id=project.id)) %}
         <article class="record-card">
           <div class="record-card__top">
             <div>

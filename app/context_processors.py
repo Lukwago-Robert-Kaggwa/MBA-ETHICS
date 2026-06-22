@@ -2,17 +2,20 @@ from pathlib import Path
 
 from flask import request, url_for
 from flask_login import current_user
+from sqlalchemy import or_
 from werkzeug.routing import BuildError
 
-from .models import MbaProject, MbaRole, ProjectStatus
+from .models import MbaProject, MbaProjectSupervisorInvitation, MbaRole, ProjectStatus
 from .mba.route_support import (
     INVITATION_ACCEPTED,
     additional_assessment_pending,
+    additional_assessor_nomination_awaiting_hdc,
     admin_pending_reminder_count,
+    assessment_results_forwarded_to_supervisor,
     corrections_released_to_student,
-    effective_supervisor_invitation_status,
     project_has_active_corrections,
     project_corrections_status,
+    supervisor_can_manage_corrections,
 )
 
 
@@ -73,18 +76,36 @@ def inject_auth_flags_factory(app):
                 return nav
 
             if role == MbaRole.SCHOLAR.value:
-                projects = MbaProject.query.filter_by(primary_supervisor_id=current_user.id).all()
+                accepted_invitation_project_ids = [
+                    invitation.project_id
+                    for invitation in MbaProjectSupervisorInvitation.query.filter_by(
+                        supervisor_id=current_user.id,
+                        status=INVITATION_ACCEPTED,
+                    ).all()
+                ]
+                projects = MbaProject.query.filter(
+                    or_(
+                        MbaProject.primary_supervisor_id == current_user.id,
+                        MbaProject.id.in_(accepted_invitation_project_ids),
+                        MbaProject.co_supervisor_id == current_user.id,
+                    )
+                ).all()
                 matches = [
                     project
                     for project in projects
-                    if effective_supervisor_invitation_status(project) == INVITATION_ACCEPTED
-                    and project.supervisor_accepted_at is not None
+                    if supervisor_can_manage_corrections(project, current_user)
                     and project_has_active_corrections(project)
+                    and assessment_results_forwarded_to_supervisor(project)
+                ]
+                pending_matches = [
+                    project
+                    for project in matches
+                    if project_corrections_status(project) != "ready_for_admin"
                 ]
                 nav.update(
                     {
                         "visible": endpoint_active or bool(matches),
-                        "count": len(matches),
+                        "count": len(pending_matches),
                         "url": url_for("mba.scholar_corrections"),
                     }
                 )
@@ -93,10 +114,15 @@ def inject_auth_flags_factory(app):
             if role in {MbaRole.ADMIN.value, MbaRole.MAIN_ADMIN.value}:
                 projects = MbaProject.query.filter(MbaProject.project_status != ProjectStatus.CREATED.value).all()
                 matches = [project for project in projects if project_has_active_corrections(project)]
+                pending_matches = [
+                    project
+                    for project in matches
+                    if project_corrections_status(project) != "ready_for_admin"
+                ]
                 nav.update(
                     {
                         "visible": endpoint_active or bool(matches),
-                        "count": len(matches),
+                        "count": len(pending_matches),
                         "url": url_for("mba.admin_corrections"),
                     }
                 )
@@ -148,6 +174,7 @@ def inject_auth_flags_factory(app):
                 "jbs5": 0,
                 "nominations": 0,
                 "results": 0,
+                "additional_nominations": 0,
                 "total": 0,
             }
             if (
@@ -165,13 +192,19 @@ def inject_auth_flags_factory(app):
             result_count = MbaProject.query.filter_by(
                 project_status=ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value
             ).count()
+            additional_nomination_count = sum(
+                1
+                for project in MbaProject.query.filter(MbaProject.assessor_3_id.isnot(None)).all()
+                if additional_assessor_nomination_awaiting_hdc(project)
+            )
             nav.update(
                 {
                     "visible": True,
                     "jbs5": jbs5_count,
                     "nominations": nomination_count,
                     "results": result_count,
-                    "total": jbs5_count + nomination_count + result_count,
+                    "additional_nominations": additional_nomination_count,
+                    "total": jbs5_count + nomination_count + result_count + additional_nomination_count,
                 }
             )
             return nav

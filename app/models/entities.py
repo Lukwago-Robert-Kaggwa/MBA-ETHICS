@@ -24,6 +24,8 @@ class UserAuthMixin(UserMixin):
     popia_notice_version = db.Column(db.String(40), nullable=True)
     popia_confirmed_ip = db.Column(db.String(64), nullable=True)
     popia_confirmed_user_agent = db.Column(db.String(255), nullable=True)
+    reset_token_hash = db.Column(db.String(64), nullable=True, index=True)
+    reset_token_expires_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -54,6 +56,12 @@ class MbaUser(UserAuthMixin, db.Model):
     has_profile = db.Column(db.Boolean, nullable=False, default=False)
     has_signature = db.Column(db.Boolean, nullable=False, default=False)
     has_cv = db.Column(db.Boolean, nullable=False, default=False)
+    hdc_assessor_approval_status = db.Column(db.String(20), nullable=True)
+    hdc_assessor_approval_at = db.Column(db.DateTime, nullable=True)
+    hdc_assessor_approval_set_by_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"), nullable=True)
+    hdc_assessor_approval_set_by = db.relationship(
+        "MbaUser", remote_side="MbaUser.id", foreign_keys=[hdc_assessor_approval_set_by_id]
+    )
 
     def is_admin_role(self):
         return self.role in {MbaRole.MAIN_ADMIN.value, MbaRole.ADMIN.value}
@@ -239,6 +247,13 @@ class MbaProject(db.Model):
     assignment_confirmed = db.Column(db.Boolean, nullable=False, default=False)
     invitations_sent_at = db.Column(db.DateTime, nullable=True)
     primary_supervisor_invitation_status = db.Column(db.String(20), nullable=True)
+    co_supervisor_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"))
+    co_supervisor = db.relationship("MbaUser", foreign_keys=[co_supervisor_id])
+    co_supervisor_invitation_status = db.Column(db.String(20), nullable=True)
+    co_supervisor_invited_at = db.Column(db.DateTime, nullable=True)
+    co_supervisor_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+    co_supervisor_accepted_at = db.Column(db.DateTime, nullable=True)
+    co_supervisor_required = db.Column(db.Boolean, nullable=False, default=False)
     assessor_1_id = db.Column(db.Integer, db.ForeignKey("mba_users.id"))
     assessor_1 = db.relationship("MbaUser", foreign_keys=[assessor_1_id])
     assessor_1_invitation_status = db.Column(db.String(20), nullable=True)
@@ -260,6 +275,9 @@ class MbaProject(db.Model):
     assessor_3_invitation_status = db.Column(db.String(20), nullable=True)
     assessor_3_invited_at = db.Column(db.DateTime, nullable=True)
     assessor_3_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+    assessor_3_hdc_decision = db.Column(db.String(20), nullable=True)
+    assessor_3_hdc_decision_at = db.Column(db.DateTime, nullable=True)
+    assessor_3_hdc_decision_assessor_id = db.Column(db.Integer, nullable=True)
     comments = db.Column(db.Text)
     hdc_comments = db.Column(db.Text)
     jbs5_hdc_comments = db.Column(db.Text, nullable=True)

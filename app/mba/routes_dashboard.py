@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
 from ..models import MbaForm, MbaProject, MbaRole, MbaScholarProfile, MbaStudentProfile, MbaUser, MbaProjectSupervisorInvitation, ProjectStatus
+from ..password_policy import validate_password_strength
 from .route_support import *  # noqa: F403
 from .grading import project_grade_summary
 
@@ -29,8 +30,9 @@ def _change_current_user_password():
         flash("Current password is incorrect.", "error")
         return False
 
-    if len(new_password) < 8:
-        flash("New password must be at least 8 characters.", "error")
+    policy_error = validate_password_strength(new_password, email=current_user.email)
+    if policy_error:
+        flash(policy_error, "error")
         return False
 
     if new_password != confirm_password:
@@ -358,7 +360,7 @@ def student_corrections():
 
 @mba_bp.route("/scholar-dashboard")
 @login_required
-def scholar_dashboard():
+def scholar_dashboard(project_id_filter=None, single_project_view=False):
     if not require_mba_role(MbaRole.SCHOLAR.value):
         return redirect(role_landing_url())
     supervisor_status = (request.args.get("supervisor_status") or "all").strip().lower()
@@ -409,6 +411,10 @@ def scholar_dashboard():
             and project.supervisor_accepted_at is not None
         ):
             return "accepted"
+        if project.co_supervisor_id == current_user.id:
+            if project.co_supervisor_invitation_status == INVITATION_ACCEPTED:
+                return "accepted"
+            return project.co_supervisor_invitation_status or "all"
         return "all"
 
     def assessor_project_states(project):
@@ -443,7 +449,13 @@ def scholar_dashboard():
             joinedload(MbaProject.supervisor_invitations),
             joinedload(MbaProject.student).joinedload(MbaUser.student_profile),
         )
-        .filter(((MbaProject.primary_supervisor_id == current_user.id) | (MbaProject.id.in_(invited_project_ids))),)
+        .filter(
+            (
+                (MbaProject.primary_supervisor_id == current_user.id)
+                | (MbaProject.id.in_(invited_project_ids))
+                | (MbaProject.co_supervisor_id == current_user.id)
+            ),
+        )
         .order_by(MbaProject.updated_at.desc())
     )
     if supervisor_student_number:
@@ -474,6 +486,11 @@ def scholar_dashboard():
     examiner_projects_by_student = [
         project for project in examiner_projects_all if project_student_number_matches(project, assessor_student_number)
     ]
+    if project_id_filter:
+        supervised_projects_by_student = [project for project in supervised_projects_by_student if project.id == project_id_filter]
+        examiner_projects_by_student = [project for project in examiner_projects_by_student if project.id == project_id_filter]
+        if single_project_view and not supervised_projects_by_student and not examiner_projects_by_student:
+            abort(404)
     if current_user.is_supervisor_role():
         available_supervisor_projects_all = (
             MbaProject.query.options(
@@ -546,6 +563,7 @@ def scholar_dashboard():
     )
     return render_template(
         "mba/scholar_dashboard.html",
+        single_project_view=single_project_view,
         supervised_projects=supervised_projects,
         examiner_projects=examiner_projects,
         available_supervisor_projects=available_supervisor_projects,
@@ -586,6 +604,7 @@ def scholar_dashboard():
         additional_assessment_required=additional_assessment_required,
         additional_assessment_stage=additional_assessment_stage,
         additional_assessment_status_label=additional_assessment_status_label,
+        assessor_hdc_decision=assessor_hdc_decision,
         external_examiner_nomination_doc_type=external_examiner_nomination_doc_type,
         external_examiner_nomination_supervisor_signed=external_examiner_nomination_supervisor_signed,
         additional_external_examiner_nomination_doc_type=additional_external_examiner_nomination_doc_type,
@@ -599,9 +618,15 @@ def scholar_dashboard():
     )
 
 
+@mba_bp.route("/scholar-dashboard/<int:project_id>")
+@login_required
+def scholar_project_detail(project_id):
+    return scholar_dashboard(project_id_filter=project_id, single_project_view=True)
+
+
 @mba_bp.route("/scholar-corrections")
 @login_required
-def scholar_corrections():
+def scholar_corrections(project_id_filter=None, single_project_view=False):
     if not require_mba_role(MbaRole.SCHOLAR.value):
         return redirect(role_landing_url())
     correction_status = (request.args.get("corrections_status") or "all").strip().lower()
@@ -627,6 +652,7 @@ def scholar_corrections():
             or_(
                 MbaProject.primary_supervisor_id == current_user.id,
                 MbaProject.id.in_(accepted_invitation_project_ids),
+                MbaProject.co_supervisor_id == current_user.id,
             )
         )
         .order_by(MbaProject.updated_at.desc())
@@ -690,8 +716,13 @@ def scholar_corrections():
         if correction_status == "all"
         or project_corrections_status(project, forms_by_project=forms_by_project) == correction_status
     ]
+    if project_id_filter:
+        visible_projects = [project for project in visible_projects if project.id == project_id_filter]
+        if single_project_view and not visible_projects:
+            abort(404)
     return render_template(
         "mba/scholar_corrections.html",
+        single_project_view=single_project_view,
         projects=visible_projects,
         forms_by_project=forms_by_project,
         corrections_status=correction_status,
@@ -716,9 +747,15 @@ def scholar_corrections():
     )
 
 
+@mba_bp.route("/scholar-corrections/<int:project_id>")
+@login_required
+def scholar_corrections_project_detail(project_id):
+    return scholar_corrections(project_id_filter=project_id, single_project_view=True)
+
+
 @mba_bp.route("/examiner-dashboard")
 @login_required
-def examiner_dashboard():
+def examiner_dashboard(project_id_filter=None, single_project_view=False):
     if not require_mba_role(MbaRole.EXAMINER.value):
         return redirect(role_landing_url())
     examiner_page = parse_positive_int(request.args.get("examiner_page"), 1)
@@ -737,19 +774,27 @@ def examiner_dashboard():
         )
         .order_by(MbaProject.updated_at.desc())
     )
-    examiner_pagination_args = request_query_args({"examiner_page", "examiner_per_page"})
-    projects, examiner_pagination = paginate_query(
-        query,
-        examiner_page,
-        examiner_per_page,
-        "mba.examiner_dashboard",
-        page_param="examiner_page",
-        per_page_param="examiner_per_page",
-        base_args=examiner_pagination_args,
-        anchor="assigned-projects",
-    )
+    if project_id_filter:
+        query = query.filter(MbaProject.id == project_id_filter)
+        projects = query.all()
+        examiner_pagination = None
+        if single_project_view and not projects:
+            abort(404)
+    else:
+        examiner_pagination_args = request_query_args({"examiner_page", "examiner_per_page"})
+        projects, examiner_pagination = paginate_query(
+            query,
+            examiner_page,
+            examiner_per_page,
+            "mba.examiner_dashboard",
+            page_param="examiner_page",
+            per_page_param="examiner_per_page",
+            base_args=examiner_pagination_args,
+            anchor="assigned-projects",
+        )
     return render_template(
         "mba/examiner_dashboard.html",
+        single_project_view=single_project_view,
         projects=projects,
         examiner_pagination=examiner_pagination,
         invitation_status_for_user=invitation_status_for_user,
@@ -772,12 +817,19 @@ def examiner_dashboard():
         additional_assessment_required=additional_assessment_required,
         additional_assessment_stage=additional_assessment_stage,
         additional_assessment_status_label=additional_assessment_status_label,
+        assessor_hdc_decision=assessor_hdc_decision,
     )
+
+
+@mba_bp.route("/examiner-dashboard/<int:project_id>")
+@login_required
+def examiner_project_detail(project_id):
+    return examiner_dashboard(project_id_filter=project_id, single_project_view=True)
 
 
 @mba_bp.route("/hdc-dashboard")
 @login_required
-def hdc_dashboard():
+def hdc_dashboard(project_id_filter=None, single_project_view=False):
     if not require_mba_role(MbaRole.HDC.value):
         return redirect(role_landing_url())
     approval_set = (request.args.get("approval_set") or "overview").strip().lower()
@@ -915,17 +967,36 @@ def hdc_dashboard():
         "results": MbaProject.query.filter_by(project_status=ProjectStatus.RESULTS_SUBMITTED_TO_HDC.value).count(),
     }
     hdc_pending_counts["total"] = sum(hdc_pending_counts.values())
-    hdc_pagination_args = request_query_args({"hdc_page", "hdc_per_page"})
-    queue, hdc_pagination = paginate_query(
-        queue_query,
-        hdc_page,
-        hdc_per_page,
-        "mba.hdc_dashboard",
-        page_param="hdc_page",
-        per_page_param="hdc_per_page",
-        base_args=hdc_pagination_args,
-        anchor="hdc-queue",
-    )
+    if project_id_filter:
+        # Bypass the approval_set/review_status filters here: a detail link may have
+        # been opened from any tab, and the HDC role has no narrower per-project scope.
+        queue = (
+            MbaProject.query.options(
+                joinedload(MbaProject.student).joinedload(MbaUser.student_profile),
+                joinedload(MbaProject.primary_supervisor).joinedload(MbaUser.scholar_profile),
+                joinedload(MbaProject.assessor_1).joinedload(MbaUser.scholar_profile),
+                joinedload(MbaProject.assessor_2).joinedload(MbaUser.scholar_profile),
+                joinedload(MbaProject.assessor_3).joinedload(MbaUser.scholar_profile),
+                joinedload(MbaProject.documents),
+            )
+            .filter(MbaProject.id == project_id_filter)
+            .all()
+        )
+        hdc_pagination = None
+        if single_project_view and not queue:
+            abort(404)
+    else:
+        hdc_pagination_args = request_query_args({"hdc_page", "hdc_per_page"})
+        queue, hdc_pagination = paginate_query(
+            queue_query,
+            hdc_page,
+            hdc_per_page,
+            "mba.hdc_dashboard",
+            page_param="hdc_page",
+            per_page_param="hdc_per_page",
+            base_args=hdc_pagination_args,
+            anchor="hdc-queue",
+        )
 
     project_ids = [p.id for p in queue]
     def hdc_visible_documents(project):
@@ -948,6 +1019,7 @@ def hdc_dashboard():
 
     return render_template(
         "mba/hdc_dashboard.html",
+        single_project_view=single_project_view,
         projects=queue,
         documents_by_project=documents_by_project,
         forms_by_project=forms_by_project,
@@ -972,4 +1044,10 @@ def hdc_dashboard():
         hdc_additional_external_examiner_nomination_signature_complete=hdc_additional_external_examiner_nomination_signature_complete,
         hdc_document_signature_status=hdc_document_signature_status,
     )
+
+
+@mba_bp.route("/hdc-dashboard/<int:project_id>")
+@login_required
+def hdc_project_detail(project_id):
+    return hdc_dashboard(project_id_filter=project_id, single_project_view=True)
 

@@ -99,6 +99,7 @@ ASSESSOR_SLOTS = ("assessor_1", "assessor_2")
 PRIMARY_ASSESSOR_SLOTS = ASSESSOR_SLOTS
 ADDITIONAL_ASSESSOR_SLOT = "assessor_3"
 ALL_ASSESSOR_SLOTS = PRIMARY_ASSESSOR_SLOTS + (ADDITIONAL_ASSESSOR_SLOT,)
+CO_SUPERVISOR_SLOT = "co_supervisor"
 SUMMARY_COURSEWORK_MODULES = (
     "AFM9X01",
     "CSM9X01",
@@ -404,6 +405,11 @@ INVITATION_SLOTS = {
         "status_field": "primary_supervisor_invitation_status",
         "label": "Supervisor",
     },
+    "co_supervisor": {
+        "id_field": "co_supervisor_id",
+        "status_field": "co_supervisor_invitation_status",
+        "label": "Co-Supervisor",
+    },
     "assessor_1": {
         "id_field": "assessor_1_id",
         "status_field": "assessor_1_invitation_status",
@@ -445,8 +451,29 @@ def mark_assessor_invitations_sent(project, slots=None, sent_at=None):
             setattr(project, f"{slot}_reminder_sent_at", None)
 
 
+def mark_co_supervisor_invitation_sent(project, sent_at=None):
+    sent_at = sent_at or datetime.utcnow()
+    if project.co_supervisor_id:
+        project.co_supervisor_invited_at = sent_at
+        project.co_supervisor_reminder_sent_at = None
+
+
+def reset_co_supervisor_invitation_tracking(project, clear_assignment=False):
+    project.co_supervisor_invitation_status = None
+    project.co_supervisor_invited_at = None
+    project.co_supervisor_reminder_sent_at = None
+    project.co_supervisor_accepted_at = None
+    if clear_assignment:
+        project.co_supervisor_id = None
+        project.co_supervisor_required = False
+
+
+def co_supervisor_acceptance_satisfied(project):
+    return not project.co_supervisor_required or project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+
+
 def assessor_hdc_decision(project, slot):
-    if slot not in PRIMARY_ASSESSOR_SLOTS:
+    if slot not in ALL_ASSESSOR_SLOTS:
         return None
     return getattr(project, f"{slot}_hdc_decision", None)
 
@@ -458,13 +485,31 @@ def assessor_hdc_decision_label(decision):
     }.get(decision, "Pending Review")
 
 
+def assessor_previously_hdc_approved(user):
+    return bool(user and user.hdc_assessor_approval_status == HDC_ASSESSOR_APPROVED)
+
+
+def revoke_assessor_hdc_approval(user, revoked_by=None):
+    if not user:
+        return
+    user.hdc_assessor_approval_status = "revoked"
+    user.hdc_assessor_approval_at = datetime.utcnow()
+    user.hdc_assessor_approval_set_by_id = revoked_by.id if revoked_by else None
+
+
 def set_assessor_hdc_decision(project, slot, decision):
-    if slot not in PRIMARY_ASSESSOR_SLOTS:
+    if slot not in ALL_ASSESSOR_SLOTS:
         return
     if decision in HDC_ASSESSOR_DECISIONS:
         setattr(project, f"{slot}_hdc_decision", decision)
         setattr(project, f"{slot}_hdc_decision_at", datetime.utcnow())
-        setattr(project, f"{slot}_hdc_decision_assessor_id", getattr(project, f"{slot}_id", None))
+        assessor_id = getattr(project, f"{slot}_id", None)
+        setattr(project, f"{slot}_hdc_decision_assessor_id", assessor_id)
+        if decision == HDC_ASSESSOR_APPROVED and assessor_id:
+            assessor_user = db.session.get(MbaUser, assessor_id)
+            if assessor_user:
+                assessor_user.hdc_assessor_approval_status = HDC_ASSESSOR_APPROVED
+                assessor_user.hdc_assessor_approval_at = datetime.utcnow()
         return
     setattr(project, f"{slot}_hdc_decision", None)
     setattr(project, f"{slot}_hdc_decision_at", None)
@@ -1507,6 +1552,16 @@ def _form_print_styles():
         body.mba-print-body { padding: 0; color: #111827; }
         .ethics-layout, .ethics-main, .mba-page-stack, .ethics-panel { margin: 0; padding: 0; }
         .ethics-panel { background: transparent; border: 0; box-shadow: none; }
+        body.mba-print-body .mba-doc-page {
+          overflow: visible;
+          padding-bottom: 0;
+        }
+        body.mba-print-body .mba-doc-page .ethics-panel {
+          width: 100%;
+          max-width: none;
+          margin: 0;
+          overflow: visible;
+        }
         .mba-doc-page { max-width: none; }
         .mba-doc-paper { box-shadow: none; border-radius: 0; }
         .mba-doc-actions { display: none !important; }
@@ -1978,11 +2033,16 @@ def _build_html_form_fragment(project, form_type, payload, logo_mode="web"):
         extra_context["slot"] = slot
         extra_context["slot_label"] = slot.replace("_", " ").title()
         extra_context["reason_options"] = [
-            "Services will not exceed 3 months",
-            "Specific project for limited time and clear deliverable",
+            "Temporary replacement of permanent employee on leave or secondment",
+            "Temporary stand-in for vacant permanent position, to be filled",
             "Temporary increase in volume of work, less than 12 months",
             "Seasonal increase in volume of work, less than 12 months",
+            "Student or recent graduate on academic apprenticeship/internship/learnership",
             "Position funded by external (non UJ) funds for limited time",
+            "Post-retirement appointment (person beyond retirement age)",
+            "Duration of work-permit for a non-citizen employee",
+            "Services will not exceed 3 months",
+            "Specific project for limited time and clear deliverable",
             "Other",
         ]
         extra_context["yes_no_options"] = ["Yes", "No"]
@@ -4547,6 +4607,7 @@ def _generate_assessor_temp_claim_template_word_bytes(project, payload):
     _docx_set_cell_text_preserving_style(root, 0, 12, 1, "START DATE: " + _docx_format_date_numeric(_docx_first_value(payload, "appointment_start_date")))
     _docx_set_cell_text_preserving_style(root, 0, 12, 2, "END DATE: " + _docx_format_date_numeric(_docx_first_value(payload, "appointment_end_date")))
     _docx_set_cell_text_preserving_style(root, 0, 13, 1, _docx_first_value(payload, "appointed_as", default="External Assessor"))
+    _docx_set_cell_text_preserving_style(root, 0, 14, 1, _docx_first_value(payload, "claim_unit_basis", default="PER HOUR"))
     _docx_set_cell_text_preserving_style(root, 0, 14, 2, _docx_first_value(payload, "claim_total_units", "total_units"))
     _docx_set_cell_text_preserving_style(root, 0, 14, 4, _docx_first_value(payload, "other_rate_basis"))
     _docx_set_cell_text_preserving_style(root, 0, 15, 1, "ZAR " + _docx_first_value(payload, "claim_rate", "rate_per_hour"))
@@ -4554,6 +4615,9 @@ def _generate_assessor_temp_claim_template_word_bytes(project, payload):
     cost_parts = _docx_cost_centre_parts(_docx_first_value(payload, "claim_cost_centre_number", "full_cost_centre_string"))
     for index, part in enumerate(cost_parts, start=1):
         _docx_set_cell_text_preserving_style(root, 0, 16, index, part)
+    if _docx_is_yes(_docx_first_value(payload, "appointed_against_permanent_position")):
+        _docx_replace_cell_text(root, 0, 17, 1, "YES X")
+        _docx_replace_cell_text(root, 0, 17, 2, "NO")
     _docx_set_cell_text_preserving_style(root, 0, 17, 4, _docx_first_value(payload, "position_number"))
     budget = _docx_first_value(payload, "total_budget_for_appointment")
     _docx_set_cell_text_preserving_style(root, 0, 18, 1, f"R{budget}" if budget and not str(budget).startswith("R") else budget)
@@ -6960,6 +7024,8 @@ def additional_external_examiner_nomination_can_generate(project):
         project
         and additional_assessment_required(project)
         and getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None)
+        and getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_invitation_status", None) == INVITATION_ACCEPTED
+        and assessor_acceptance_pack_complete(project, ADDITIONAL_ASSESSOR_SLOT)
     )
 
 
@@ -6986,7 +7052,9 @@ def additional_external_examiner_nomination_supervisor_signed(project):
 
 
 def additional_assessor_nomination_fully_approved(project):
-    return additional_external_examiner_nomination_supervisor_signed(project)
+    return additional_external_examiner_nomination_supervisor_signed(
+        project
+    ) and assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT) == HDC_ASSESSOR_APPROVED
 
 
 def external_examiner_nomination_form(project):
@@ -7016,6 +7084,18 @@ def assessor_hr_documents_sent(project):
 
 def assessor_hr_documents_sent_to(project):
     form = external_examiner_nomination_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return payload.get("assessor_hr_documents_sent_to") or ""
+
+
+def additional_assessor_hr_documents_sent(project):
+    form = additional_external_examiner_nomination_form(project)
+    payload = form.payload if form and isinstance(form.payload, dict) else {}
+    return bool(payload.get("assessor_hr_documents_sent_at") and payload.get("assessor_hr_documents_sent_to"))
+
+
+def additional_assessor_hr_documents_sent_to(project):
+    form = additional_external_examiner_nomination_form(project)
     payload = form.payload if form and isinstance(form.payload, dict) else {}
     return payload.get("assessor_hr_documents_sent_to") or ""
 
@@ -7135,6 +7215,8 @@ def assessment_summary_supervisor_signing_block_reason(project, forms_by_project
         correction_status = project_corrections_status(project, forms_by_project=forms_by_project)
         if correction_status != "ready_for_admin":
             return "The supervisor must approve the student's Response to Assessors' Comments before signing the assessment summary."
+    if not module_completion_allows_hdc_submission(project):
+        return "The Marks Committee must verify the coursework marks before the assessment summary can be signed."
     if not assessment_results_forwarded_to_supervisor(project):
         return "MBA Admin must forward the assessment summary to the supervisor before it can be signed."
     if not uploaded_doc_for(project, assessment_summary_doc_type()):
@@ -7189,9 +7271,11 @@ def student_submitted_corrections_pack(project):
 
 
 def supervisor_rejected_corrections(project):
-    student_submitted_at = getattr(project, "corrections_student_resubmitted_at", None)
     rejected_at = getattr(project, "corrections_supervisor_rejected_at", None)
-    return bool(student_submitted_at and rejected_at and rejected_at >= student_submitted_at)
+    if not rejected_at:
+        return False
+    student_submitted_at = getattr(project, "corrections_student_resubmitted_at", None)
+    return not student_submitted_at or rejected_at >= student_submitted_at
 
 
 def supervisor_approved_corrections(project):
@@ -7214,10 +7298,10 @@ def supervisor_approved_corrections(project):
 def project_corrections_status(project, forms_by_project=None):
     if not project_has_active_corrections(project, forms_by_project=forms_by_project):
         return "none"
-    if not student_submitted_corrections_pack(project):
-        return "awaiting_student"
     if supervisor_rejected_corrections(project):
         return "rejected_by_supervisor"
+    if not student_submitted_corrections_pack(project):
+        return "awaiting_student"
     if not supervisor_approved_corrections(project):
         return "awaiting_supervisor"
     return "ready_for_admin"
@@ -7255,9 +7339,13 @@ def module_completion_status_label(status):
 
 
 def module_completion_allows_hdc_submission(project):
+    # "modules_incomplete" still means the Marks Committee filled in every required mark field
+    # and responded - the outcome was just a fail. A failing result must still reach HDC for
+    # sign-off, so it is treated the same as a completed/passing response here.
     return str(getattr(project, "module_completion_status", "") or "") in {
         "completed",
         "response_received",
+        "modules_incomplete",
     }
 
 
@@ -7399,10 +7487,10 @@ def additional_assessment_stage(project, forms_by_project=None):
         return "completed" if additional_assessor_nomination_fully_approved(project) else "awaiting_nomination"
     if not getattr(project, "assessor_3_id", None):
         return "needs_assignment"
-    if not additional_assessor_nomination_fully_approved(project):
-        return "awaiting_nomination"
     if getattr(project, "assessor_3_invitation_status", None) != INVITATION_ACCEPTED:
         return "awaiting_acceptance"
+    if not additional_assessor_nomination_fully_approved(project):
+        return "awaiting_nomination"
     return "awaiting_result"
 
 
@@ -7699,6 +7787,21 @@ def mba_admin_notification_emails():
     return [admin.email for admin in admin_users if admin.email]
 
 
+def hdc_notification_emails():
+    hdc_users = MbaUser.query.filter_by(role=MbaRole.HDC.value).all()
+    return [user.email for user in hdc_users if user.email]
+
+
+def additional_assessor_nomination_awaiting_hdc(project):
+    return bool(
+        project
+        and additional_assessment_required(project)
+        and getattr(project, f"{ADDITIONAL_ASSESSOR_SLOT}_id", None)
+        and additional_external_examiner_nomination_supervisor_signed(project)
+        and assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT) is None
+    )
+
+
 def assessor_hdc_decision_alert_label(decision):
     return {
         HDC_ASSESSOR_APPROVED: "Approved",
@@ -7829,7 +7932,8 @@ def corrections_requested_email_messages(project, correction_request):
     ]
 
 
-def supervisor_can_manage_corrections(project, user):
+def user_is_accepted_project_supervisor(project, user):
+    """True if `user` is the accepted primary supervisor or accepted co-supervisor for `project`."""
     if not project or not user or user.role != MbaRole.SCHOLAR.value:
         return False
     accepted_invitation = any(
@@ -7843,7 +7947,15 @@ def supervisor_can_manage_corrections(project, user):
             or project.supervisor_accepted_at is not None
         )
     )
-    return primary_supervisor_accepted or accepted_invitation
+    co_supervisor_accepted = (
+        project.co_supervisor_id == user.id
+        and project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    )
+    return primary_supervisor_accepted or accepted_invitation or co_supervisor_accepted
+
+
+def supervisor_can_manage_corrections(project, user):
+    return user_is_accepted_project_supervisor(project, user)
 
 
 def assessor_slots_for_user(project, user_id):
@@ -7863,10 +7975,17 @@ def assessor_can_view_project_documents(project):
     return project.project_status in ASSESSOR_PROJECT_DOCUMENT_VISIBLE_STATUSES
 
 
-def assessor_can_view_student_dissertation(project):
-    return assessor_can_view_project_documents(project) and bool(
+def assessor_can_view_student_dissertation(project, slots=None):
+    if not assessor_can_view_project_documents(project) or not bool(
         getattr(project, "dissertation_released_to_assessors", False)
-    )
+    ):
+        return False
+    if slots is not None and ADDITIONAL_ASSESSOR_SLOT in slots:
+        return (
+            assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT) == HDC_ASSESSOR_APPROVED
+            and additional_assessor_hr_documents_sent(project)
+        )
+    return True
 
 
 def require_mba_user():
@@ -8332,7 +8451,9 @@ def paginate_query(
 
 def reset_invitation_tracking(project):
     project.invitations_sent_at = None
-    for meta in INVITATION_SLOTS.values():
+    for slot, meta in INVITATION_SLOTS.items():
+        if slot == CO_SUPERVISOR_SLOT:
+            continue
         setattr(project, meta["status_field"], None)
     reset_assessor_invitation_tracking(project)
 
@@ -8350,6 +8471,8 @@ def invitation_status_or_not_sent(project, status_field):
 
 def project_has_any_invitation_response(project):
     if getattr(project, "primary_supervisor_invitation_status") in {INVITATION_PENDING, INVITATION_ACCEPTED, INVITATION_DECLINED}:
+        return True
+    if getattr(project, "co_supervisor_invitation_status") in {INVITATION_PENDING, INVITATION_ACCEPTED, INVITATION_DECLINED}:
         return True
     return any(
         getattr(project, f"{slot}_invitation_status") in {INVITATION_PENDING, INVITATION_ACCEPTED, INVITATION_DECLINED}
@@ -8842,9 +8965,24 @@ def supervisor_invitation_count_status(project, invitation):
     return "not_sent"
 
 
-def invitation_email_messages(project, include_supervisors=True, include_assessors=True, assessor_slots=None):
+def invitation_email_messages(project, include_supervisors=True, include_assessors=True, assessor_slots=None, include_co_supervisor=False):
     recipients = []
     assessor_slot_filter = set(assessor_slots) if assessor_slots is not None else None
+    if include_co_supervisor:
+        co_supervisor = project.co_supervisor
+        if co_supervisor and project.co_supervisor_invitation_status == INVITATION_PENDING and co_supervisor.email:
+            recipients.append(
+                {
+                    "recipient": co_supervisor.email,
+                    "subject": f"MBA Co-Supervisor Invitation: {project.project_title}",
+                    "body": (
+                        f"You have been invited to serve as Co-Supervisor for the MBA Capstone Project '{project.project_title}'.\n\n"
+                        f"Student: {project.student.email if project.student else 'Unknown'}\n"
+                        f"Discipline: {project.discipline_name}\n\n"
+                        "Please sign in to the MBA system to accept or decline this invitation."
+                    ),
+                }
+            )
     if include_supervisors:
         for invitation in getattr(project, "supervisor_invitations", []):
             supervisor = invitation.supervisor

@@ -46,6 +46,7 @@ from .route_support import (
     additional_external_examiner_nomination_doc_type,
     additional_external_examiner_nomination_can_generate,
     additional_external_examiner_nomination_supervisor_signed,
+    additional_assessor_nomination_awaiting_hdc,
     append_comment,
     apply_assessor_suggestions_if_ready,
     apply_saved_signature_snapshot,
@@ -90,6 +91,7 @@ from .route_support import (
     mark_assessor_invitations_sent,
     mba_bp,
     mba_admin_notification_emails,
+    hdc_notification_emails,
     project_supervisor_notification_emails,
     project_correction_requests,
     project_has_active_corrections,
@@ -117,6 +119,7 @@ from .route_support import (
     uploaded_doc_for,
     activate_project_corrections,
     activate_additional_assessment,
+    additional_assessment_pending,
     primary_assessment_conflict_detected,
     accepted_assessor_count,
     all_assessor_acceptance_packs_complete,
@@ -497,6 +500,14 @@ SUPERVISOR_AGREEMENT_SIGNATURE_FIELDS = {
         "supervisor_signature_year": "supervisor signature year",
         "supervisor_signature": "supervisor signature",
         "supervisor_signature_name": "supervisor printed name",
+    },
+    "co_supervisor": {
+        "co_supervisor_signing_location": "co-supervisor signing location",
+        "co_supervisor_signature_day": "co-supervisor signature day",
+        "co_supervisor_signature_month": "co-supervisor signature month",
+        "co_supervisor_signature_year": "co-supervisor signature year",
+        "co_supervisor_signature": "co-supervisor signature",
+        "co_supervisor_signature_name": "co-supervisor printed name",
     },
 }
 
@@ -2120,6 +2131,8 @@ def hdc_sign_project_form(project_id, form_type):
                 template_context["prefill"] = prefill
                 return render_template(template_name, **template_context)
             flash(message, message_category)
+            if form_type == additional_external_examiner_nomination_doc_type():
+                return redirect(url_for("mba.admin_additional_assessment"))
             return redirect(url_for("mba.hdc_dashboard"))
 
         return render_template(template_name, **template_context)
@@ -2218,7 +2231,11 @@ def supervisor_title_change_request(project_id):
     project = db.session.get(MbaProject, project_id)
     if not project:
         abort(404)
-    if project.primary_supervisor_id != current_user.id:
+    is_accepted_co_supervisor = (
+        project.co_supervisor_id == current_user.id
+        and project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    )
+    if project.primary_supervisor_id != current_user.id and not is_accepted_co_supervisor:
         pending_invitation = next(
             (
                 inv
@@ -2313,7 +2330,11 @@ def supervisor_sign_jbs5(project_id):
         ),
         None,
     )
-    if project.primary_supervisor_id != current_user.id:
+    is_accepted_co_supervisor = (
+        project.co_supervisor_id == current_user.id
+        and project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    )
+    if project.primary_supervisor_id != current_user.id and not is_accepted_co_supervisor:
         if pending_invitation:
             flash("Accept the supervisor invitation before signing JBS5.", "error")
             return redirect(url_for("mba.scholar_dashboard"))
@@ -2406,7 +2427,9 @@ def supervisor_sign_jbs1_declaration(project_id):
     if not project:
         abort(404)
 
-    if project.primary_supervisor_id != current_user.id:
+    if project.primary_supervisor_id != current_user.id and not (
+        project.co_supervisor_id == current_user.id and project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    ):
         abort(403)
 
     jbs1_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs1_declaration").first()
@@ -2565,7 +2588,9 @@ def supervisor_sign_jbs10(project_id):
     if not project:
         abort(404)
 
-    if project.primary_supervisor_id != current_user.id:
+    if project.primary_supervisor_id != current_user.id and not (
+        project.co_supervisor_id == current_user.id and project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    ):
         abort(403)
 
     jbs10_form = MbaForm.query.filter_by(project_id=project.id, form_type="jbs10").first()
@@ -2709,7 +2734,9 @@ def supervisor_sign_intent_to_submit(project_id):
     if not project:
         abort(404)
 
-    if project.primary_supervisor_id != current_user.id:
+    if project.primary_supervisor_id != current_user.id and not (
+        project.co_supervisor_id == current_user.id and project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    ):
         abort(403)
 
     intent_form = MbaForm.query.filter_by(project_id=project.id, form_type="intent_to_submit").first()
@@ -2782,7 +2809,9 @@ def _supervisor_sign_nomination_form(project_id, form_type, form_label, admin_ne
     project = db.session.get(MbaProject, project_id)
     if not project:
         abort(404)
-    if project.primary_supervisor_id != current_user.id:
+    if project.primary_supervisor_id != current_user.id and not (
+        project.co_supervisor_id == current_user.id and project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    ):
         abort(403)
 
     nomination_form = MbaForm.query.filter_by(project_id=project.id, form_type=form_type).first()
@@ -2845,6 +2874,25 @@ def _supervisor_sign_nomination_form(project_id, form_type, form_label, admin_ne
                     "Additional assessor nomination form signed. The third-assessor invitation is already pending "
                     "or accepted."
                 )
+                if additional_assessor_nomination_awaiting_hdc(project):
+                    additional_assessor_name = (
+                        f"{project.assessor_3.first_name or ''} {project.assessor_3.last_name or ''}".strip()
+                        if project.assessor_3
+                        else "Not selected"
+                    ) or (project.assessor_3.email if project.assessor_3 else "Not selected")
+                    hdc_review_url = url_for("mba.hdc_dashboard", _external=True)
+                    for hdc_email in hdc_notification_emails():
+                        _send_email_safely(
+                            hdc_email,
+                            f"Additional Assessor Nomination Awaiting Approval: {project.project_title}",
+                            (
+                                f"The supervisor has signed the additional assessor nomination for "
+                                f"'{project.project_title}' and it is now awaiting HDC approval.\n\n"
+                                f"Student: {project.student.email if project.student else 'Unknown'}\n"
+                                f"Additional assessor: {additional_assessor_name}\n\n"
+                                f"Please review and approve or decline this nomination here:\n{hdc_review_url}"
+                            ),
+                        )
             for admin_email in mba_admin_notification_emails():
                 _send_email_safely(
                     admin_email,
@@ -3206,6 +3254,141 @@ def supervisor_fill_form(project_id):
         project=project,
         prefill=prefill,
         invitation=invitation,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Co-supervisor fill form route (also accepts the invitation)
+# ---------------------------------------------------------------------------
+
+@mba_bp.route("/projects/<int:project_id>/co-supervisor-fill-form", methods=["GET", "POST"])
+@login_required
+def co_supervisor_fill_form(project_id):
+    """
+    Co-supervisor fills their portion of the Supervisor Agreement via web form.
+    On submit, the co-supervisor invitation is automatically accepted -- mirroring
+    the primary supervisor's accept flow rather than a bare accept button, since the
+    co-supervisor signs the same Student/Supervisor Agreement document.
+    """
+    if not require_mba_role(MbaRole.SCHOLAR.value):
+        return redirect(role_landing_url())
+
+    project = db.session.get(MbaProject, project_id)
+    if not project:
+        abort(404)
+
+    if project.co_supervisor_id != current_user.id:
+        abort(403)
+    if project.co_supervisor_invitation_status != INVITATION_PENDING:
+        flash("No pending co-supervisor invitation found for this Capstone Project.", "error")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    profile = getattr(current_user, "scholar_profile", None)
+    today = datetime.utcnow()
+    existing_form = MbaForm.query.filter_by(project_id=project.id, form_type="supervisor_agreement").first()
+    saved_payload = existing_form.payload if existing_form and isinstance(existing_form.payload, dict) else {}
+
+    prefill = dict(saved_payload)
+    prefill.setdefault("research_title", project.project_title)
+    co_supervisor_full_name = (
+        f"{profile.title or ''} {profile.name or ''} {profile.surname or ''}".strip() if profile else ""
+    )
+    if not prefill.get("co_supervisor_full_name"):
+        prefill["co_supervisor_full_name"] = co_supervisor_full_name
+    if not prefill.get("co_supervisor_department"):
+        prefill["co_supervisor_department"] = profile.department if profile else ""
+    if not prefill.get("co_supervisor_surname"):
+        prefill["co_supervisor_surname"] = profile.surname if profile else ""
+    if not prefill.get("co_supervisor_initials"):
+        prefill["co_supervisor_initials"] = _initials_from_parts(
+            profile.name if profile else "",
+            profile.surname if profile else "",
+        )
+    if not prefill.get("co_supervisor_signing_location"):
+        prefill["co_supervisor_signing_location"] = getattr(profile, "default_signing_location", "") if profile else ""
+    prefill["co_supervisor_signature_day"] = prefill.get("co_supervisor_signature_day") or today.strftime("%d")
+    prefill["co_supervisor_signature_month"] = prefill.get("co_supervisor_signature_month") or today.strftime("%B")
+    prefill["co_supervisor_signature_year"] = prefill.get("co_supervisor_signature_year") or today.strftime("%y")
+    if not prefill.get("co_supervisor_signature"):
+        prefill["co_supervisor_signature"] = co_supervisor_full_name
+    if not prefill.get("co_supervisor_signature_name"):
+        prefill["co_supervisor_signature_name"] = prefill.get("co_supervisor_full_name", "")
+    apply_saved_signature_snapshot(prefill, ("co_supervisor_signature",), current_user)
+
+    if request.method == "POST":
+        payload = {
+            k: (request.form.get(k) or "").strip()
+            for k in request.form
+            if k not in {"csrf_token", "_csrf_token"}
+        }
+        payload["research_title"] = payload.get("research_title") or project.project_title or prefill.get("research_title", "")
+        payload["co_supervisor_full_name"] = payload.get("co_supervisor_full_name") or prefill.get("co_supervisor_full_name", "")
+
+        if not payload.get("co_supervisor_full_name"):
+            flash("Co-supervisor name is required.", "error")
+            return render_template(
+                "mba/form_fill_supervisor_agreement.html",
+                project=project,
+                prefill=payload,
+                co_supervisor_signature_mode=True,
+            )
+
+        missing_signature_fields = _missing_supervisor_agreement_signature_fields(payload, "co_supervisor")
+        if missing_signature_fields:
+            flash(
+                "Co-supervisor signature fields are required before accepting the co-supervisor invitation: "
+                + ", ".join(missing_signature_fields),
+                "error",
+            )
+            return render_template(
+                "mba/form_fill_supervisor_agreement.html",
+                project=project,
+                prefill=payload,
+                co_supervisor_signature_mode=True,
+            )
+
+        try:
+            payload["co_supervisor_agreement_declaration"] = "1"
+            refresh_saved_signature_snapshot(payload, ("co_supervisor_signature",), current_user)
+            payload["_co_supervisor_submitted_by"] = str(current_user.id)
+            _save_form_as_document(project, "supervisor_agreement", "supervisor_agreement", payload)
+
+            project.co_supervisor_invitation_status = INVITATION_ACCEPTED
+            project.co_supervisor_accepted_at = datetime.utcnow()
+            project.comments = append_comment(
+                project.comments,
+                f"Co-supervisor agreement submitted and invitation accepted by {current_user.email}",
+            )
+            db.session.commit()
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template(
+                "mba/form_fill_supervisor_agreement.html",
+                project=project,
+                prefill=payload,
+                co_supervisor_signature_mode=True,
+            )
+        except Exception:
+            db.session.rollback()
+            flash("Form submission failed. Please try again.", "error")
+            return render_template(
+                "mba/form_fill_supervisor_agreement.html",
+                project=project,
+                prefill=payload,
+                co_supervisor_signature_mode=True,
+            )
+
+        _notify_admins_form_submitted(project, "supervisor_agreement")
+
+        flash("Co-supervisor agreement submitted. Invitation accepted.", "success")
+        return redirect(url_for("mba.scholar_dashboard"))
+
+    return render_template(
+        "mba/form_fill_supervisor_agreement.html",
+        project=project,
+        prefill=prefill,
+        co_supervisor_signature_mode=True,
     )
 
 
@@ -3880,7 +4063,7 @@ def assessor_acceptance_form(project_id, slot):
                     project.comments,
                     f"{slot_label} acceptance documents submitted and invitation accepted by {current_user.email}",
                 )
-                if assessor_can_view_student_dissertation(project):
+                if assessor_can_view_student_dissertation(project, slots=[slot]):
                     dissertation_doc = uploaded_doc_for(project, "dissertation")
                     if dissertation_doc:
                         from .routes_documents import dissertation_assessor_email_messages
@@ -3946,7 +4129,11 @@ def assessor_grade_form(project_id, slot):
         flash("Accept the assessor invitation before submitting a grade.", "error")
         return redirect(role_landing_url())
 
-    if not assessor_can_view_student_dissertation(project):
+    if slot == ADDITIONAL_ASSESSOR_SLOT and assessor_hdc_decision(project, slot) != HDC_ASSESSOR_APPROVED:
+        flash("Assessor result submission opens after HDC approves your nomination for this Capstone Project.", "error")
+        return redirect(role_landing_url())
+
+    if not assessor_can_view_student_dissertation(project, slots=[slot]):
         flash("Assessor result submission opens after MBA Admin releases the Capstone Project to assessors.", "error")
         return redirect(role_landing_url())
 
@@ -4146,8 +4333,14 @@ def assessor_grade_form(project_id, slot):
             corrections_newly_activated = False
             if primary_assessment_conflict_detected(project):
                 activate_additional_assessment(project)
+            final_grade = _assessment_grade_summary(project).get("final")
+            student_failing_overall = final_grade is not None and final_grade < 50
             if additional_assessment_pending(project):
                 pass  # corrections wait until the additional assessment is complete
+            elif student_failing_overall:
+                # A failing overall result needs no corrections - the dissertation simply fails.
+                if project.corrections_requested_at:
+                    clear_project_corrections(project)
             elif project_correction_requests(project):
                 if not project.corrections_requested_at:
                     activate_project_corrections(project)

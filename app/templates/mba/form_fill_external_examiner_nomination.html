@@ -70,11 +70,11 @@
       <td>{{ readonly_input(prefill.get(prefix ~ '_email')) }}</td>
     </tr>
     <tr>
-      <td class="mba-doc-label">Postgraduate students supervised to completion</td>
+      <td class="mba-doc-label">Indicate the approximate number of postgraduate students, MSc &amp; PhD, supervised to completion</td>
       <td>{{ readonly_input(prefill.get(prefix ~ '_students_supervised')) }}</td>
     </tr>
     <tr>
-      <td class="mba-doc-label">Current affiliation with a university</td>
+      <td class="mba-doc-label">Current affiliation with a university, (if not a motivation needs to be submitted)</td>
       <td>{{ readonly_input(prefill.get(prefix ~ '_current_university_affiliation')) }}</td>
     </tr>
     <tr>
@@ -167,7 +167,7 @@
         {{ assessor_section('assessor_1', 'ASSESSOR ONE') }}
         {{ assessor_section('assessor_2', 'ASSESSOR TWO') }}
         {% if prefill.get('standby_name') %}
-          {{ assessor_section('standby', 'STANDBY ASSESSOR') }}
+          {{ assessor_section('standby', 'PRE-APPROVED STANDBY ASSESSOR') }}
         {% endif %}
 
         <table class="mba-doc-table mba-doc-table--tight assessor-doc-table">
@@ -206,7 +206,7 @@
           </div>
           <div class="mba-doc-actions">
             <button class="primary-button" type="submit">Sign Nomination Form</button>
-            <a href="{{ url_for('mba.hdc_dashboard') }}" class="secondary-button">Cancel</a>
+            <a href="{{ url_for('mba.admin_additional_assessment') if active_form_type == 'additional_external_examiner_nomination' else url_for('mba.hdc_dashboard') }}" class="secondary-button">Cancel</a>
           </div>
         {% endif %}
       </div>

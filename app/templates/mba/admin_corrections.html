@@ -6,9 +6,13 @@
 
 {% block body %}
 {% from "mba/_project_disclosure.html" import project_disclosure %}
+{% set single_project_view = single_project_view|default(false) %}
 <div class="mba-page-stack">
+  {% if not single_project_view %}
   {% include "mba/_kpis.html" %}
+  {% endif %}
   <section class="ethics-panel">
+    {% if not single_project_view %}
     <div class="panel-heading">
       <h2>Assessors' Comments Queue</h2>
       <span>{{ projects|length }}</span>
@@ -46,6 +50,7 @@
         </div>
       </form>
     </div>
+    {% endif %}
 
     <div class="record-list">
       {% for project in projects %}
@@ -54,7 +59,7 @@
         {% set response_doc = uploaded_doc_for(project, 'corrections_response') %}
         {% set turnitin_doc = uploaded_doc_for(project, 'corrections_turnitin_report') %}
         {% set student_number_value = project.student.student_profile.student_number if project.student and project.student.student_profile and project.student.student_profile.student_number else 'Not captured' %}
-        {% call project_disclosure(project, 'project-disclosure--admin') %}
+        {% call project_disclosure(project, 'project-disclosure--admin', open_only=single_project_view, detail_url=url_for('mba.admin_corrections_project_detail', project_id=project.id)) %}
         <article class="record-card admin-project-card">
           <div class="record-card__top">
             <div>

@@ -116,7 +116,7 @@
 }
 
 .auth-dialog {
-  width: min(430px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
   border: 0;
   border-radius: 14px;
   padding: 0;
@@ -147,9 +147,9 @@
 .auth-dialog__header h2 {
   margin: 0;
   color: #111827;
-  font-size: 1.28rem;
+  font-size: 1.2rem;
   line-height: 1.2;
-  font-weight: 850;
+  font-weight: 800;
 }
 
 .auth-dialog__close {
@@ -786,6 +786,7 @@ textarea {
 
 .record-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -2946,6 +2947,23 @@ textarea {
   color: #111827;
 }
 
+.supervisor-agreement-alpha-list {
+  list-style: none;
+  padding-left: 1.6em;
+  counter-reset: supervisor-agreement-alpha;
+}
+
+.supervisor-agreement-alpha-list > li {
+  counter-increment: supervisor-agreement-alpha;
+  position: relative;
+}
+
+.supervisor-agreement-alpha-list > li::before {
+  content: "(" counter(supervisor-agreement-alpha, lower-alpha) ")";
+  position: absolute;
+  left: -1.6em;
+}
+
 .mba-doc-header {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -3032,13 +3050,15 @@ textarea {
   text-align: center;
 }
 
-.mba-doc-section-title {
-  background: #e5e7eb;
+th.mba-doc-section-title {
+  background: #909497;
+  color: #ffffff;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .mba-doc-label {
+  background: #d9d9d9;
   font-weight: 700;
 }
 
@@ -3215,6 +3235,314 @@ textarea {
   .mba-doc-inline-sentence {
     align-items: flex-start;
   }
+}
+
+.supervisor-agreement-header td,
+.supervisor-agreement-header th {
+  border: none;
+  padding: 0 10px;
+  vertical-align: middle;
+}
+
+.supervisor-agreement-logo-cell {
+  text-align: center;
+}
+
+.supervisor-agreement-logo {
+  width: 100%;
+  max-width: 110px;
+}
+
+.supervisor-agreement-title-cell {
+  text-align: center;
+}
+
+.supervisor-agreement-school {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 1.05rem;
+}
+
+.supervisor-agreement-date {
+  font-size: 0.8rem;
+  color: #4b5563;
+  margin-top: 2px;
+}
+
+.supervisor-agreement-title {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 1.15rem;
+  margin-top: 8px;
+}
+
+.supervisor-agreement-copy {
+  display: grid;
+  gap: 10px;
+  line-height: 1.6;
+}
+
+.supervisor-agreement-copy p {
+  margin: 0;
+  text-align: justify;
+}
+
+.supervisor-agreement-center-title {
+  text-align: center;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin: 6px 0;
+}
+
+.supervisor-agreement-number-table {
+  margin: 4px 0 10px;
+}
+
+.supervisor-agreement-number-table td:not(.mba-doc-label) {
+  height: 32px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.supervisor-agreement-template-line,
+.supervisor-agreement-signing-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+
+.supervisor-agreement-template-line span,
+.supervisor-agreement-signing-line span {
+  white-space: nowrap;
+}
+
+.supervisor-agreement-line-fill {
+  flex: 1 1 auto;
+  min-width: 60px;
+}
+
+.supervisor-agreement-surname-fill {
+  flex: 2 1 160px;
+}
+
+.supervisor-agreement-initials-fill {
+  flex: 0 1 70px;
+}
+
+.supervisor-agreement-address-fill {
+  flex: 4 1 300px;
+}
+
+.supervisor-agreement-postal-fill {
+  flex: 0 1 100px;
+}
+
+.supervisor-agreement-degree-fill,
+.supervisor-agreement-department-fill {
+  flex: 3 1 220px;
+}
+
+.supervisor-agreement-location-fill {
+  flex: 2 1 160px;
+}
+
+.supervisor-agreement-day-fill {
+  flex: 0 1 50px;
+}
+
+.supervisor-agreement-month-fill {
+  flex: 0 1 110px;
+}
+
+.supervisor-agreement-year-fill {
+  flex: 0 1 50px;
+}
+
+.supervisor-agreement-empty-line {
+  flex: 4 1 300px;
+}
+
+.supervisor-agreement-year-tail {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.supervisor-agreement-signature-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.supervisor-agreement-signature-field {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.mba-doc-signature-image {
+  max-height: 40px;
+  max-width: 140px;
+  object-fit: contain;
+}
+
+.supervisor-agreement-signature-labels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #374151;
+  text-align: center;
+  margin-top: 2px;
+}
+
+.supervisor-agreement-submit-controls {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 700px) {
+  .supervisor-agreement-signature-pair,
+  .supervisor-agreement-signature-labels {
+    grid-template-columns: 1fr;
+  }
+}
+
+.jbs5-doc-header-table td,
+.jbs5-doc-header-table th {
+  border: none;
+  padding: 4px 8px;
+  vertical-align: middle;
+}
+
+.jbs5-doc-logo-cell {
+  text-align: center;
+}
+
+.jbs5-doc-logo {
+  width: 100%;
+  max-width: 90px;
+}
+
+.jbs5-doc-title-cell {
+  text-align: center;
+}
+
+.jbs5-doc-school {
+  font-weight: 800;
+  font-size: 1rem;
+  text-transform: uppercase;
+}
+
+.jbs5-doc-form-number {
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+
+.jbs5-doc-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+.jbs5-doc-subtitle {
+  font-size: 0.78rem;
+  color: #4b5563;
+  margin-top: 4px;
+}
+
+.jbs5-doc-check-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.jbs5-doc-option-cell {
+  background: #DCDDDE;
+  font-weight: 700;
+}
+
+.jbs5-doc-office-cell {
+  background: #DCDDDE;
+  font-size: 0.82rem;
+}
+
+.jbs5-doc-office-title {
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.jbs5-doc-dots {
+  display: inline-block;
+  border-bottom: 1px solid #111827;
+  width: 90px;
+  height: 1em;
+  vertical-align: bottom;
+}
+
+.jbs5-doc-center {
+  text-align: center;
+  vertical-align: middle;
+}
+
+th.jbs5-doc-section-number {
+  background: #909497;
+  color: #ffffff;
+  text-align: center;
+  font-weight: 800;
+}
+
+.jbs5-doc-small {
+  font-size: 0.72rem;
+  color: #4b5563;
+  font-weight: 400;
+}
+
+.jbs5-doc-inline-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.jbs5-doc-inline-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.jbs5-doc-signatures td.jbs5-doc-blank-row {
+  border: none;
+  height: 16px;
+}
+
+.jbs5-doc-sdgs {
+  margin-top: 1rem;
+  font-size: 0.78rem;
+  color: #374151;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 18px;
+}
+
+.jbs5-doc-sdgs-title {
+  grid-column: 1 / -1;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.jbs5-doc-sdgs p {
+  margin: 0;
 }
 
 /* --- Usability polish pass: shared shell, cards, forms, tables, and workflow surfaces --- */
@@ -4226,6 +4554,7 @@ input[type="file"] {
 /* --- Collapsed project display shared by Admin, Student, Supervisor, Assessor, and HDC --- */
 .project-disclosure {
   display: block;
+  width: 100%;
   container-type: inline-size;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -4306,11 +4635,17 @@ input[type="file"] {
   overflow: hidden;
 }
 
+.project-disclosure__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+}
+
 .project-disclosure__expand {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  justify-self: end;
   min-height: 38px;
   min-width: 92px;
   border: 1px solid rgba(239, 130, 13, 0.28);
@@ -4323,6 +4658,26 @@ input[type="file"] {
   white-space: nowrap;
 }
 
+.project-disclosure__open-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 850;
+  padding: 8px 12px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.project-disclosure__open-link:hover {
+  background: var(--surface-alt);
+}
+
 .project-disclosure__expand-open {
   display: none;
 }
@@ -4333,6 +4688,23 @@ input[type="file"] {
 
 .project-disclosure[open] .project-disclosure__expand-open {
   display: inline;
+}
+
+.project-disclosure-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.project-disclosure-link:hover {
+  background: #fffaf5;
+}
+
+.project-disclosure-link__label {
+  white-space: nowrap;
+}
+
+.project-disclosure--open {
+  border-color: var(--border);
 }
 
 .project-disclosure__content {
@@ -4366,7 +4738,8 @@ input[type="file"] {
   grid-column: 1 / -1;
 }
 
-.project-disclosure--student .project-disclosure__expand {
+.project-disclosure--student .project-disclosure__expand,
+.project-disclosure--student .project-disclosure__actions {
   justify-self: end;
 }
 
@@ -4385,7 +4758,8 @@ input[type="file"] {
     grid-column: 1 / -1;
   }
 
-  .project-disclosure__expand {
+  .project-disclosure__expand,
+  .project-disclosure__actions {
     justify-self: end;
   }
 }
@@ -4395,8 +4769,17 @@ input[type="file"] {
     grid-template-columns: 1fr;
   }
 
-  .project-disclosure__expand {
+  .project-disclosure__expand,
+  .project-disclosure__actions {
     width: 100%;
+  }
+
+  .project-disclosure__actions {
+    flex-wrap: wrap;
+  }
+
+  .project-disclosure__open-link {
+    flex: 1 1 auto;
   }
 }
 
@@ -4420,8 +4803,17 @@ input[type="file"] {
     grid-template-columns: 1fr;
   }
 
-  .project-disclosure__expand {
+  .project-disclosure__expand,
+  .project-disclosure__actions {
     width: 100%;
+  }
+
+  .project-disclosure__actions {
+    flex-wrap: wrap;
+  }
+
+  .project-disclosure__open-link {
+    flex: 1 1 auto;
   }
 }
 
@@ -5189,14 +5581,16 @@ body,
 }
 
 .secondary-button:not(.login-microsoft),
-.project-disclosure__expand {
+.project-disclosure__expand,
+.project-disclosure__open-link {
   background: var(--surface);
   border-color: var(--border);
   color: var(--text);
 }
 
 .secondary-button:not(.login-microsoft):hover:not([disabled]),
-.project-disclosure__expand:hover {
+.project-disclosure__expand:hover,
+.project-disclosure__open-link:hover {
   background: var(--surface-alt);
   border-color: var(--border-strong);
   color: var(--text);
@@ -6093,7 +6487,8 @@ input[type="submit"].primary-button {
 
 .secondary-button:not(.login-microsoft),
 .small-button:not(.primary-button):not(.banner-button),
-.project-disclosure__expand {
+.project-disclosure__expand,
+.project-disclosure__open-link {
   border: 1px solid var(--border);
   background: linear-gradient(180deg, #ffffff, #f7f9fc);
   color: var(--text);
@@ -6102,7 +6497,8 @@ input[type="submit"].primary-button {
 
 .secondary-button:not(.login-microsoft):hover:not([disabled]),
 .small-button:not(.primary-button):not(.banner-button):hover:not([disabled]),
-.project-disclosure__expand:hover {
+.project-disclosure__expand:hover,
+.project-disclosure__open-link:hover {
   border-color: var(--border-strong);
   background: linear-gradient(180deg, #ffffff, #fff7ed);
 }
@@ -6263,6 +6659,18 @@ textarea:focus,
   margin-top: 0.35rem;
   color: var(--text-muted);
   font-size: 0.84rem;
+}
+
+.admin-outstanding-docs {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.85rem;
+  border-left: 4px solid #d97706;
+  background: #fffbeb;
+  border-radius: 8px;
+  color: #92400e;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .moodle-alert {
@@ -7355,4 +7763,808 @@ a.dashboard-stat-card:hover {
   border-color: var(--primary);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+}
+
+/* MBA document template fidelity overrides.
+   These pages intentionally keep a fixed Word-like canvas and scroll on
+   narrow screens so tables do not reflow away from the DOCX templates. */
+.mba-doc-page {
+  --mba-doc-black: #000;
+  --mba-doc-label: #d9d9d9;
+  --mba-doc-section: #808080;
+  --mba-doc-orange: #ef6436;
+  max-width: none;
+  overflow-x: auto;
+  padding-bottom: 24px;
+}
+
+.mba-doc-page .ethics-panel {
+  width: max-content;
+  max-width: none;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.mba-doc-page .mba-doc-paper {
+  box-sizing: border-box;
+  width: 794px;
+  max-width: none;
+  margin: 0 auto;
+  padding: 36px 44px;
+  border: 1px solid #7a7a7a;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+  color: var(--mba-doc-black);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  line-height: 1.16;
+  letter-spacing: 0;
+}
+
+.mba-doc-page .mba-doc-paper--jbs5,
+.mba-doc-page .mba-doc-paper--jbs10,
+.mba-doc-page .mba-doc-paper--assessor {
+  padding: 22px 28px;
+  font-size: 8pt;
+  line-height: 1.12;
+}
+
+.mba-doc-page .mba-doc-paper--intent {
+  padding: 30px 38px;
+  font-size: 8.5pt;
+  line-height: 1.14;
+}
+
+.mba-doc-page .mba-doc-paper--summary {
+  padding: 20px 28px;
+  font-size: 7.5pt;
+  line-height: 1.08;
+}
+
+.mba-doc-page .mba-doc-paper--integrity,
+.mba-doc-page .mba-doc-paper--jbs-declaration,
+.mba-doc-page .mba-doc-paper--affidavit {
+  padding: 30px 42px;
+}
+
+.mba-doc-page .mba-doc-form {
+  gap: 8px;
+}
+
+.mba-doc-page .mba-doc-header {
+  margin-bottom: 10px;
+}
+
+.mba-doc-page .mba-doc-title,
+.mba-doc-page .mba-doc-title-stack h2 {
+  margin: 0;
+  color: var(--mba-doc-black);
+  font-size: 12pt;
+  line-height: 1.16;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.mba-doc-page .mba-doc-subtitle,
+.mba-doc-page .mba-doc-kicker,
+.mba-doc-page .mba-doc-note,
+.mba-doc-page .mba-doc-paragraph {
+  color: var(--mba-doc-black);
+  letter-spacing: 0;
+}
+
+.mba-doc-page .mba-doc-paragraph {
+  margin: 0;
+  line-height: inherit;
+}
+
+.mba-doc-page .mba-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: var(--mba-doc-black);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.mba-doc-page .mba-doc-table th,
+.mba-doc-page .mba-doc-table td {
+  border: 1px solid var(--mba-doc-black);
+  padding: 2px 4px;
+  vertical-align: top;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.mba-doc-page .mba-doc-table th {
+  background: var(--mba-doc-label);
+  color: var(--mba-doc-black);
+  font-weight: 700;
+  text-align: left;
+}
+
+.mba-doc-page .mba-doc-table--tight th,
+.mba-doc-page .mba-doc-table--tight td {
+  padding: 1px 3px;
+}
+
+.mba-doc-page th.mba-doc-section-title,
+.mba-doc-page .jbs-template-section-title {
+  background: var(--mba-doc-section) !important;
+  color: #fff !important;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mba-doc-page .mba-doc-label,
+.mba-doc-page .jbs-template-label,
+.mba-doc-page .integrity-doc-label {
+  background: var(--mba-doc-label);
+  color: var(--mba-doc-black);
+  font-weight: 700;
+}
+
+.mba-doc-page .mba-doc-input,
+.mba-doc-page .mba-doc-select,
+.mba-doc-page .mba-doc-textarea,
+.mba-doc-page .jbs-doc-line-fill {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 18px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--mba-doc-black);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--mba-doc-black);
+  font: inherit;
+  line-height: 1.15;
+  letter-spacing: 0;
+  padding: 1px 2px;
+}
+
+.mba-doc-page .mba-doc-select {
+  appearance: none;
+  padding-right: 12px;
+}
+
+.mba-doc-page .mba-doc-textarea {
+  min-height: 48px;
+  border: 1px solid var(--mba-doc-black);
+  resize: vertical;
+}
+
+.mba-doc-page .mba-doc-textarea--line {
+  min-height: 28px;
+  border: 0;
+  border-bottom: 1px solid var(--mba-doc-black);
+}
+
+.mba-doc-page .mba-doc-input[readonly],
+.mba-doc-page .mba-doc-textarea[readonly],
+.mba-doc-page .mba-doc-select:disabled {
+  background: transparent;
+  color: var(--mba-doc-black);
+  opacity: 1;
+  -webkit-text-fill-color: var(--mba-doc-black);
+}
+
+.mba-doc-page input[type="checkbox"],
+.mba-doc-page input[type="radio"] {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  margin: 0;
+  accent-color: var(--mba-doc-black);
+}
+
+.mba-doc-page .mba-doc-signature-field {
+  display: flex;
+  min-height: 20px;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.mba-doc-page .mba-doc-signature-image {
+  max-width: 108px;
+  max-height: 26px;
+  object-fit: contain;
+}
+
+.mba-doc-page .mba-doc-checkline {
+  min-height: 24px;
+  padding: 4px 6px;
+  border: 1px solid var(--mba-doc-black);
+  border-radius: 0;
+  background: #fff;
+  color: var(--mba-doc-black);
+  font-size: inherit;
+}
+
+.mba-doc-page .mba-doc-muted-box {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.mba-doc-page .mba-doc-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #cfcfcf;
+}
+
+.jbs-template-form,
+.integrity-doc-form,
+.affidavit-doc .jbs-template-form {
+  gap: 8px;
+}
+
+.jbs-template-header-table td,
+.jbs-template-header-table th {
+  border: 0 !important;
+  padding: 0 6px 8px !important;
+  vertical-align: middle;
+}
+
+.jbs-template-logo-cell {
+  text-align: center;
+}
+
+.jbs-template-logo {
+  width: 112px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.jbs-template-title-cell {
+  text-align: center;
+}
+
+.jbs-template-school {
+  font-size: 12pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.jbs-template-form-number,
+.jbs-template-date {
+  font-size: 8pt;
+}
+
+.jbs-template-title {
+  margin-top: 4px;
+  font-size: 12pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.jbs-template-subtitle {
+  margin: 8px 0 4px;
+  text-align: center;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.jbs-template-paragraph {
+  margin: 0 0 7px;
+  text-align: justify;
+  line-height: 1.22;
+}
+
+.jbs-template-alpha-list {
+  margin: 4px 0 0 20px;
+  padding: 0;
+}
+
+.jbs-template-alpha-list li {
+  margin: 0 0 4px;
+}
+
+.jbs-template-note {
+  margin-top: 2px;
+  font-size: 8pt;
+  text-align: center;
+}
+
+.jbs-template-cell-textarea,
+.integrity-doc-cell-textarea {
+  min-height: 34px;
+}
+
+.mba-doc-page .jbs-doc-line-fill {
+  display: inline-block;
+  width: auto;
+}
+
+.affidavit-title {
+  margin: 12px 0 14px;
+  text-align: center;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.affidavit-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 8px 0;
+  line-height: 1.3;
+}
+
+.affidavit-line span {
+  white-space: nowrap;
+}
+
+.affidavit-name-fill {
+  flex: 1 1 420px;
+}
+
+.affidavit-id-fill,
+.affidavit-student-number-fill,
+.affidavit-qualification-fill {
+  flex: 1 1 260px;
+}
+
+.affidavit-location-fill {
+  flex: 1 1 180px;
+}
+
+.affidavit-day-fill,
+.affidavit-year-fill {
+  flex: 0 0 46px;
+}
+
+.affidavit-month-fill {
+  flex: 0 0 120px;
+}
+
+.affidavit-signature-fill,
+.affidavit-print-name-fill {
+  flex: 1 1 180px;
+}
+
+.affidavit-helper {
+  margin: -5px 0 8px 170px;
+  font-size: 8pt;
+}
+
+.affidavit-commissioner-space {
+  height: 46px;
+}
+
+.affidavit-stamp-box {
+  width: 280px;
+  min-height: 64px;
+  margin: 0 auto 8px;
+  border: 1px solid var(--mba-doc-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: 700;
+}
+
+.affidavit-certified-title {
+  margin-top: 4px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.affidavit-commissioner-text {
+  margin: 6px 0 0;
+  font-size: 8pt;
+  line-height: 1.2;
+  text-align: justify;
+}
+
+.integrity-doc-banner {
+  display: block;
+  width: 100%;
+  max-height: 86px;
+  margin: 0 0 10px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.integrity-doc-main-title {
+  margin: 8px 0 3px;
+  color: var(--mba-doc-black);
+  font-size: 12pt;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.integrity-doc-subtitle,
+.integrity-doc-center,
+.integrity-doc-school {
+  text-align: center;
+}
+
+.integrity-doc-school {
+  font-weight: 700;
+}
+
+.integrity-doc-section-label {
+  margin: 9px 0 3px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.integrity-doc-section-label--left {
+  text-align: left;
+}
+
+.integrity-doc-table th,
+.integrity-doc-table td {
+  padding: 3px 5px;
+}
+
+.integrity-doc-members-table th,
+.integrity-doc-members-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.integrity-doc-copy {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  text-align: justify;
+}
+
+.integrity-doc-copy p {
+  margin: 0;
+}
+
+.integrity-doc-page-break {
+  break-before: page;
+  height: 20px;
+  margin: 14px 0;
+  border-top: 1px dashed #bdbdbd;
+}
+
+.integrity-doc-ai-textarea {
+  min-height: 72px;
+}
+
+.integrity-doc-empty-row {
+  height: 28px;
+}
+
+.integrity-doc-date-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.integrity-doc-date-fill {
+  flex: 0 0 190px;
+}
+
+.jbs10-doc-header {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 72px;
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 6px;
+}
+
+.jbs10-doc-logo {
+  grid-column: 1;
+  grid-row: 1;
+  width: 72px;
+  max-width: 72px;
+}
+
+.jbs10-doc-meta {
+  grid-column: 3;
+  grid-row: 1;
+  text-align: right;
+  font-size: 7pt;
+  line-height: 1.15;
+}
+
+.jbs10-doc-heading {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: center;
+}
+
+.jbs10-doc-school {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.jbs10-doc-title {
+  margin-top: 4px;
+  font-size: 9pt;
+  font-weight: 700;
+  line-height: 1.12;
+  text-transform: uppercase;
+}
+
+.jbs10-doc-header-rule {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--mba-doc-black);
+}
+
+.jbs10-doc-table th,
+.jbs10-doc-table td,
+.jbs5-doc-table th,
+.jbs5-doc-table td {
+  padding: 2px 3px;
+}
+
+.jbs10-doc-table th:not(.mba-doc-section-title) {
+  background: var(--mba-doc-label);
+  color: var(--mba-doc-black);
+  font-weight: 700;
+}
+
+.jbs10-doc-small,
+.jbs5-doc-small {
+  color: var(--mba-doc-black);
+  font-size: 7pt;
+  line-height: 1.1;
+}
+
+.jbs10-doc-choice-cell,
+.jbs10-doc-check-cell,
+.jbs10-doc-center {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.jbs10-doc-choice-cell label,
+.jbs5-doc-inline-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 5px;
+  font-weight: 700;
+}
+
+.jbs10-doc-textarea,
+.jbs5-doc-textarea {
+  min-height: 36px;
+}
+
+.jbs5-doc-header-table td,
+.jbs5-doc-header-table th {
+  border: 0 !important;
+  padding: 2px 4px !important;
+}
+
+.jbs5-doc-logo {
+  max-width: 76px;
+}
+
+.jbs5-doc-school {
+  font-size: 9.5pt;
+}
+
+.jbs5-doc-title {
+  font-size: 9pt;
+  line-height: 1.12;
+}
+
+.jbs5-doc-subtitle,
+.jbs5-doc-form-number {
+  color: var(--mba-doc-black);
+  font-size: 7pt;
+}
+
+.jbs5-doc-office-cell,
+.jbs5-doc-option-cell {
+  background: var(--mba-doc-label);
+}
+
+.jbs5-doc-dots {
+  width: 78px;
+  border-bottom-color: var(--mba-doc-black);
+}
+
+.jbs5-doc-sdgs {
+  margin-top: 8px;
+  color: var(--mba-doc-black);
+  font-size: 7pt;
+  line-height: 1.1;
+  gap: 1px 14px;
+}
+
+.mba-doc-header--intent {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.intent-doc-logo {
+  width: 118px;
+  max-width: 118px;
+}
+
+.intent-doc-adapted {
+  margin: 2px 0 0;
+  text-align: center;
+  font-size: 7pt;
+}
+
+.intent-doc-instruction {
+  margin-bottom: 8px;
+}
+
+.intent-doc-table th,
+.intent-doc-table td {
+  padding: 2px 4px;
+}
+
+.intent-doc-fixed-value,
+.intent-doc-full-label {
+  font-weight: 700;
+}
+
+.intent-doc-signature-only {
+  display: grid;
+  gap: 2px;
+}
+
+.intent-doc-approval-table {
+  margin-top: 8px;
+}
+
+.assessor-doc-header .mba-doc-logo,
+.mba-doc-paper--assessor .mba-doc-logo {
+  width: 82px;
+  max-width: 82px;
+}
+
+.assessor-doc-form {
+  gap: 7px;
+}
+
+.assessor-doc-table th,
+.assessor-doc-table td {
+  padding: 2px 4px;
+}
+
+.assessor-doc-table th:not(.mba-doc-section-title) {
+  background: var(--mba-doc-label);
+  color: var(--mba-doc-black);
+  font-weight: 700;
+}
+
+.assessor-doc-note-row {
+  background: #fff;
+  color: var(--mba-doc-black);
+  font-weight: 700;
+  text-align: center;
+}
+
+.assessor-doc-intro,
+.mba-doc-paper--assessor .mba-doc-note {
+  font-size: 7.5pt;
+  line-height: 1.16;
+}
+
+.assessor-doc-stacked-value .mba-doc-input + .mba-doc-input {
+  margin-top: 3px;
+}
+
+.assessor-doc-mark-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.assessor-doc-mark {
+  width: 12px;
+  height: 12px;
+}
+
+.assessor-doc-dual-cell {
+  padding: 0 !important;
+}
+
+.assessor-doc-dual-line {
+  min-height: 20px;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--mba-doc-black);
+}
+
+.assessor-doc-dual-line:last-child {
+  border-bottom: 0;
+}
+
+.assessor-doc-final-mark {
+  width: 55%;
+}
+
+.summary-doc-heading {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.summary-doc-logo {
+  width: 82px;
+  max-width: 82px;
+}
+
+.summary-doc-title-band {
+  border: 1px solid var(--mba-doc-black);
+  background: var(--mba-doc-label);
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.summary-doc-title-band h2,
+.summary-doc-title-band p {
+  margin: 0;
+  color: var(--mba-doc-black);
+  font-size: 8.2pt;
+  line-height: 1.12;
+  font-weight: 700;
+}
+
+.summary-doc-table th,
+.summary-doc-table td {
+  padding: 1px 3px;
+}
+
+.summary-doc-table--center th,
+.summary-doc-table--center td,
+.summary-doc-center {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.summary-doc-mark {
+  display: inline-block;
+  min-width: 13px;
+  min-height: 13px;
+  text-align: center;
+  font-weight: 700;
+  line-height: 13px;
+}
+
+.summary-doc-shaded {
+  background: var(--mba-doc-label);
+}
+
+.summary-doc-marks-table {
+  width: 72.3%;
+  min-width: 520px;
+}
+
+@media (max-width: 900px) {
+  .mba-doc-page .ethics-panel {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .affidavit-line {
+    flex-wrap: wrap;
+  }
+}
+
+.ethics-layout--public {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ethics-main--public {
+  max-width: 1100px;
+  margin: 0 auto;
 }

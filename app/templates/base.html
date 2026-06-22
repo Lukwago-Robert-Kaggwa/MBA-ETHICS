@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=asset_version('css/app.css')) }}">
   </head>
   {% set public_page = public_page|default(false) %}
-  <body class="ethics-app-shell{% if public_page %} ethics-app-shell--public{% endif %}">
+  <body class="ethics-app-shell{% if public_page %} ethics-app-shell--public{% endif %}" data-single-project-view="{{ 'true' if single_project_view else 'false' }}">
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <div class="ethics-layout{% if public_page %} ethics-layout--public{% endif %}">
       {% if not public_page %}
@@ -94,6 +94,9 @@
               </a>
               <a href="{{ url_for('mba.hdc_dashboard', approval_set='results', review_status='pending_review') }}" class="ethics-sidebar__item {% if request.endpoint == 'mba.hdc_dashboard' and hdc_nav.active == 'results' %}is-active{% endif %}">
                 <i class="bi bi-award-fill nav-icon" aria-hidden="true"></i><span>Result Approvals{% if hdc_nav.results %} ({{ hdc_nav.results }}){% endif %}</span>
+              </a>
+              <a href="{{ url_for('mba.admin_additional_assessment', assessment_status='all') }}" class="ethics-sidebar__item {% if request.endpoint and request.endpoint.startswith('mba.admin_additional_assessment') %}is-active{% endif %}">
+                <i class="bi bi-plus-square-fill nav-icon" aria-hidden="true"></i><span>Additional Assessor Approvals{% if hdc_nav.additional_nominations %} ({{ hdc_nav.additional_nominations }}){% endif %}</span>
               </a>
             {% elif current_user.role in ['admin', 'main_admin'] %}
               {% set reminders_nav = mba_reminders_nav() %}
@@ -381,5 +384,113 @@
         });
       })();
     </script>
+    <script>
+      (function () {
+        /* Remember scroll position per page path so that submitting a form,
+           sending an email action, or any other redirect-back-to-this-page
+           lands the user where they were instead of back at the top. */
+        var key = 'mba:scrollpos:' + location.pathname;
+
+        function saveScroll() {
+          try { sessionStorage.setItem(key, String(window.scrollY)); } catch (e) {}
+        }
+
+        var saveQueued = false;
+        window.addEventListener('scroll', function () {
+          if (saveQueued) return;
+          saveQueued = true;
+          window.requestAnimationFrame(function () {
+            saveScroll();
+            saveQueued = false;
+          });
+        }, { passive: true });
+        window.addEventListener('beforeunload', saveScroll);
+
+        /* An explicit #anchor in the URL (used by a few redirects already)
+           takes priority over the remembered pixel position. */
+        if (!location.hash) {
+          var saved = null;
+          try { saved = sessionStorage.getItem(key); } catch (e) {}
+          var y = saved !== null ? parseInt(saved, 10) : NaN;
+          if (!isNaN(y) && y > 0) {
+            var attempts = 0;
+            var restore = function () {
+              window.scrollTo(0, y);
+              attempts += 1;
+              if (attempts < 4) window.requestAnimationFrame(restore);
+            };
+            window.requestAnimationFrame(restore);
+          }
+        }
+      })();
+    </script>
+    {% if single_project_view %}
+    <script>
+      (function () {
+        /* This page is a project's standalone "open in new tab" detail view.
+           Submitting any action form here should land back on this same
+           detail page, not the role's project list (the action's normal
+           default) -- otherwise the user loses their open tab on every
+           submit and has to reopen the project again. */
+        document.addEventListener('submit', function (event) {
+          var form = event.target;
+          if (!(form instanceof HTMLFormElement)) return;
+          if ((form.method || 'get').toLowerCase() !== 'post') return;
+          if (form.querySelector('input[name="next"]')) return;
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'next';
+          input.value = location.pathname;
+          form.appendChild(input);
+        }, true);
+      })();
+    </script>
+    {% endif %}
+    {% if current_user.is_authenticated %}
+    <script>
+      (function () {
+        /* Keep every open tab's authenticated state in sync: logging out in
+           one tab, or this tab discovering the session has gone idle, must
+           lock out every other open project tab immediately rather than
+           waiting for the user to click something in it. */
+        var broadcastKey = 'mba:auth-broadcast';
+        var loginUrl = {{ url_for('auth.login')|tojson }};
+        var statusUrl = {{ url_for('auth.session_status')|tojson }};
+        var redirected = false;
+
+        function goToLogin() {
+          if (redirected) return;
+          redirected = true;
+          window.location.href = loginUrl;
+        }
+
+        function broadcastLoggedOut() {
+          try { localStorage.setItem(broadcastKey, String(Date.now())); } catch (e) {}
+        }
+
+        window.addEventListener('storage', function (event) {
+          if (event.key === broadcastKey) goToLogin();
+        });
+
+        document.addEventListener('click', function (event) {
+          var link = event.target.closest('a[href*="/logout"]');
+          if (link) broadcastLoggedOut();
+        });
+
+        function pollSessionStatus() {
+          fetch(statusUrl, { cache: 'no-store', credentials: 'same-origin' })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+              if (!data.authenticated) {
+                broadcastLoggedOut();
+                goToLogin();
+              }
+            })
+            .catch(function () {});
+        }
+        setInterval(pollSessionStatus, 90000);
+      })();
+    </script>
+    {% endif %}
   </body>
 </html>

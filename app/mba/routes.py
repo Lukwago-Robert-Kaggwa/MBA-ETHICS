@@ -26,6 +26,8 @@ def user_can_comment_on_project(project):
     if current_user.role == MbaRole.SCHOLAR.value:
         if project.primary_supervisor_id == current_user.id:
             return True
+        if project.co_supervisor_id == current_user.id and project.co_supervisor_invitation_status in {INVITATION_PENDING, INVITATION_ACCEPTED}:
+            return True
         return any(
             invitation.supervisor_id == current_user.id
             and invitation.status in {INVITATION_PENDING, INVITATION_ACCEPTED}
@@ -152,16 +154,17 @@ def _email_safe_filename(value):
     return "".join(ch if ch.isalnum() or ch in " ._-" else "_" for ch in str(value or "")).strip()
 
 
-def _assessor_hr_document_attachments(project):
+def _assessor_hr_document_attachments_for_slots(project, slots):
     approved_slots = [
         slot
-        for slot in PRIMARY_ASSESSOR_SLOTS
+        for slot in slots
         if assessor_hdc_decision(project, slot) == HDC_ASSESSOR_APPROVED
     ]
     missing = []
     attachments = []
-    if len(approved_slots) < len(PRIMARY_ASSESSOR_SLOTS):
-        missing.append("HDC approval for both nominated assessors")
+    if len(approved_slots) < len(slots):
+        label = "the nominated assessor" if len(slots) == 1 else "both nominated assessors"
+        missing.append(f"HDC approval for {label}")
         return attachments, missing
 
     for slot in approved_slots:
@@ -190,14 +193,23 @@ def _assessor_hr_document_attachments(project):
     return attachments, missing
 
 
+def _assessor_hr_document_attachments(project):
+    return _assessor_hr_document_attachments_for_slots(project, PRIMARY_ASSESSOR_SLOTS)
+
+
+def _additional_assessor_hr_document_attachments(project):
+    return _assessor_hr_document_attachments_for_slots(project, [ADDITIONAL_ASSESSOR_SLOT])
+
+
 def can_request_module_completion_verification(project):
+    # The supervisor can only sign the assessment summary after the Marks Committee has
+    # verified coursework marks, so this must NOT depend on the summary being signed yet.
     return (
         project
         and project.project_status == ProjectStatus.HDC_VERIFIED.value
         and all_assessment_results_received(project)
         and not additional_assessment_blocks_hdc_submission(project)
         and not corrections_block_hdc_submission(project)
-        and assessment_summary_supervisor_signed(project)
         and not module_completion_allows_hdc_submission(project)
         and project.module_completion_status != "awaiting_marks_committee"
     )
@@ -443,6 +455,50 @@ def module_completion_verification_response(token, decision=None):
                 coursework_credit_total,
                 coursework_credit_average,
             ) = _coursework_values_from_request()
+
+            graded_assessor_values = {}
+            for grade_field in ("assessor_1_grade", "assessor_2_grade"):
+                submitted_grade = (request.form.get(grade_field) or "").strip()
+                if submitted_grade:
+                    graded_assessor_values[grade_field] = _format_summary_number(
+                        _parse_summary_number(submitted_grade, grade_field.replace("_", " "), minimum=0, maximum=100)
+                    )
+
+            submitted_capstone_total = request.form.get("capstone_total")
+            capstone_total = (
+                _parse_summary_number(submitted_capstone_total, "Total Capstone Project", minimum=0)
+                if str(submitted_capstone_total or "").strip()
+                else _parse_summary_number(prefill.get("capstone_total") or 0, "Total Capstone Project", minimum=0)
+            )
+            submitted_capstone_average = request.form.get("capstone_average")
+            capstone_average = (
+                _parse_summary_number(submitted_capstone_average, "Capstone Project average", minimum=0, maximum=100)
+                if str(submitted_capstone_average or "").strip()
+                else _parse_summary_number(prefill.get("capstone_average") or 0, "Capstone Project average", minimum=0, maximum=100)
+            )
+
+            capstone_weighted_calculated = capstone_average * 0.26
+            coursework_weighted_calculated = coursework_average * 0.74
+            final_mark_calculated = capstone_weighted_calculated + coursework_weighted_calculated
+
+            submitted_capstone_weighted = request.form.get("capstone_weighted_result")
+            capstone_weighted = (
+                _parse_summary_number(submitted_capstone_weighted, "Capstone project result (26%)", minimum=0)
+                if str(submitted_capstone_weighted or "").strip()
+                else capstone_weighted_calculated
+            )
+            submitted_coursework_weighted = request.form.get("coursework_weighted_result")
+            coursework_weighted = (
+                _parse_summary_number(submitted_coursework_weighted, "Coursework module average result (74%)", minimum=0)
+                if str(submitted_coursework_weighted or "").strip()
+                else coursework_weighted_calculated
+            )
+            submitted_final_mark = request.form.get("final_mark")
+            final_mark = (
+                _parse_summary_number(submitted_final_mark, "Final mark", minimum=0)
+                if str(submitted_final_mark or "").strip()
+                else final_mark_calculated
+            )
         except ValueError as exc:
             flash(str(exc), "error")
             for key, value in request.form.items():
@@ -466,11 +522,9 @@ def module_completion_verification_response(token, decision=None):
         prefill["coursework_average"] = _format_summary_number(coursework_average)
         prefill["coursework_credit_total"] = _format_summary_number(coursework_credit_total)
         prefill["coursework_credit_average"] = _format_summary_number(coursework_credit_average)
-
-        capstone_average = _parse_summary_number(prefill.get("capstone_average") or 0, "Capstone Project average", minimum=0, maximum=100)
-        capstone_weighted = capstone_average * 0.26
-        coursework_weighted = coursework_average * 0.74
-        final_mark = capstone_weighted + coursework_weighted
+        prefill.update(graded_assessor_values)
+        prefill["capstone_total"] = _format_summary_number(capstone_total)
+        prefill["capstone_average"] = _format_summary_number(capstone_average)
         prefill["capstone_weighted_result"] = _format_summary_number(capstone_weighted)
         prefill["coursework_weighted_result"] = _format_summary_number(coursework_weighted)
         prefill["final_mark"] = _format_summary_number(final_mark)
@@ -479,14 +533,16 @@ def module_completion_verification_response(token, decision=None):
         project.module_completion_responded_at = datetime.utcnow()
         project.module_completion_response = "yes" if all_modules_passed else "no"
         project.module_completion_verification_token = None
+        # The Marks Committee has filled in every required mark field (enforced above), so the
+        # verification is complete regardless of whether the outcome is a pass or a fail - HDC
+        # still needs to receive and sign off on a failing result, not just a passing one.
+        project.module_completion_status = "completed"
         if all_modules_passed:
-            project.module_completion_status = "completed"
             project.comments = append_comment(
                 project.comments,
                 f"Marks Committee submitted coursework marks and confirmed module completion via {project.module_completion_marks_email}.",
             )
         else:
-            project.module_completion_status = "modules_incomplete"
             project.comments = append_comment(
                 project.comments,
                 f"Marks Committee submitted coursework marks with one or more modules below pass level via {project.module_completion_marks_email}.",
@@ -772,6 +828,11 @@ def admin_project_action(project_id):
             "error",
         )
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
+    co_supervisor_invite_actions = {"invite_co_supervisor"}
+    co_supervisor_change_locked = project.co_supervisor_invitation_status == INVITATION_ACCEPTED
+    if action in co_supervisor_invite_actions and co_supervisor_change_locked:
+        flash("The co-supervisor invitation can no longer be changed because the co-supervisor has accepted.", "error")
+        return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
     selected_supervisor_ids = []
     for supervisor_id in request.form.getlist("supervisor_ids"):
@@ -812,6 +873,72 @@ def admin_project_action(project_id):
 
     def _projects_redirect():
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
+
+    def _invite_co_supervisor(co_supervisor_id):
+        if not co_supervisor_id:
+            flash("Select a co-supervisor to invite.", "error")
+            return _projects_redirect()
+        if co_supervisor_id == project.primary_supervisor_id:
+            flash("The co-supervisor must be different from the primary supervisor.", "error")
+            return _projects_redirect()
+        valid_supervisor_ids = {s.id for s in supervisors_query().all()}
+        if co_supervisor_id not in valid_supervisor_ids:
+            flash("Selected co-supervisor is invalid.", "error")
+            return _projects_redirect()
+
+        current_status = project.co_supervisor_invitation_status
+        if current_status in {INVITATION_PENDING, INVITATION_ACCEPTED}:
+            if project.co_supervisor_id == co_supervisor_id:
+                flash("This co-supervisor has already been invited.", "info")
+                return _projects_redirect()
+            flash("An invited co-supervisor cannot be replaced unless they decline the invitation.", "error")
+            return _projects_redirect()
+
+        reset_co_supervisor_invitation_tracking(project, clear_assignment=True)
+        project.co_supervisor_id = co_supervisor_id
+        project.co_supervisor_invitation_status = INVITATION_PENDING
+        project.co_supervisor_required = True
+        mark_co_supervisor_invitation_sent(project)
+        email_result = send_bulk_emails(
+            invitation_email_messages(
+                project,
+                include_supervisors=False,
+                include_assessors=False,
+                include_co_supervisor=True,
+            )
+        )
+        delivered_count = len(email_result["delivered"])
+        failed_count = len(email_result["failed"])
+        co_supervisor_user = db.session.get(MbaUser, co_supervisor_id)
+        project.comments = append_comment(
+            project.comments,
+            (
+                f"{current_user.email}: invited co-supervisor: "
+                f"{co_supervisor_user.email if co_supervisor_user else 'unknown'}; "
+                f"delivered={delivered_count}; failed={failed_count}"
+            ),
+        )
+        db.session.commit()
+        if delivered_count and not failed_count:
+            flash("Co-supervisor invitation sent.", "success")
+        elif delivered_count and failed_count:
+            flash(f"Co-supervisor invitation recorded. Email sent to {delivered_count}; {failed_count} failed.", "warning")
+        else:
+            flash("Co-supervisor invitation recorded. Email delivery is not configured or failed.", "warning")
+        return _projects_redirect()
+
+    def _withdraw_co_supervisor_requirement():
+        if project.co_supervisor_invitation_status == INVITATION_ACCEPTED:
+            flash("The co-supervisor has already accepted and cannot be withdrawn.", "error")
+            return _projects_redirect()
+        reset_co_supervisor_invitation_tracking(project, clear_assignment=True)
+        project.comments = append_comment(
+            project.comments,
+            f"{current_user.email}: withdrew the co-supervisor requirement for this Capstone Project.",
+        )
+        db.session.commit()
+        flash("Co-supervisor requirement withdrawn.", "success")
+        return _projects_redirect()
 
     def _assessor_invitation_prerequisite_error():
         if not project.jbs5_hdc_approved_at:
@@ -1089,6 +1216,12 @@ def admin_project_action(project_id):
         flash(message, "success")
         return redirect(url_for("mba.admin_dashboard", panel="projects"))
 
+    if action == "invite_co_supervisor":
+        return _invite_co_supervisor(request.form.get("co_supervisor_id", type=int))
+
+    if action == "withdraw_co_supervisor_requirement":
+        return _withdraw_co_supervisor_requirement()
+
     if action == "invite_selected_assessors":
         return _invite_assessor_pairs(
             list(zip(PRIMARY_ASSESSOR_SLOTS, assessor_ids)),
@@ -1209,6 +1342,9 @@ def admin_project_action(project_id):
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         if not _jbs5_signed_by_student_and_supervisor(project):
             flash("JBS5 must be signed by both the student and supervisor before it can be forwarded to HDC.", "error")
+            return redirect(url_for("mba.admin_dashboard", panel="projects"))
+        if not co_supervisor_acceptance_satisfied(project):
+            flash("The co-supervisor must accept their invitation before JBS5 can be forwarded to HDC.", "error")
             return redirect(url_for("mba.admin_dashboard", panel="projects"))
         project.project_status = ProjectStatus.JBS5_SUBMITTED_TO_HDC.value
         project.title_approved = False
@@ -1391,6 +1527,77 @@ def admin_project_action(project_id):
             ),
         )
         message = "Approved assessor HR documents sent. Stage 4 is now complete."
+    elif action == "send_additional_assessor_hr_documents_to_hr":
+        if assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT) != HDC_ASSESSOR_APPROVED:
+            flash("Send the additional assessor HR documents only after HDC has approved the additional assessor nomination.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if additional_assessor_hr_documents_sent(project):
+            flash("The approved additional assessor HR documents have already been sent to HR.", "info")
+            return redirect(url_for("mba.admin_additional_assessment", _anchor=f"project-{project.id}"))
+        hr_email = normalize_email(request.form.get("assessor_hr_email"))
+        if not _looks_like_email(hr_email):
+            flash("Enter a valid HR email address before sending the additional assessor documents.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        nomination_form = additional_external_examiner_nomination_form(project)
+        if not nomination_form or not isinstance(nomination_form.payload, dict):
+            flash("The additional assessor nomination form is not available for tracking the HR send.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        attachments, missing_hr_docs = _additional_assessor_hr_document_attachments(project)
+        if missing_hr_docs:
+            flash(
+                "The HR email cannot be sent until these approved additional assessor documents are available: "
+                + ", ".join(missing_hr_docs),
+                "error",
+            )
+            return redirect(url_for("mba.admin_additional_assessment"))
+        attachment_lines = "\n".join(f"- {attachment['filename']}" for attachment in attachments)
+        email_result = send_bulk_emails(
+            [
+                {
+                    "recipient": hr_email,
+                    "subject": f"Approved Additional Assessor Appointment Documents: {project.project_title}",
+                    "body": (
+                        "Please find attached the HDC-approved additional assessor appointment documents for this MBA Capstone Project.\n\n"
+                        f"Project: {project.project_title}\n"
+                        f"Student: {project.student.email if project.student else 'Unknown'}\n"
+                        f"Discipline: {project.discipline_name}\n\n"
+                        "Attached documents:\n"
+                        f"{attachment_lines}\n\n"
+                        "The attached files include the temporary appointment form and remuneration/temporary claim form for the additional assessor."
+                    ),
+                    "attachments": attachments,
+                }
+            ]
+        )
+        if not email_result["delivered"]:
+            project.comments = append_comment(
+                project.comments,
+                (
+                    f"{current_user.email}: attempted to send approved additional assessor HR documents to {hr_email}; "
+                    f"failed={len(email_result['failed'])}."
+                ),
+            )
+            db.session.commit()
+            flash("The HR email could not be sent. Check mail configuration or the HR email address.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+
+        payload = dict(nomination_form.payload or {})
+        payload["assessor_hr_documents_sent_at"] = datetime.utcnow().isoformat()
+        payload["assessor_hr_documents_sent_to"] = hr_email
+        payload["assessor_hr_documents_sent_by"] = current_user.email or ""
+        payload["assessor_hr_documents_sent_count"] = len(attachments)
+        nomination_form.payload = payload
+        flag_modified(nomination_form, "payload")
+        project.comments = append_comment(
+            project.comments,
+            (
+                f"{current_user.email}: sent approved additional assessor temporary appointment and claim forms "
+                f"to HR at {hr_email}; attachments={len(attachments)}."
+            ),
+        )
+        db.session.commit()
+        flash("Approved additional assessor HR documents sent.", "success")
+        return redirect(url_for("mba.admin_additional_assessment", _anchor=f"project-{project.id}"))
     elif action == "request_moodle_manuscript_submission":
         if not project.student or not project.student.email:
             flash("The student does not have an email address on file.", "error")
@@ -1528,54 +1735,19 @@ def admin_project_action(project_id):
 
         additional_assessor = db.session.get(MbaUser, additional_assessor_id)
         was_override = bool(suggested_assessor and suggested_assessor.id != additional_assessor_id)
-        nomination_form = _routes_forms.refresh_additional_external_examiner_nomination_if_ready(project)
-        delivered_count = 0
-        failed_count = 0
-        supervisor = project.primary_supervisor
-        if nomination_form:
-            payload = dict(nomination_form.payload or {})
-            payload["nomination_forwarded_to_supervisor_at"] = datetime.utcnow().isoformat()
-            payload["nomination_forwarded_to_supervisor_by"] = current_user.email or ""
-            nomination_form.payload = payload
-            flag_modified(nomination_form, "payload")
-        if nomination_form and supervisor and supervisor.email:
-            sign_url = url_for(
-                "mba.supervisor_sign_additional_external_examiner_nomination",
-                project_id=project.id,
-                _external=True,
-            )
-            email_result = send_bulk_emails(
-                [
-                    {
-                        "recipient": supervisor.email,
-                        "subject": f"Additional Assessor Nomination Requires Signature: {project.project_title}",
-                        "body": (
-                            f"The additional assessor nomination form for '{project.project_title}' is ready for your signature.\n\n"
-                            f"Student: {project.student.email if project.student else 'Unknown'}\n"
-                            f"Proposed additional assessor: {_person_name(additional_assessor, 'Not selected')}\n\n"
-                            f"Please sign in and sign the nomination form here:\n{sign_url}"
-                        ),
-                    }
-                ]
-            )
-            delivered_count = len(email_result["delivered"])
-            failed_count = len(email_result["failed"])
         project.comments = append_comment(
             project.comments,
             (
                 f"Admin proposed additional assessor: {additional_assessor.email}; "
-                f"override={'yes' if was_override else 'no'}; supervisor_signature_email_delivered={delivered_count}; "
-                f"failed={failed_count}"
+                f"override={'yes' if was_override else 'no'}"
             ),
         )
-        if nomination_form and delivered_count and not failed_count:
-            message = "Additional assessor proposed. The nomination form was sent to the supervisor for signature."
-        elif nomination_form and supervisor and supervisor.email:
-            message = "Additional assessor proposed. The nomination form was generated, but the supervisor signature email was not delivered."
-        elif nomination_form:
-            message = "Additional assessor proposed and the nomination form was generated. The supervisor does not have an email address on file."
-        else:
-            message = "Additional assessor proposed, but the nomination form could not be generated yet."
+        message = "Additional assessor proposed. Next step: click Send Invitation to invite this assessor."
+        if comment:
+            project.comments = append_comment(project.comments, f"{current_user.email}: {comment}")
+        db.session.commit()
+        flash(message, message_category)
+        return redirect(url_for("mba.admin_additional_assessment"))
     elif action == "send_additional_assessor_invitation":
         if project.project_status not in {ProjectStatus.HDC_VERIFIED.value, ProjectStatus.RESULTS_DECLINED.value}:
             flash(
@@ -1607,14 +1779,6 @@ def admin_project_action(project_id):
                 "info",
             )
             return redirect(url_for("mba.admin_additional_assessment"))
-        if not additional_external_examiner_nomination_supervisor_signed(project):
-            flash(
-                "Additional assessor invitation was not sent because the supervisor has not signed the additional "
-                "nomination form. Next step: the supervisor must open the additional assessor nomination form and sign it.",
-                "error",
-            )
-            return redirect(url_for("mba.admin_additional_assessment"))
-
         additional_assessor = project.assessor_3
         if not additional_assessor or not additional_assessor.email:
             flash(
@@ -1657,7 +1821,8 @@ def admin_project_action(project_id):
         if delivered_count and not failed_count:
             message = (
                 "Additional assessor invitation sent. The invitation is now Pending. Next step: the assessor must "
-                "sign in, complete the acceptance documents, then submit the assessment result."
+                "sign in, accept the invitation, and complete the acceptance documents. Once accepted, send the "
+                "nomination form to the supervisor for signature."
             )
         elif delivered_count and failed_count:
             message = (
@@ -1674,6 +1839,81 @@ def admin_project_action(project_id):
                 message += f" Reason: {failure_reasons}."
             message += " Next step: configure SMTP or manually notify the assessor to sign in."
             message_category = "warning"
+        if comment:
+            project.comments = append_comment(project.comments, f"{current_user.email}: {comment}")
+        db.session.commit()
+        flash(message, message_category)
+        return redirect(url_for("mba.admin_additional_assessment"))
+    elif action == "forward_additional_examiner_nomination_to_supervisor":
+        if not additional_assessment_required(project):
+            flash("This project does not currently require an additional assessment.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not project.assessor_3_id:
+            flash("Select and invite the additional assessor before sending the nomination form.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if project.assessor_3_invitation_status != INVITATION_ACCEPTED:
+            flash("The additional assessor must accept the invitation before the nomination form can be sent.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if additional_external_examiner_nomination_supervisor_signed(project):
+            flash("The additional assessor nomination form is already signed by the supervisor.", "info")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not assessor_acceptance_pack_complete(project, ADDITIONAL_ASSESSOR_SLOT):
+            flash("The additional assessor's acceptance documents (temp appointment, claim, CV, qualification) must be complete first.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+
+        additional_assessor = project.assessor_3
+        nomination_form = _routes_forms.refresh_additional_external_examiner_nomination_if_ready(project)
+        if not nomination_form:
+            flash("The additional assessor nomination form could not be generated yet.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        supervisor = project.primary_supervisor
+        delivered_count = 0
+        failed_count = 0
+        payload = dict(nomination_form.payload or {})
+        payload["nomination_forwarded_to_supervisor_at"] = datetime.utcnow().isoformat()
+        payload["nomination_forwarded_to_supervisor_by"] = current_user.email or ""
+        nomination_form.payload = payload
+        flag_modified(nomination_form, "payload")
+        if supervisor and supervisor.email:
+            sign_url = url_for(
+                "mba.supervisor_sign_additional_external_examiner_nomination",
+                project_id=project.id,
+                _external=True,
+            )
+            email_result = send_bulk_emails(
+                [
+                    {
+                        "recipient": supervisor.email,
+                        "subject": f"Additional Assessor Nomination Requires Signature: {project.project_title}",
+                        "body": (
+                            f"The additional assessor nomination form for '{project.project_title}' is ready for your signature.\n\n"
+                            f"Student: {project.student.email if project.student else 'Unknown'}\n"
+                            f"Additional assessor: {_person_name(additional_assessor, 'Not selected')}\n\n"
+                            f"Please sign in and sign the nomination form here:\n{sign_url}"
+                        ),
+                    }
+                ]
+            )
+            delivered_count = len(email_result["delivered"])
+            failed_count = len(email_result["failed"])
+        project.comments = append_comment(
+            project.comments,
+            (
+                f"{current_user.email}: forwarded the additional assessor nomination form to the supervisor "
+                f"for signature; delivered={delivered_count}; failed={failed_count}"
+            ),
+        )
+        if delivered_count and not failed_count:
+            message = "Additional assessor nomination form sent to the supervisor for signature."
+        elif supervisor and supervisor.email:
+            message = "The nomination form was generated, but the supervisor signature email was not delivered."
+        else:
+            message = "The nomination form was generated. The supervisor does not have an email address on file."
+        if comment:
+            project.comments = append_comment(project.comments, f"{current_user.email}: {comment}")
+        db.session.commit()
+        flash(message, message_category)
+        return redirect(url_for("mba.admin_additional_assessment"))
     elif action == "request_module_completion_verification":
         if not can_request_module_completion_verification(project):
             flash("Module completion verification is not available for this Capstone Project right now.", "error")
@@ -1924,6 +2164,48 @@ def hdc_project_action(project_id):
             f"{assessor_label} nomination {decision_label} recorded. "
             "Use Finish Review after every assessor decision and required form signature is complete."
         )
+    elif action in {"approve_assessor_3_additional_nomination", "decline_assessor_3_additional_nomination"}:
+        if not project.assessor_3_id:
+            flash("No additional assessor is assigned to this Capstone Project.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not additional_external_examiner_nomination_supervisor_signed(project):
+            flash(
+                "The additional assessor nomination form must be signed by the supervisor before HDC can review it.",
+                "error",
+            )
+            return redirect(url_for("mba.admin_additional_assessment"))
+        if not hdc_additional_external_examiner_nomination_signature_complete(project):
+            flash(
+                "Sign the additional assessor nomination form before approving or declining it.",
+                "error",
+            )
+            return redirect(url_for("mba.admin_additional_assessment"))
+        decision = (
+            HDC_ASSESSOR_APPROVED
+            if action == "approve_assessor_3_additional_nomination"
+            else HDC_ASSESSOR_DECLINED
+        )
+        set_assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT, decision)
+        project.comments = append_comment(
+            project.comments,
+            f"{current_user.email}: {assessor_hdc_decision_label(decision).lower()} the additional assessor nomination.",
+        )
+        db.session.commit()
+        flash(f"Additional assessor nomination {assessor_hdc_decision_label(decision).lower()}.", "success")
+        return redirect(url_for("mba.admin_additional_assessment"))
+    elif action == "revoke_additional_assessor_hdc_approval":
+        if not project.assessor_3_id:
+            flash("No additional assessor is assigned to this Capstone Project.", "error")
+            return redirect(url_for("mba.admin_additional_assessment"))
+        revoke_assessor_hdc_approval(project.assessor_3, revoked_by=current_user)
+        set_assessor_hdc_decision(project, ADDITIONAL_ASSESSOR_SLOT, None)
+        project.comments = append_comment(
+            project.comments,
+            f"{current_user.email}: revoked this assessor's standing HDC approval; a fresh approval is now required.",
+        )
+        db.session.commit()
+        flash("HDC approval revoked. This assessor will require fresh approval the next time they're nominated.", "success")
+        return redirect(url_for("mba.admin_additional_assessment"))
     elif action == "finish_nomination_review":
         if project.project_status != ProjectStatus.ADMIN_APPROVED.value:
             flash("This Capstone Project is not waiting for HDC nomination review.", "error")
